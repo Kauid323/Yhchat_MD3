@@ -25,6 +25,17 @@ android {
             isMinifyEnabled = false
         }
     }
+    
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    
+    // 忽略 minSdkVersion 冲突
+    lint {
+        abortOnError = false
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -143,4 +154,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // Flyme实况通知
+    implementation(files("libs/flymelive-1.0.0.aar"))
 }

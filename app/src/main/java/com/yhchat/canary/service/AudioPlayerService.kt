@@ -23,6 +23,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.graphics.drawable.Icon
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.documentfile.provider.DocumentFile
@@ -34,6 +35,9 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import com.erisdev.flymelive.FlymeLiveManager
+import com.erisdev.flymelive.showLiveNotification
+import com.erisdev.flymelive.setCapsuleIconFromResource
 
 /**
  * 语音播放服务
@@ -135,6 +139,7 @@ class AudioPlayerService : Service() {
     private val progressPrefs by lazy { getSharedPreferences("audio_player_progress", Context.MODE_PRIVATE) }
     private var progressJob: Job? = null
     private var currentDurationMs: Long = 0L
+    private lateinit var flymeLiveManager: FlymeLiveManager
 
     private data class SavedAudioItem(
         val contentUri: String,
@@ -160,6 +165,7 @@ class AudioPlayerService : Service() {
         createNotificationChannel()
         audioCacheManager = AudioCacheManager(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        flymeLiveManager = FlymeLiveManager(this)
         mediaSession = MediaSessionCompat(this, TAG).apply {
             setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
@@ -733,6 +739,19 @@ class AudioPlayerService : Service() {
         currentLocalPath = null
         currentContentUri = null
         updatePlaybackState(playing = false)
+        
+        // 在Flyme设备上取消实况通知
+        val manufacturer = Build.MANUFACTURER ?: ""
+        val display = Build.DISPLAY ?: ""
+        val isFlyme = manufacturer.contains("meizu", ignoreCase = true) || display.contains("flyme", ignoreCase = true)
+        if (isFlyme) {
+            try {
+                flymeLiveManager.cancelNotification(NOTIFICATION_ID)
+            } catch (e: Exception) {
+                Log.e(TAG, "取消Flyme实况通知失败", e)
+            }
+        }
+        
         stopForeground(true)
         stopSelf()
     }
@@ -870,7 +889,7 @@ class AudioPlayerService : Service() {
                 updatePlaybackState(playing = isPlaying)
                 val content = if (isPlaying) "正在播放" else "已暂停"
                 updateNotification(currentTitle, content)
-                delay(1000)
+                delay(50)
             }
         }
     }
@@ -966,34 +985,117 @@ class AudioPlayerService : Service() {
         val isFlyme = manufacturer.contains("meizu", ignoreCase = true) || display.contains("flyme", ignoreCase = true)
         if (!isFlyme) return
 
-        val capsuleBundle = Bundle().apply {
-            putInt("notification.live.capsuleStatus", 1)
-            putInt("notification.live.capsuleType", 5)
-            putString("notification.live.capsuleContent", content)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                putParcelable(
-                    "notification.live.capsuleIcon",
-                    Icon.createWithResource(this@AudioPlayerService, R.drawable.ic_launcher_foreground)
+        try {
+            // 创建胶囊视图
+            val capsuleView = RemoteViews(packageName, R.layout.live_audio_capsule).apply {
+                setTextViewText(R.id.capsule_content, if (isPlaying) "正在播放" else "已暂停")
+            }
+            
+            // 创建展开视图
+            val contentView = RemoteViews(packageName, R.layout.live_audio_content).apply {
+                setTextViewText(R.id.title, title)
+                setTextViewText(R.id.message, if (isPlaying) "正在播放语音消息" else "已暂停语音播放")
+                
+                // 设置进度信息
+                val duration = currentDurationMs
+                val position = getCurrentPositionMs()
+                setTextViewText(R.id.progress_text, formatTime(position))
+                setTextViewText(R.id.duration_text, formatTime(duration))
+                
+                if (duration > 0) {
+                    setProgressBar(R.id.progress_bar, duration.toInt(), position.coerceAtMost(duration).toInt(), false)
+                }
+                
+                // 设置播放/暂停图标
+                setImageViewResource(
+                    R.id.pause_btn,
+                    if (isPlaying) R.drawable.ic_audio_pause else R.drawable.ic_audio_play
                 )
             }
-        }
+            
+            // 使用FlymeLive库创建实况通知
+            flymeLiveManager.showLiveNotification(
+                channelId = CHANNEL_ID,
+                channelName = "语音播放",
+                notificationId = NOTIFICATION_ID
+            ) {
+                setSmallIcon(R.drawable.ic_audio_playing)
+                setContentTitle(title)
+                setContentText(content)
+                
+                // 设置胶囊相关属性
+                setCapsuleContent(if (isPlaying) "正在播放" else "已暂停")
+                setCapsuleContentView(capsuleView)
+                setCapsuleIconFromResource(this@AudioPlayerService, R.drawable.ic_audio_playing)
+                
+                // 设置展开视图
+                setContentView(contentView)
+                
+                // 添加媒体控制按钮
+                if (isPlaying) {
+                    addExtra("action", "pause")
+                } else {
+                    addExtra("action", "play")
+                }
+            }
+            
+            // 注意：这里不需要调用NotificationManager，因为FlymeLiveManager已经处理了通知显示
+        } catch (e: Exception) {
+            Log.e(TAG, "创建Flyme实况通知失败，使用普通通知", e)
+            // 如果Flyme实况通知创建失败，则使用原来的Bundle方式作为后备
+            val capsuleBundle = Bundle().apply {
+                putInt("notification.live.capsuleStatus", 1)
+                putInt("notification.live.capsuleType", 5)
+                putString("notification.live.capsuleContent", content)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    putParcelable(
+                        "notification.live.capsuleIcon",
+                        Icon.createWithResource(this@AudioPlayerService, R.drawable.ic_launcher_foreground)
+                    )
+                }
+            }
 
-        val liveBundle = Bundle().apply {
-            putBoolean("is_live", true)
-            putInt("notification.live.operation", 0)
-            putInt("notification.live.type", 2)
-            putBundle("notification.live.capsule", capsuleBundle)
-        }
+            val liveBundle = Bundle().apply {
+                putBoolean("is_live", true)
+                putInt("notification.live.operation", 0)
+                putInt("notification.live.type", 2)
+                putBundle("notification.live.capsule", capsuleBundle)
+            }
 
-        builder
-            .addExtras(liveBundle)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(false)
+            builder
+                .addExtras(liveBundle)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(false)
+        }
+    }
+    
+    private fun formatTime(timeMs: Long): String {
+        val totalSeconds = timeMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
     
     private fun updateNotification(title: String, content: String) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, createNotification(title, content))
+        val manufacturer = Build.MANUFACTURER ?: ""
+        val display = Build.DISPLAY ?: ""
+        val isFlyme = manufacturer.contains("meizu", ignoreCase = true) || display.contains("flyme", ignoreCase = true)
+        
+        if (isFlyme) {
+            try {
+                // 在Flyme设备上，直接更新实况通知
+                maybeApplyFlymeLive(NotificationCompat.Builder(this, CHANNEL_ID), title, content)
+            } catch (e: Exception) {
+                Log.e(TAG, "更新Flyme实况通知失败", e)
+                // 如果失败，回退到普通通知
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(NOTIFICATION_ID, createNotification(title, content))
+            }
+        } else {
+            // 非Flyme设备，使用普通通知
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(NOTIFICATION_ID, createNotification(title, content))
+        }
     }
     
     /**

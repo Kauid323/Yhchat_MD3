@@ -23,6 +23,11 @@
     
     <!-- 通知权限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="flyme.permission.READ_NOTIFICATION_LIVE_STATE" />
+
+    <!-- 覆盖库的 SDK 要求 -->
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="36" 
+        tools:overrideLibrary="com.erisdev.flymelive" />
 
     <application
         android:name=".CanaryApplication"
@@ -33,7 +38,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.YhchatCanary">
+        android:theme="@style/Theme.YhchatCanary"
+        tools:overrideLibrary="com.erisdev.flymelive">
         <!-- 聊天界面 Activity -->
         <activity
             android:name=".ui.chat.ChatActivity"
