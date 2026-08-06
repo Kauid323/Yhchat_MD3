@@ -107,9 +107,13 @@ import com.yhchat.canary.ui.adaptive.YhClickableSurface
 import com.yhchat.canary.ui.adaptive.YhIcon as Icon
 import com.yhchat.canary.ui.adaptive.YhIconButton
 import com.yhchat.canary.ui.adaptive.YhPullToRefresh
+import com.yhchat.canary.ui.adaptive.YhScaffold
+import com.yhchat.canary.ui.adaptive.YhSmallTopAppBar
 import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.adaptive.YhText as Text
 import com.yhchat.canary.ui.adaptive.YhTextButton
+import com.yhchat.canary.ui.adaptive.YhTopBar
+import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.search.ComprehensiveSearchActivity
 import com.yhchat.canary.ui.search.SearchViewModel
 import com.yhchat.canary.utils.QRCodeUtil
@@ -317,6 +321,150 @@ fun ConversationScreen(
     // 扫描方式选择弹窗状态
     var showScanMethodDialog by remember { mutableStateOf(false) }
     
+    val layoutShowSearch by rememberBooleanPreference("layout_settings", "conversation_show_search", true)
+    val layoutShowAddButton by rememberBooleanPreference("layout_settings", "conversation_show_add", true)
+    val layoutShowUnreadBadge by rememberBooleanPreference("layout_settings", "conversation_show_unread_badge", true)
+    val layoutShowConversationList by rememberBooleanPreference("layout_settings", "conversation_show_list", true)
+    val layoutShowAddUser by rememberBooleanPreference("layout_settings", "add_menu_show_user", true)
+    val layoutShowAddGroup by rememberBooleanPreference("layout_settings", "add_menu_show_group", true)
+    val layoutShowScan by rememberBooleanPreference("layout_settings", "add_menu_show_scan", true)
+
+    // 顶部搜索栏状态
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var isManuallyActivated by rememberSaveable { mutableStateOf(false) } // 标记是否手动激活
+    var isTextFieldEnabled by rememberSaveable { mutableStateOf(false) } // 控制输入框是否启用
+    var isFocusClearing by rememberSaveable { mutableStateOf(false) } // 防止焦点清除死循环
+    val searchFocusRequester = remember { FocusRequester() }
+    
+    // 检测安卓版本
+    val isLowAndroidVersion = remember { android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.O_MR1 }
+
+    // 顶栏左侧自己的头像（来自 UserRepository.getUserProfile）
+    var myAvatarUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(token) {
+        if (token.isBlank()) return@LaunchedEffect
+        runCatching {
+            val userRepo = RepositoryFactory.getUserRepository(context)
+            userRepo.getUserProfile().onSuccess { profile ->
+                myAvatarUrl = profile.avatarUrl
+            }
+        }
+    }
+
+    // 防止安卓8及以下自动聚焦 - 多层防护
+    LaunchedEffect(Unit) {
+        if (isLowAndroidVersion) {
+            // 安卓8及以下版本使用温和的初始化
+            kotlinx.coroutines.delay(300)
+            repeat(3) {
+                kotlinx.coroutines.delay(100)
+                if (!isSearchActive && !isManuallyActivated && !isFocusClearing) {
+                    try {
+                        focusManager.clearFocus()
+                        searchFocusRequester.freeFocus()
+                    } catch (_: Exception) {}
+                }
+            }
+            kotlinx.coroutines.delay(200)
+            isTextFieldEnabled = true
+        } else {
+            // 安卓9及以上版本使用原有逻辑
+            repeat(5) {
+                kotlinx.coroutines.delay(50)
+                if (!isSearchActive && !isManuallyActivated) {
+                    try {
+                        focusManager.clearFocus()
+                        searchFocusRequester.freeFocus()
+                    } catch (_: Exception) {}
+                }
+            }
+            kotlinx.coroutines.delay(200)
+            isTextFieldEnabled = true
+        }
+    }
+    
+    // 监听搜索状态变化，在退出搜索时清除焦点
+    LaunchedEffect(isSearchActive) {
+        if (!isSearchActive && searchQuery.isEmpty() && !isFocusClearing) {
+            coroutineScope.launch {
+                isFocusClearing = true
+                try {
+                    focusManager.clearFocus()
+                    searchFocusRequester.freeFocus()
+                } catch (_: Exception) {}
+                kotlinx.coroutines.delay(if (isLowAndroidVersion) 200 else 100)
+                isFocusClearing = false
+            }
+        }
+    }
+
+    // 搜索ViewModel（用于API搜索）
+    val searchViewModel: SearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val searchUiState by searchViewModel.uiState.collectAsState()
+    val searchResult by searchViewModel.searchResult.collectAsState()
+
+    // 本地会话过滤（按名称匹配）
+    val filteredConversations = remember(conversations, searchQuery) {
+        if (searchQuery.isBlank()) conversations
+        else conversations.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
+
+    // 搜索激活时拦截返回键
+    BackHandler(enabled = isSearchActive) {
+        if (searchQuery.isNotEmpty()) {
+            searchQuery = ""
+            searchViewModel.clearSearch()
+        } else {
+            isSearchActive = false
+            focusManager.clearFocus()
+        }
+    }
+
+    // 扫一扫相关逻辑
+    // 处理扫描结果
+    val handleScanResult = remember(context) {
+        { text: String ->
+            if (text.isNotEmpty()) {
+                if (UnifiedLinkHandler.isHandleableLink(text)) {
+                    UnifiedLinkHandler.handleLink(context, text)
+                } else {
+                    // 尝试用浏览器打开
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(text))
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "无法识别的内容: $text", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // 扫码启动器
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
+        if (result.contents != null) {
+            handleScanResult(result.contents)
+        }
+    }
+
+    // 相册启动器
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val text = QRCodeUtil.decodeFromUri(context, uri)
+                if (text != null) {
+                    handleScanResult(text)
+                } else {
+                    android.widget.Toast.makeText(context, "未识别到二维码", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // 扫描方式选择弹窗状态
+    var showScanMethodDialog by remember { mutableStateOf(false) }
+    
     // 设置tokenRepository（只在第一次或tokenRepository变化时执行）
     LaunchedEffect(tokenRepository) {
         tokenRepository?.let { viewModel.setTokenRepository(it) }
@@ -340,279 +488,227 @@ fun ConversationScreen(
         }
     }
     
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-    ) {
-        LaunchedEffect(isSearchActive) {
-            if (!isSearchActive) {
-                try { searchFocusRequester.freeFocus() } catch (_: Exception) {}
-            }
-        }
-
-        AnimatedVisibility(
-            visible = topBarNavigationState.isVisible,
-            enter = fadeIn(animationSpec = tween(durationMillis = 220)) + expandVertically(
-                animationSpec = tween(durationMillis = 260),
-                expandFrom = Alignment.Top
-            ),
-            exit = fadeOut(animationSpec = tween(durationMillis = 180)) + shrinkVertically(
-                animationSpec = tween(durationMillis = 260),
-                shrinkTowards = Alignment.Top
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-        ) {
-            YhCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                cornerRadius = 28.dp,
-                containerColor = Color.Transparent
-            ) {
+    YhScaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            if (isSearchActive) {
                 val searchBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
                 val onSearchColor = MaterialTheme.colorScheme.onSurfaceVariant
-                val searchBarVerticalPadding by animateDpAsState(
-                    targetValue = if (isSearchActive) 0.dp else 4.dp,
-                    label = "SearchBarVerticalPadding"
-                )
-                val searchBarHorizontalPadding by animateDpAsState(
-                    targetValue = if (isSearchActive) 4.dp else 8.dp,
-                    label = "SearchBarHorizontalPadding"
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (layoutShowAvatar) {
-                        val avatarOuterSize = 36.dp
-                        val avatarRingWidth = 2.dp
+                YhSmallTopAppBar(
+                    title = {
                         Box(
                             modifier = Modifier
-                                .size(avatarOuterSize)
-                                .clip(CircleShape)
-                                .border(avatarRingWidth, MaterialTheme.colorScheme.primary, CircleShape)
-                                .clickable(onClick = onProfileClick),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(searchBackgroundColor)
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart
                         ) {
-                            val avatarUrl72 = remember(myAvatarUrl) {
-                                val url = myAvatarUrl
-                                if (url.isNullOrBlank()) {
-                                    url
-                                } else if (url.contains("?")) {
-                                    url
-                                } else {
-                                    url + "?imageView2/2/w/150/h/150"
-                                }
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = "搜索会话、联系人...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = onSearchColor.copy(alpha = 0.6f),
+                                    maxLines = 1
+                                )
                             }
-                            val avatarRequest = remember(avatarUrl72) {
-                                avatarUrl72?.let { url ->
-                                    ImageRequest.Builder(context)
-                                        .data(url)
-                                        .addHeader("Referer", "https://myapp.jwznb.com")
-                                        .crossfade(true)
-                                        .build()
-                                }
-                            }
-                            AsyncImage(
-                                model = avatarRequest,
-                                contentDescription = "我的头像",
-                                modifier = Modifier
-                                    .size(avatarOuterSize - avatarRingWidth * 2)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                                error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-
-                    // 中间：搜索输入框
-                    if (layoutShowSearch) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(
-                                    vertical = searchBarVerticalPadding,
-                                    horizontal = searchBarHorizontalPadding.coerceAtMost(6.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = {
+                                    if (isManuallyActivated) {
+                                        searchQuery = it
+                                        if (it.isNotEmpty()) {
+                                            isSearchActive = true
+                                            searchViewModel.search(it)
+                                        }
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = onSearchColor),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(36.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(searchBackgroundColor)
-                                    .clickable {
-                                        if (isTextFieldEnabled) {
-                                            isManuallyActivated = true
-                                            isSearchActive = true
-                                            coroutineScope.launch {
-                                                kotlinx.coroutines.delay(100)
-                                                try {
-                                                    searchFocusRequester.requestFocus()
-                                                } catch (_: Exception) {}
-                                            }
-                                        }
-                                    }
-                                    .padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (isSearchActive) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Search,
-                                    contentDescription = "搜索",
-                                    tint = onSearchColor,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clickable(enabled = isSearchActive) {
-                                            if (searchQuery.isNotEmpty()) {
-                                                searchQuery = ""
-                                                searchViewModel.clearSearch()
-                                            } else {
-                                                isSearchActive = false
-                                                isManuallyActivated = false
-                                                focusManager.clearFocus()
-                                            }
-                                        }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier.weight(1f),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (searchQuery.isEmpty()) {
-                                        Text(
-                                            text = "搜索会话、联系人...",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = onSearchColor.copy(alpha = 0.6f),
-                                            maxLines = 1
-                                        )
-                                    }
-                                    BasicTextField(
-                                        value = searchQuery,
-                                        onValueChange = {
-                                            if (isManuallyActivated) {
-                                                searchQuery = it
-                                                if (it.isNotEmpty()) {
-                                                    isSearchActive = true
-                                                    searchViewModel.search(it)
-                                                }
-                                            }
-                                        },
-                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = onSearchColor),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .focusRequester(searchFocusRequester)
-                                            .onFocusChanged { focusState ->
-                                                if (!isFocusClearing) {
-                                                    if (focusState.isFocused && !isManuallyActivated) {
-                                                        if (isLowAndroidVersion) {
-                                                            coroutineScope.launch {
-                                                                isFocusClearing = true
-                                                                try {
-                                                                    focusManager.clearFocus()
-                                                                } catch (_: Exception) {}
-                                                                kotlinx.coroutines.delay(200)
-                                                                isFocusClearing = false
-                                                            }
-                                                        } else {
-                                                            coroutineScope.launch {
-                                                                isFocusClearing = true
-                                                                focusManager.clearFocus()
-                                                                isTextFieldEnabled = false
-                                                                kotlinx.coroutines.delay(100)
-                                                                isTextFieldEnabled = true
-                                                                isFocusClearing = false
-                                                            }
-                                                        }
-                                                    } else if (focusState.isFocused && isManuallyActivated) {
-                                                        isSearchActive = true
-                                                    } else if (!focusState.isFocused && isSearchActive && searchQuery.isEmpty()) {
-                                                        isSearchActive = false
-                                                        isManuallyActivated = false
+                                    .focusRequester(searchFocusRequester)
+                                    .onFocusChanged { focusState ->
+                                        if (!isFocusClearing) {
+                                            if (focusState.isFocused && !isManuallyActivated) {
+                                                if (isLowAndroidVersion) {
+                                                    coroutineScope.launch {
+                                                        isFocusClearing = true
+                                                        try {
+                                                            focusManager.clearFocus()
+                                                        } catch (_: Exception) {}
+                                                        kotlinx.coroutines.delay(200)
+                                                        isFocusClearing = false
+                                                    }
+                                                } else {
+                                                    coroutineScope.launch {
+                                                        isFocusClearing = true
+                                                        focusManager.clearFocus()
+                                                        isTextFieldEnabled = false
+                                                        kotlinx.coroutines.delay(100)
+                                                        isTextFieldEnabled = true
+                                                        isFocusClearing = false
                                                     }
                                                 }
-                                            },
-                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                        keyboardActions = KeyboardActions(onSearch = {
-                                            if (searchQuery.isNotEmpty()) {
-                                                searchViewModel.search(searchQuery)
+                                            } else if (focusState.isFocused && isManuallyActivated) {
+                                                isSearchActive = true
+                                            } else if (!focusState.isFocused && isSearchActive && searchQuery.isEmpty()) {
+                                                isSearchActive = false
+                                                isManuallyActivated = false
                                             }
-                                            focusManager.clearFocus()
-                                        }),
-                                        singleLine = true,
-                                        enabled = isTextFieldEnabled && (isManuallyActivated || isSearchActive)
-                                    )
-                                }
-                                if (searchQuery.isNotEmpty()) {
-                                    YhIconButton(
-                                        onClick = {
-                                            searchQuery = ""
-                                            searchViewModel.clearSearch()
-                                            isSearchActive = false
-                                            isManuallyActivated = false
-                                            focusManager.clearFocus()
-                                        },
-                                        modifier = Modifier.size(18.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Clear,
-                                            contentDescription = "清除",
-                                            tint = onSearchColor
-                                        )
+                                        }
+                                    },
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        searchViewModel.search(searchQuery)
                                     }
-                                }
-                            }
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // 右侧：加号按钮
-                    if (!isSearchActive && layoutShowAddButton) {
-                        YhIconButton(onClick = { showAddMenuBottomSheet = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "添加",
-                                tint = MaterialTheme.colorScheme.onSurface
+                                    focusManager.clearFocus()
+                                }),
+                                singleLine = true,
+                                enabled = isTextFieldEnabled && (isManuallyActivated || isSearchActive)
                             )
                         }
+                    },
+                    navigationIcon = {
+                        YhIconButton(onClick = {
+                            searchQuery = ""
+                            searchViewModel.clearSearch()
+                            isSearchActive = false
+                            isManuallyActivated = false
+                            focusManager.clearFocus()
+                        }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回"
+                            )
+                        }
+                    },
+                    actions = {
+                        if (searchQuery.isNotEmpty()) {
+                            YhIconButton(onClick = {
+                                searchQuery = ""
+                                searchViewModel.clearSearch()
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "清除"
+                                )
+                            }
+                        }
                     }
-                }
-            }
-        }
-        
-        uiState.error?.let { error ->
-            YhSurface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.errorContainer,
-                shadowElevation = 0.dp,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                YhTopBar(
+                    title = "会话",
+                    large = true,
+                    navigationIcon = {
+                        if (layoutShowAvatar) {
+                            val avatarOuterSize = 36.dp
+                            val avatarRingWidth = 2.dp
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .size(avatarOuterSize)
+                                    .clip(CircleShape)
+                                    .border(avatarRingWidth, MaterialTheme.colorScheme.primary, CircleShape)
+                                    .clickable(onClick = onProfileClick),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val avatarUrl72 = remember(myAvatarUrl) {
+                                    val url = myAvatarUrl
+                                    if (url.isNullOrBlank()) {
+                                        url
+                                    } else if (url.contains("?")) {
+                                        url
+                                    } else {
+                                        url + "?imageView2/2/w/150/h/150"
+                                    }
+                                }
+                                val avatarRequest = remember(avatarUrl72) {
+                                    avatarUrl72?.let { url ->
+                                        ImageRequest.Builder(context)
+                                            .data(url)
+                                            .addHeader("Referer", "https://myapp.jwznb.com")
+                                            .crossfade(true)
+                                            .build()
+                                    }
+                                }
+                                AsyncImage(
+                                    model = avatarRequest,
+                                    contentDescription = "我的头像",
+                                    modifier = Modifier
+                                        .size(avatarOuterSize - avatarRingWidth * 2)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        if (layoutShowSearch) {
+                            YhIconButton(onClick = {
+                                if (isTextFieldEnabled) {
+                                    isManuallyActivated = true
+                                    isSearchActive = true
+                                    coroutineScope.launch {
+                                        kotlinx.coroutines.delay(100)
+                                        try {
+                                            searchFocusRequester.requestFocus()
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "搜索"
+                                )
+                            }
+                        }
+                        if (layoutShowAddButton) {
+                            YhIconButton(onClick = { showAddMenuBottomSheet = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "添加"
+                                )
+                            }
+                        }
+                    }
                 )
             }
         }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            uiState.error?.let { error ->
+                YhSurface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shadowElevation = 0.dp,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
 
             if (isSearchActive) {
                 // ========== 搜索模式 ==========
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .yhTopBarNestedScroll(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                 // 本地会话匹配结果
@@ -811,7 +907,9 @@ fun ConversationScreen(
                     
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .yhTopBarNestedScroll(),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
                         // 置顶会话显示在列表最顶部 - 横向滑动样式
@@ -945,17 +1043,6 @@ fun ConversationScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-    }
-    
-    // 长按菜单弹窗
-    if (showConversationMenu && selectedConversation != null) {
-        ConversationMenuDialog(
             conversation = selectedConversation!!,
             isSticky = isSelectedConversationSticky,
             onDismiss = { 
