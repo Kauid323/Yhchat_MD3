@@ -177,150 +177,6 @@ fun ConversationScreen(
     
     // 布局设置
     val layoutShowAvatar by rememberBooleanPreference("layout_settings", "conversation_show_title", true)
-    val layoutShowSearch by rememberBooleanPreference("layout_settings", "conversation_show_search", true)
-    val layoutShowAddButton by rememberBooleanPreference("layout_settings", "conversation_show_add", true)
-    val layoutShowUnreadBadge by rememberBooleanPreference("layout_settings", "conversation_show_unread_badge", true)
-    val layoutShowConversationList by rememberBooleanPreference("layout_settings", "conversation_show_list", true)
-    val layoutShowAddUser by rememberBooleanPreference("layout_settings", "add_menu_show_user", true)
-    val layoutShowAddGroup by rememberBooleanPreference("layout_settings", "add_menu_show_group", true)
-    val layoutShowScan by rememberBooleanPreference("layout_settings", "add_menu_show_scan", true)
-
-    // 顶部搜索栏状态
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var isSearchActive by rememberSaveable { mutableStateOf(false) }
-    var isManuallyActivated by rememberSaveable { mutableStateOf(false) } // 标记是否手动激活
-    var isTextFieldEnabled by rememberSaveable { mutableStateOf(false) } // 控制输入框是否启用
-    var isFocusClearing by rememberSaveable { mutableStateOf(false) } // 防止焦点清除死循环
-    val searchFocusRequester = remember { FocusRequester() }
-    
-    // 检测安卓版本
-    val isLowAndroidVersion = remember { android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.O_MR1 }
-
-    // 顶栏左侧自己的头像（来自 UserRepository.getUserProfile）
-    var myAvatarUrl by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(token) {
-        if (token.isBlank()) return@LaunchedEffect
-        runCatching {
-            val userRepo = RepositoryFactory.getUserRepository(context)
-            userRepo.getUserProfile().onSuccess { profile ->
-                myAvatarUrl = profile.avatarUrl
-            }
-        }
-    }
-
-    // 防止安卓8及以下自动聚焦 - 多层防护
-    LaunchedEffect(Unit) {
-        if (isLowAndroidVersion) {
-            // 安卓8及以下版本使用温和的初始化
-            kotlinx.coroutines.delay(300)
-            repeat(3) {
-                kotlinx.coroutines.delay(100)
-                if (!isSearchActive && !isManuallyActivated && !isFocusClearing) {
-                    try {
-                        focusManager.clearFocus()
-                        searchFocusRequester.freeFocus()
-                    } catch (_: Exception) {}
-                }
-            }
-            kotlinx.coroutines.delay(200)
-            isTextFieldEnabled = true
-        } else {
-            // 安卓9及以上版本使用原有逻辑
-            repeat(5) {
-                kotlinx.coroutines.delay(50)
-                if (!isSearchActive && !isManuallyActivated) {
-                    try {
-                        focusManager.clearFocus()
-                        searchFocusRequester.freeFocus()
-                    } catch (_: Exception) {}
-                }
-            }
-            kotlinx.coroutines.delay(200)
-            isTextFieldEnabled = true
-        }
-    }
-    
-    // 监听搜索状态变化，在退出搜索时清除焦点
-    LaunchedEffect(isSearchActive) {
-        if (!isSearchActive && searchQuery.isEmpty() && !isFocusClearing) {
-            coroutineScope.launch {
-                isFocusClearing = true
-                try {
-                    focusManager.clearFocus()
-                    searchFocusRequester.freeFocus()
-                } catch (_: Exception) {}
-                kotlinx.coroutines.delay(if (isLowAndroidVersion) 200 else 100)
-                isFocusClearing = false
-            }
-        }
-    }
-
-    // 搜索ViewModel（用于API搜索）
-    val searchViewModel: SearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val searchUiState by searchViewModel.uiState.collectAsState()
-    val searchResult by searchViewModel.searchResult.collectAsState()
-
-    // 本地会话过滤（按名称匹配）
-    val filteredConversations = remember(conversations, searchQuery) {
-        if (searchQuery.isBlank()) conversations
-        else conversations.filter { it.name.contains(searchQuery, ignoreCase = true) }
-    }
-
-    // 搜索激活时拦截返回键
-    BackHandler(enabled = isSearchActive) {
-        if (searchQuery.isNotEmpty()) {
-            searchQuery = ""
-            searchViewModel.clearSearch()
-        } else {
-            isSearchActive = false
-            focusManager.clearFocus()
-        }
-    }
-
-    // 扫一扫相关逻辑
-    // 处理扫描结果
-    val handleScanResult = remember(context) {
-        { text: String ->
-            if (text.isNotEmpty()) {
-                if (UnifiedLinkHandler.isHandleableLink(text)) {
-                    UnifiedLinkHandler.handleLink(context, text)
-                } else {
-                    // 尝试用浏览器打开
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(text))
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        android.widget.Toast.makeText(context, "无法识别的内容: $text", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
-    // 扫码启动器
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
-        if (result.contents != null) {
-            handleScanResult(result.contents)
-        }
-    }
-
-    // 相册启动器
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            coroutineScope.launch {
-                val text = QRCodeUtil.decodeFromUri(context, uri)
-                if (text != null) {
-                    handleScanResult(text)
-                } else {
-                    android.widget.Toast.makeText(context, "未识别到二维码", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    // 扫描方式选择弹窗状态
-    var showScanMethodDialog by remember { mutableStateOf(false) }
-    
     // 设置tokenRepository（只在第一次或tokenRepository变化时执行）
     LaunchedEffect(tokenRepository) {
         tokenRepository?.let { viewModel.setTokenRepository(it) }
@@ -350,7 +206,7 @@ fun ConversationScreen(
             if (isSearchActive) {
                 val searchBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
                 val onSearchColor = MaterialTheme.colorScheme.onSurfaceVariant
-                YhSmallTopAppBar(
+                YhTopAppBar(
                     title = {
                         Box(
                             modifier = Modifier
@@ -899,6 +755,18 @@ fun ConversationScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 长按菜单弹窗
+    if (showConversationMenu && selectedConversation != null) {
+        ConversationMenuDialog(
             conversation = selectedConversation!!,
             isSticky = isSelectedConversationSticky,
             onDismiss = { 
@@ -983,12 +851,9 @@ fun ConversationScreen(
                 showAddUser = layoutShowAddUser,
                 showAddGroup = layoutShowAddGroup,
                 showScan = layoutShowScan
-                )
-            }
+            )
         }
-
-}
-
+    }
 }
 
 /**
