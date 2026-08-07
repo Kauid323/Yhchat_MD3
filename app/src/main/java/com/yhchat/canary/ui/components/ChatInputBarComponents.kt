@@ -1,5 +1,8 @@
 package com.yhchat.canary.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -152,6 +155,7 @@ fun AttachmentMenu(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // 第一块：附件
             YhSurface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -161,96 +165,133 @@ fun AttachmentMenu(
                     AttachmentSectionHeader(
                         title = "附件",
                         expanded = expandedSection == "attachments",
-                        showDivider = expandedSection != "attachments" ||
-                            (onTextClick != null && onHtmlClick != null && onMarkdownClick != null) ||
-                            onDefaultMessageTypeChange != null,
+                        showDivider = false,
                         onClick = { expandedSection = if (expandedSection == "attachments") "" else "attachments" }
                     )
-                    if (expandedSection == "attachments") {
-                        AttachmentSheetRow("图片", Icons.Default.Image, onClick = { onImageClick?.invoke() })
-                        AttachmentSheetRow("拍照", Icons.Default.CameraAlt, onClick = { onCameraClick?.invoke() })
-                        AttachmentSheetRow("视频", Icons.Default.VideoLibrary, onClick = { onVideoClick?.invoke() })
-                        AttachmentSheetRow(
-                            "文件",
-                            Icons.Default.AttachFile,
-                            onClick = { onFileClick?.invoke() },
-                            showDivider = false
-                        )
-                    }
-
-                    if (onTextClick != null && onHtmlClick != null && onMarkdownClick != null) {
-                        AttachmentSectionHeader(
-                            title = "当前消息类型",
-                            expanded = expandedSection == "messageType",
-                            showDivider = expandedSection != "messageType" || onDefaultMessageTypeChange != null,
-                            onClick = { expandedSection = if (expandedSection == "messageType") "" else "messageType" }
-                        )
-                    }
-                    if (expandedSection == "messageType" && onTextClick != null && onHtmlClick != null && onMarkdownClick != null) {
-                        AttachmentSheetRow(
-                            "文本",
-                            Icons.Default.TextFields,
-                            checked = selectedMessageType == 1,
-                            onClick = { onTextClick.invoke() }
-                        )
-                        AttachmentSheetRow(
-                            "Markdown",
-                            Icons.AutoMirrored.Filled.Article,
-                            checked = selectedMessageType == 3,
-                            onClick = { onMarkdownClick.invoke() }
-                        )
-                        AttachmentSheetRow(
-                            "HTML",
-                            Icons.Default.Code,
-                            checked = selectedMessageType == 8,
-                            onClick = { onHtmlClick.invoke() },
-                            showDivider = onA2UiClick != null
-                        )
-                        if (onA2UiClick != null) {
+                    AnimatedVisibility(
+                        visible = expandedSection == "attachments",
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        Column {
+                            AttachmentSheetRow("图片", Icons.Default.Image, onClick = { onImageClick?.invoke() })
+                            AttachmentSheetRow("拍照", Icons.Default.CameraAlt, onClick = { onCameraClick?.invoke() })
+                            AttachmentSheetRow("视频", Icons.Default.VideoLibrary, onClick = { onVideoClick?.invoke() })
                             AttachmentSheetRow(
-                                "A2UI",
-                                Icons.Default.Settings,
-                                checked = selectedMessageType == 14,
-                                onClick = { onA2UiClick.invoke() },
+                                "文件",
+                                Icons.Default.AttachFile,
+                                onClick = { onFileClick?.invoke() },
                                 showDivider = false
                             )
                         }
                     }
+                }
+            }
 
-                    if (onDefaultMessageTypeChange != null) {
+            // 第二块：当前消息类型
+            if (onTextClick != null && onHtmlClick != null && onMarkdownClick != null) {
+                YhSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        AttachmentSectionHeader(
+                            title = "当前消息类型",
+                            expanded = expandedSection == "messageType",
+                            showDivider = false,
+                            onClick = { expandedSection = if (expandedSection == "messageType") "" else "messageType" }
+                        )
+                        AnimatedVisibility(
+                            visible = expandedSection == "messageType",
+                            enter = expandVertically(),
+                            exit = shrinkVertically()
+                        ) {
+                            Column {
+                                AttachmentSheetRow(
+                                    "文本",
+                                    Icons.Default.TextFields,
+                                    checked = selectedMessageType == 1,
+                                    onClick = { onTextClick.invoke() }
+                                )
+                                AttachmentSheetRow(
+                                    "Markdown",
+                                    Icons.AutoMirrored.Filled.Article,
+                                    checked = selectedMessageType == 3,
+                                    onClick = { onMarkdownClick.invoke() }
+                                )
+                                AttachmentSheetRow(
+                                    "HTML",
+                                    Icons.Default.Code,
+                                    checked = selectedMessageType == 8,
+                                    onClick = { onHtmlClick.invoke() },
+                                    showDivider = onA2UiClick != null
+                                )
+                                if (onA2UiClick != null) {
+                                    AttachmentSheetRow(
+                                        "A2UI",
+                                        Icons.Default.Settings,
+                                        checked = selectedMessageType == 14,
+                                        onClick = { onA2UiClick.invoke() },
+                                        showDivider = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 第三块：默认消息类型
+            if (onDefaultMessageTypeChange != null) {
+                YhSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         AttachmentSectionHeader(
                             title = "默认消息类型",
                             expanded = expandedSection == "defaultType",
                             showDivider = false,
                             onClick = { expandedSection = if (expandedSection == "defaultType") "" else "defaultType" }
                         )
-                    }
-                    if (expandedSection == "defaultType" && onDefaultMessageTypeChange != null) {
-                        AttachmentSheetRow(
-                            "默认文本",
-                            Icons.Default.TextFields,
-                            checked = defaultMessageType == 1,
-                            onClick = { onDefaultMessageTypeChange.invoke(1) }
-                        )
-                        AttachmentSheetRow(
-                            "默认Markdown",
-                            Icons.AutoMirrored.Filled.Article,
-                            checked = defaultMessageType == 3,
-                            onClick = { onDefaultMessageTypeChange.invoke(3) }
-                        )
-                        AttachmentSheetRow(
-                            "默认HTML",
-                            Icons.Default.Code,
-                            checked = defaultMessageType == 8,
-                            onClick = { onDefaultMessageTypeChange.invoke(8) }
-                        )
-                        AttachmentSheetRow(
-                            "默认A2UI",
-                            Icons.Default.Settings,
-                            checked = defaultMessageType == 14,
-                            onClick = { onDefaultMessageTypeChange.invoke(14) },
-                            showDivider = false
-                        )
+                        AnimatedVisibility(
+                            visible = expandedSection == "defaultType",
+                            enter = expandVertically(),
+                            exit = shrinkVertically()
+                        ) {
+                            Column {
+                                AttachmentSheetRow(
+                                    "默认文本",
+                                    Icons.Default.TextFields,
+                                    checked = defaultMessageType == 1,
+                                    onClick = { onDefaultMessageTypeChange.invoke(1) }
+                                )
+                                AttachmentSheetRow(
+                                    "默认Markdown",
+                                    Icons.AutoMirrored.Filled.Article,
+                                    checked = defaultMessageType == 3,
+                                    onClick = { onDefaultMessageTypeChange.invoke(3) }
+                                )
+                                AttachmentSheetRow(
+                                    "默认HTML",
+                                    Icons.Default.Code,
+                                    checked = defaultMessageType == 8,
+                                    onClick = { onDefaultMessageTypeChange.invoke(8) },
+                                    showDivider = onA2UiClick != null
+                                )
+                                if (onA2UiClick != null) {
+                                    AttachmentSheetRow(
+                                        "默认A2UI",
+                                        Icons.Default.Settings,
+                                        checked = defaultMessageType == 14,
+                                        onClick = { onDefaultMessageTypeChange.invoke(14) },
+                                        showDivider = false
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
