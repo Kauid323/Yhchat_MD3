@@ -113,7 +113,7 @@ class ChatActivity : BaseActivity() {
                 val topBarComposeColor = if (isMiuixUi) {
                     top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.surface
                 } else {
-                    MaterialTheme.colorScheme.primaryContainer
+                    MaterialTheme.colorScheme.surface
                 }
                 val topBarColor = topBarComposeColor.toArgb()
                 val navigationBarColor = android.graphics.Color.TRANSPARENT
