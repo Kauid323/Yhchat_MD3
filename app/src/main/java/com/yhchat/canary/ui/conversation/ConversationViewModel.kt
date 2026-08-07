@@ -102,23 +102,7 @@ class ConversationViewModel @Inject constructor(
      * 观察WebSocket会话更新
      */
     private fun observeWebSocketMessages() {
-        // 监听消息事件
-        viewModelScope.launch {
-            webSocketManager.getMessageEvents().collect { event ->
-                Log.d("ConversationViewModel", "Received MessageEvent: ${event::class.simpleName}")
-                when (event) {
-                    is MessageEvent.NewMessage -> {
-                        updateConversationWithNewMessage(event.message)
-                    }
-                    is MessageEvent.MessageEdited -> {
-                        updateConversationWithEditedMessage(event.message)
-                    }
-                    else -> {
-                        // ignore other events
-                    }
-                }
-            }
-        }
+        // 监听消息事件 (已移除，避免重复更新)
         
         // 同时监听会话更新事件（这个流专门用于会话列表更新）
         viewModelScope.launch {
@@ -167,12 +151,9 @@ class ConversationViewModel @Inject constructor(
                 )
                 currentConversations[conversationIndex] = updatedConversation
                 
-                // 更新缓存中的会话
-                cacheRepository.updateConversationLastMessage(
-                    targetChatId,
-                    messagePreview,
-                    message.sendTime
-                )
+                // 注意：这里不再调用 cacheRepository.updateConversationLastMessage
+                // 因为 WebSocketManager 在收到消息时已经通过 ConversationRepository 更新了数据库
+                // 这样避免了未读消息数被重复 +1 的问题。
                 
                 Log.d("ConversationViewModel", "Updated conversation: chatId=$targetChatId, unread=${updatedConversation.unreadMessage}, preview=$messagePreview")
             } else {

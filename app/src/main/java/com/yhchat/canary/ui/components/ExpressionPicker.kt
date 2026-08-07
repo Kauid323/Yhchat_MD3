@@ -96,7 +96,6 @@ fun ExpressionPicker(
     }
     
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: 默认, 1: 收藏, 2+: 表情包
     val tabs = remember(uiState.stickerPacks) {
         buildList<ExpressionPickerTab> {
             add(ExpressionPickerTab.DefaultExpressions)
@@ -111,25 +110,7 @@ fun ExpressionPicker(
         initialPage = 0,
         pageCount = { totalTabs }
     )
-
-    LaunchedEffect(totalTabs) {
-        if (selectedTab >= totalTabs) {
-            selectedTab = 0
-        }
-    }
-
-    LaunchedEffect(selectedTab, totalTabs) {
-        val target = selectedTab.coerceIn(0, totalTabs - 1)
-        if (target != pagerState.currentPage && !pagerState.isScrollInProgress) {
-            pagerState.animateScrollToPage(target)
-        }
-    }
-
-    LaunchedEffect(pagerState.currentPage) {
-        if (selectedTab != pagerState.currentPage) {
-            selectedTab = pagerState.currentPage
-        }
-    }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     
     YhSurface(
         modifier = modifier
@@ -155,8 +136,12 @@ fun ExpressionPicker(
 
                 ExpressionPickerTabRow(
                     tabs = tabs,
-                    selectedTabIndex = selectedTab,
-                    onTabSelected = { selectedTab = it },
+                    selectedTabIndex = pagerState.currentPage,
+                    onTabSelected = { index -> 
+                        coroutineScope.launch { 
+                            pagerState.animateScrollToPage(index) 
+                        } 
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -382,7 +367,17 @@ private fun ExpressionPickerTabRow(
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    
+    LaunchedEffect(selectedTabIndex) {
+        if (selectedTabIndex in tabs.indices) {
+            // 简单的居中计算，或者至少滚动到该项
+            listState.animateScrollToItem(selectedTabIndex, -100) // 稍微偏移以尽量居中
+        }
+    }
+
     LazyRow(
+        state = listState,
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp),

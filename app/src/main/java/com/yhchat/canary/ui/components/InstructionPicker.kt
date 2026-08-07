@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import com.yhchat.canary.ui.adaptive.YhText as Text
 import androidx.compose.runtime.Composable
@@ -22,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +41,7 @@ import com.yhchat.canary.data.model.Instruction
 import com.yhchat.canary.data.repository.GroupRepository
 import com.yhchat.canary.ui.adaptive.YhCard
 import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
+import com.yhchat.canary.ui.adaptive.YhClickableSurface
 import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.adaptive.YhTextButton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,19 +130,89 @@ fun InstructionPicker(
                 }
                 
                 else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(uiState.instructions) { instruction ->
-                            InstructionItem(
-                                instruction = instruction,
-                                onClick = {
-                                    onInstructionClick(instruction)
-                                    onDismiss()
+                    val groupedInstructions = remember(uiState.instructions) {
+                        uiState.instructions.groupBy { it.botName.ifEmpty { "通用指令" } }
+                    }
+                    val tabNames = remember(groupedInstructions) { groupedInstructions.keys.toList() }
+                    val pagerState = rememberPagerState(
+                        initialPage = 0,
+                        pageCount = { tabNames.size }
+                    )
+                    val coroutineScope = rememberCoroutineScope()
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Tabs (only show if there is more than 1 bot)
+                        if (tabNames.size > 1) {
+                            val listState = rememberLazyListState()
+                            LaunchedEffect(pagerState.currentPage) {
+                                if (pagerState.currentPage in tabNames.indices) {
+                                    listState.animateScrollToItem(pagerState.currentPage, -100)
                                 }
-                            )
+                            }
+                            LazyRow(
+                                state = listState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                itemsIndexed(tabNames) { index, tabName ->
+                                    val selected = pagerState.currentPage == index
+                                    val containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+                                    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    
+                                    YhClickableSurface(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(index)
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = containerColor,
+                                        contentColor = contentColor,
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = tabName,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = contentColor,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Pager
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            val currentTab = tabNames.getOrNull(page)
+                            val instructionsForTab = currentTab?.let { groupedInstructions[it] } ?: emptyList()
+                            
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(instructionsForTab) { instruction ->
+                                    InstructionItem(
+                                        instruction = instruction,
+                                        onClick = {
+                                            onInstructionClick(instruction)
+                                            onDismiss()
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

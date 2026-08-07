@@ -143,7 +143,8 @@ class FriendRepository @Inject constructor(
 
     suspend fun agreeApply(
         id: Long,
-        agree: Int = 1
+        agree: Int = 1,
+        usesGroupAgreeInvite: Boolean = false
     ): Result<BaseResponse> {
         return try {
             val token = tokenRepository.getToken().first()?.token
@@ -151,7 +152,12 @@ class FriendRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
 
-            val response = apiService.agreeApply(token, AgreeApplyRequest(id = id, agree = agree))
+            val request = AgreeApplyRequest(id = id, agree = agree)
+            val response = if (usesGroupAgreeInvite) {
+                apiService.agreeInvite(token, request)
+            } else {
+                apiService.agreeApply(token, request)
+            }
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {

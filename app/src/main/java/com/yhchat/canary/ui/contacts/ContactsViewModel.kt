@@ -53,7 +53,36 @@ data class FriendRequestItem(
     val botAvatar: String,
     val processorName: String,
     val note: String
-)
+) {
+    val usesGroupAgreeInvite: Boolean
+        get() = inviterId.isNotBlank() && (
+            sourceType == 2 || targetType == 2 || groupName.isNotBlank() ||
+            sourceType == 3 || targetType == 3 || botName.isNotBlank()
+        )
+
+    val typeLabel: String
+        get() = when {
+            sourceType == 2 || targetType == 2 || groupName.isNotBlank() -> "群聊申请/邀请"
+            sourceType == 3 || targetType == 3 || botName.isNotBlank() -> "机器人申请/邀请"
+            else -> "好友申请"
+        }
+
+    val displayName: String
+        get() = name.ifBlank {
+            botName.ifBlank {
+                groupName.ifBlank {
+                    receiverName.ifBlank { "未知联系人" }
+                }
+            }
+        }
+
+    val displayAvatarUrl: String
+        get() = avatar.ifBlank {
+            botAvatar.ifBlank {
+                groupAvatar.ifBlank { receiverAvatar }
+            }
+        }
+}
 
 /**
  * 通讯录UI状态
@@ -265,7 +294,11 @@ class ContactsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(friendRequestProcessing = true)
-            friendRepository.agreeApply(id = item.requestId, agree = 1).fold(
+            friendRepository.agreeApply(
+                id = item.requestId, 
+                agree = 1, 
+                usesGroupAgreeInvite = item.usesGroupAgreeInvite
+            ).fold(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                     loadFriendRequestList()
@@ -283,7 +316,11 @@ class ContactsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(friendRequestProcessing = true)
-            friendRepository.agreeApply(id = item.requestId, agree = 2).fold(
+            friendRepository.agreeApply(
+                id = item.requestId, 
+                agree = 2,
+                usesGroupAgreeInvite = item.usesGroupAgreeInvite
+            ).fold(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                     loadFriendRequestList()

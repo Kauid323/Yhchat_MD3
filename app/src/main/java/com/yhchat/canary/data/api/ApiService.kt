@@ -1,4 +1,4 @@
-package com.yhchat.canary.data.api
+﻿package com.yhchat.canary.data.api
 
 import com.google.gson.annotations.SerializedName
 import com.yhchat.canary.data.model.AddExpressionRequest
@@ -1145,6 +1145,12 @@ interface ApiService {
      */
     @POST("v1/friend/agree-apply")
     suspend fun agreeApply(
+        @Header("token") token: String,
+        @Body request: AgreeApplyRequest
+    ): Response<com.yhchat.canary.data.model.BaseResponse>
+
+    @POST("v1/group/agree-invite")
+    suspend fun agreeInvite(
         @Header("token") token: String,
         @Body request: AgreeApplyRequest
     ): Response<com.yhchat.canary.data.model.BaseResponse>

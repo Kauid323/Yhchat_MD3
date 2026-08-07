@@ -509,9 +509,9 @@ private fun FriendRequestRow(
             AsyncImage(
                 model = ImageUtils.createAvatarImageRequest(
                     context = LocalContext.current,
-                    url = item.avatar
+                    url = item.displayAvatarUrl
                 ),
-                contentDescription = item.name,
+                contentDescription = item.displayName,
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape),
@@ -522,7 +522,7 @@ private fun FriendRequestRow(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.name.ifBlank { "未知用户" },
+                    text = item.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -617,9 +617,9 @@ private fun FriendRequestDetailBottomSheet(
                             AsyncImage(
                                 model = ImageUtils.createAvatarImageRequest(
                                     context = LocalContext.current,
-                                    url = item.avatar
+                                    url = item.displayAvatarUrl
                                 ),
-                                contentDescription = item.name,
+                                contentDescription = item.displayName,
                                 modifier = Modifier
                                     .size(56.dp)
                                     .clip(CircleShape),
@@ -628,7 +628,7 @@ private fun FriendRequestDetailBottomSheet(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = item.name.ifBlank { "未知用户" },
+                                    text = item.displayName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
@@ -646,6 +646,7 @@ private fun FriendRequestDetailBottomSheet(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        InfoLine(label = "类型", value = item.typeLabel)
                         InfoLine(label = "请求ID", value = item.requestId.toString())
                         InfoLine(label = "申请添加的会话ID", value = item.targetId)
                         InfoLine(label = "处理结果", value = item.result.toString())
@@ -693,7 +694,7 @@ private fun FriendRequestDetailBottomSheet(
                             YhCircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(10.dp))
                         }
-                        Text("通过")
+                        Text(if (item.usesGroupAgreeInvite) "同意邀请" else "通过申请")
                     }
                 }
             } else {
