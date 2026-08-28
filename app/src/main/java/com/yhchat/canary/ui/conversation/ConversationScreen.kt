@@ -703,6 +703,24 @@ fun ConversationScreen(
                         }
                     }
 
+                    // 模式3：列表展示（类似微信/QQ），置顶项以深色背景会话条目显示在最顶端
+                    val stickyConversations = remember(stickyList, conversations) {
+                        stickyList.map { stickyItem ->
+                            conversations.find { it.chatId == stickyItem.chatId } ?: Conversation(
+                                chatId = stickyItem.chatId,
+                                chatType = stickyItem.chatType,
+                                name = stickyItem.chatName,
+                                chatContent = "",
+                                timestampMs = 0L,
+                                unreadMessage = 0,
+                                at = 0,
+                                avatarUrl = stickyItem.avatarUrl,
+                                timestamp = 0L,
+                                certificationLevel = stickyItem.certificationLevel
+                            )
+                        }
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -711,24 +729,6 @@ fun ConversationScreen(
                         // 置顶会话列表
                         if (showStickyConversations && stickyList.isNotEmpty()) {
                             if (isListLayout) {
-                                // 模式3：列表展示（类似微信/QQ），置顶项以深色背景会话条目显示在最顶端
-                                val stickyConversations = remember(stickyList, conversations) {
-                                    stickyList.map { stickyItem ->
-                                        conversations.find { it.chatId == stickyItem.chatId } ?: Conversation(
-                                            chatId = stickyItem.chatId,
-                                            chatType = stickyItem.chatType,
-                                            name = stickyItem.chatName,
-                                            chatContent = "",
-                                            timestampMs = 0L,
-                                            unreadMessage = 0,
-                                            at = 0,
-                                            avatarUrl = stickyItem.avatarUrl,
-                                            timestamp = 0L,
-                                            certificationLevel = stickyItem.certificationLevel
-                                        )
-                                    }
-                                }
-
                                 if (showStickyCollapseToggle) {
                                     item(key = "sticky_list_toggle_header") {
                                         Row(
