@@ -300,6 +300,12 @@ fun ProfileScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             YhButton(
+                                onClick = { viewModel.loadUserProfile() }
+                            ) {
+                                Text("重试")
+                            }
+                        }
+                    }
                 }
                 uiState.userProfile != null -> {
                     item("profile_content") {

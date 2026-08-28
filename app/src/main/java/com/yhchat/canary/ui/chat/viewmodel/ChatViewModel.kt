@@ -390,38 +390,6 @@ class ChatViewModel @Inject constructor(
                 }
             }
         return if (filled.isEmpty()) null else gson.toJson(filled)
-    }   botLlmParamValues = currentMap.toMutableMap().apply { put(botId, updated) }
-        )
-        persistCurrentBotLlmParams()
-    }
-
-    fun updateBotLlmSelectValue(botId: String, paramId: String, value: String) {
-        val currentMap = _uiState.value.botLlmParamValues
-        val updated = currentMap[botId].orEmpty().map { item ->
-            if (item.id == paramId) item.copy(selectValue = value) else item
-        }
-        _uiState.value = _uiState.value.copy(
-            botLlmParamValues = currentMap.toMutableMap().apply { put(botId, updated) }
-        )
-        persistCurrentBotLlmParams()
-    }
-
-    private fun getBotLlmParamsForSending(): String? {
-        if (_uiState.value.botLlmRefParams.isEmpty()) return null
-        val filled = _uiState.value.botLlmParamValues.values
-            .flatten()
-            .mapNotNull { item ->
-                if (item.type.equals("select", ignoreCase = true)) {
-                    item.selectValue?.takeIf { it.isNotBlank() }?.let {
-                        item.copy(selectValue = it, value = null)
-                    }
-                } else {
-                    item.value?.takeIf { it.isNotBlank() }?.let {
-                        item.copy(value = it, selectValue = null)
-                    }
-                }
-            }
-        return if (filled.isEmpty()) null else gson.toJson(filled)
     }
 
     /**
