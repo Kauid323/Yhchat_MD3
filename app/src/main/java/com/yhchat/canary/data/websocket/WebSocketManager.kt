@@ -213,19 +213,10 @@ class WebSocketManager @Inject constructor(
      */
     private suspend fun insertMessageToLocal(message: ChatMessage) {
         try {
-            // 检查消息是否已存在，避免重复插入
-            val existingMessage = messageRepository.getMessageById(message.msgId)
-            if (existingMessage != null) {
-                Log.d(tag, "Message ${message.msgId} already exists, skipping insert")
-                return
-            }
-            
-            // 插入新消息到本地数据库
+            // 直接插入新消息到本地数据库（Dao 使用 REPLACE 策略，避免额外查库）
             messageRepository.insertMessage(message)
-            
             Log.d(tag, "Inserted new message: ${message.msgId}")
-            
-                } catch (e: Exception) {
+        } catch (e: Exception) {
             Log.e(tag, "Error inserting message to local storage", e)
         }
     }

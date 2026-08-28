@@ -36,8 +36,13 @@ class CacheRepository @Inject constructor(
     /**
      * 获取所有缓存的会话
      */
-    fun getCachedConversations(): Flow<List<Conversation>> {
-        return conversationDao.getAllConversations().map { cachedList ->
+    fun getCachedConversations(userId: String? = null): Flow<List<Conversation>> {
+        val dao = if (!userId.isNullOrBlank()) {
+            AppDatabase.getDatabase(context, userId).cachedConversationDao()
+        } else {
+            conversationDao
+        }
+        return dao.getAllConversations().map { cachedList ->
             cachedList.map { cached ->
                 Conversation(
                     chatId = cached.chatId,
@@ -59,8 +64,13 @@ class CacheRepository @Inject constructor(
     /**
      * 同步获取所有缓存的会话
      */
-    suspend fun getCachedConversationsSync(): List<Conversation> {
-        return conversationDao.getAllConversationsSync().map { cached ->
+    suspend fun getCachedConversationsSync(userId: String? = null): List<Conversation> {
+        val dao = if (!userId.isNullOrBlank()) {
+            AppDatabase.getDatabase(context, userId).cachedConversationDao()
+        } else {
+            conversationDao
+        }
+        return dao.getAllConversationsSync().map { cached ->
             Conversation(
                 chatId = cached.chatId,
                 chatType = cached.chatType,
@@ -80,7 +90,12 @@ class CacheRepository @Inject constructor(
     /**
      * 缓存会话列表
      */
-    suspend fun cacheConversations(conversations: List<Conversation>) {
+    suspend fun cacheConversations(conversations: List<Conversation>, userId: String? = null) {
+        val dao = if (!userId.isNullOrBlank()) {
+            AppDatabase.getDatabase(context, userId).cachedConversationDao()
+        } else {
+            conversationDao
+        }
         val cachedConversations = conversations.map { conversation ->
             CachedConversation(
                 chatId = conversation.chatId,
@@ -96,7 +111,7 @@ class CacheRepository @Inject constructor(
                 certificationLevel = conversation.certificationLevel
             )
         }
-        conversationDao.insertConversations(cachedConversations)
+        dao.insertConversations(cachedConversations)
     }
     
     /**

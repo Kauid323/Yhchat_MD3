@@ -173,8 +173,8 @@ fun ProfileScreen(
     var refreshing by remember { mutableStateOf(false) }
 
     // 刷新完成后关闭指示器
-    LaunchedEffect(uiState.isLoading) {
-        if (!uiState.isLoading && refreshing) {
+    LaunchedEffect(uiState.isLoading, uiState.isRefreshing) {
+        if (!uiState.isLoading && !uiState.isRefreshing && refreshing) {
             refreshing = false
         }
     }
@@ -255,10 +255,10 @@ fun ProfileScreen(
         }
 
         YhPullToRefresh(
-            isRefreshing = refreshing,
+            isRefreshing = uiState.isRefreshing || refreshing,
             onRefresh = {
                 refreshing = true
-                viewModel.loadUserProfile()
+                viewModel.refreshProfile()
             },
             modifier = Modifier.weight(1f)
         ) {
@@ -269,7 +269,7 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading && uiState.userProfile == null -> {
                     item("profile_loading") {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -279,7 +279,7 @@ fun ProfileScreen(
                         }
                     }
                 }
-                uiState.error != null -> {
+                uiState.error != null && uiState.userProfile == null -> {
                     item("profile_error") {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -300,12 +300,6 @@ fun ProfileScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             YhButton(
-                                onClick = { viewModel.loadUserProfile() }
-                            ) {
-                                Text("重试")
-                            }
-                        }
-                    }
                 }
                 uiState.userProfile != null -> {
                     item("profile_content") {

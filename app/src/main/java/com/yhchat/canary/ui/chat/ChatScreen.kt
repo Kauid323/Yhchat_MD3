@@ -257,6 +257,14 @@ fun ChatScreen(
         }
     }
     
+    // 读取内容设置：是否允许发送空文本消息
+    val isSendTextAllowEmptySetting = context.getSharedPreferences("send_text_settings", Context.MODE_PRIVATE).getBoolean("send_text_allow_empty", false)
+
+    // 初始化聊天
+    LaunchedEffect(chatId, chatType) {
+        viewModel.initChat(chatId, chatType, userId)
+    }
+
     // 读取布局设置：TTS按钮和TopAppBar显隐
     val showTtsButton by rememberBooleanPreference("layout_settings", "chat_show_tts_button", true)
     val showRefreshButton by rememberBooleanPreference("layout_settings", "chat_show_refresh_button", true)
@@ -266,14 +274,6 @@ fun ChatScreen(
         "enable_chat_context_menu",
         true
     )
-
-    // 读取内容设置：是否允许发送空文本消息
-    val isSendTextAllowEmptySetting = context.getSharedPreferences("send_text_settings", Context.MODE_PRIVATE) .getBoolean("send_text_allow_empty", false)//英语不好不知道起什么变量名
-
-    // 初始化聊天
-    LaunchedEffect(chatId, chatType) {
-        viewModel.initChat(chatId, chatType, userId)
-    }
     
     // 处理搜索跳转：当有搜索目标消息ID时，自动跳转到该消息
     LaunchedEffect(searchTargetMsgId) {

@@ -16,10 +16,24 @@ class SecureTokenStorage(context: Context) {
         private const val KEY_USER_TOKEN = "user_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
+
+        @Volatile
+        private var INSTANCE: SecureTokenStorage? = null
+
+        fun getInstance(context: Context): SecureTokenStorage {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: SecureTokenStorage(context.applicationContext).also { INSTANCE = it }
+            }
+        }
     }
     
     private val encryptedPrefs: SharedPreferences
     private val isEncrypted: Boolean
+
+    @Volatile
+    private var memoryUserId: String? = null
+    @Volatile
+    private var memoryUserToken: String? = null
     
     init {
         var encrypted = false
@@ -46,6 +60,10 @@ class SecureTokenStorage(context: Context) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         }
         isEncrypted = encrypted
+
+        // 预热内存缓存，避免后续每次读取产生昂贵的硬件密钥加解密
+        memoryUserId = encryptedPrefs.getString(KEY_USER_ID, null)
+        memoryUserToken = encryptedPrefs.getString(KEY_USER_TOKEN, null)
     }
     
     /**
@@ -77,6 +95,8 @@ class SecureTokenStorage(context: Context) {
      * 保存用户Token
      */
     fun saveUserToken(token: String, userId: String) {
+        memoryUserToken = token
+        memoryUserId = userId
         encryptedPrefs.edit()
             .putString(KEY_USER_TOKEN, token)
             .putString(KEY_USER_ID, userId)
@@ -93,14 +113,14 @@ class SecureTokenStorage(context: Context) {
      * 获取用户Token
      */
     fun getUserToken(): String? {
-        return encryptedPrefs.getString(KEY_USER_TOKEN, null)
+        return memoryUserToken ?: encryptedPrefs.getString(KEY_USER_TOKEN, null)?.also { memoryUserToken = it }
     }
     
     /**
      * 获取用户ID
      */
     fun getUserId(): String? {
-        return encryptedPrefs.getString(KEY_USER_ID, null)
+        return memoryUserId ?: encryptedPrefs.getString(KEY_USER_ID, null)?.also { memoryUserId = it }
     }
     
     /**
@@ -122,6 +142,8 @@ class SecureTokenStorage(context: Context) {
      * 清除所有Token数据
      */
     fun clearTokens() {
+        memoryUserId = null
+        memoryUserToken = null
         encryptedPrefs.edit()
             .remove(KEY_USER_TOKEN)
             .remove(KEY_USER_ID)
@@ -133,6 +155,8 @@ class SecureTokenStorage(context: Context) {
      * 清除所有数据
      */
     fun clearAll() {
+        memoryUserId = null
+        memoryUserToken = null
         encryptedPrefs.edit().clear().apply()
     }
 }

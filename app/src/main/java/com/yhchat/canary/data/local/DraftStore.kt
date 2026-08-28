@@ -57,7 +57,7 @@ class DraftStore @Inject constructor(
      * 生成唯一的key（附带用户ID实现隔离）
      */
     private fun getKey(chatId: String, chatType: Int): String {
-        val userId = runCatching { SecureTokenStorage(context).getUserId() }.getOrNull() ?: "default"
+        val userId = SecureTokenStorage.getInstance(context).getUserId() ?: "default"
         return "${userId}_${chatType}_${chatId}"
     }
 }

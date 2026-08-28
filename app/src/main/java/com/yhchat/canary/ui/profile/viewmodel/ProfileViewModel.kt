@@ -69,26 +69,66 @@ class ProfileViewModel(
             // 缓存无效或强制刷新，从网络加载
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
-            userRepository.getUserProfile().fold(
-                onSuccess = { profile ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        userProfile = profile,
-                        error = null
-                    )
-                    // 保存到缓存
-                    userRepository.saveProfileToCache(profile)
-                    // 加载用户资料成功后，同时加载内测状态
-                    loadBetaInfo()
-                },
-                onFailure = { exception ->
-                    Log.e("ProfileViewModel", "加载用户资料失败", exception)
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "加载用户资料失败"
-                    )
-                }
-            )
+            try {
+                userRepository.getUserProfile().fold(
+                    onSuccess = { profile ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            userProfile = profile,
+                            error = null
+                        )
+                        // 保存到缓存
+                        userRepository.saveProfileToCache(profile)
+                        // 加载用户资料成功后，同时加载内测状态
+                        loadBetaInfo()
+                    },
+                    onFailure = { exception ->
+                        Log.e("ProfileViewModel", "加载用户资料失败", exception)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "加载用户资料失败"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("ProfileViewModel", "加载用户资料异常", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "加载用户资料异常"
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    /**
+     * 下拉刷新用户资料及内测数据
+     */
+    fun refreshProfile() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRefreshing = true)
+            try {
+                userRepository.getUserProfile().fold(
+                    onSuccess = { profile ->
+                        _uiState.value = _uiState.value.copy(
+                            userProfile = profile,
+                            error = null
+                        )
+                        // 保存到缓存
+                        userRepository.saveProfileToCache(profile)
+                        // 同时刷新内测状态
+                        loadBetaInfo()
+                    },
+                    onFailure = { exception ->
+                        Log.e("ProfileViewModel", "刷新用户资料失败", exception)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("ProfileViewModel", "刷新用户资料异常", e)
+            } finally {
+                _uiState.value = _uiState.value.copy(isRefreshing = false)
+            }
         }
     }
     
@@ -358,6 +398,7 @@ class ProfileViewModel(
  */
 data class ProfileUiState(
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val userProfile: UserProfile? = null,
     val error: String? = null
 )

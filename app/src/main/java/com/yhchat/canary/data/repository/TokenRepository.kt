@@ -17,7 +17,7 @@ class TokenRepository @Inject constructor(
 ) {
     
     private val secureStorage: SecureTokenStorage? by lazy {
-        context?.let { SecureTokenStorage(it) }
+        context?.let { SecureTokenStorage.getInstance(it) }
     }
     
     /**

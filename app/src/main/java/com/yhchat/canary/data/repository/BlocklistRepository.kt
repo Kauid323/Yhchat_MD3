@@ -15,24 +15,33 @@ class BlocklistRepository(private val context: Context) {
     private val tag = "BlocklistRepository"
     private val blockedUserDao: com.yhchat.canary.data.local.BlockedUserDao
         get() = AppDatabase.getDatabase(context).blockedUserDao()
-    private val prefs: android.content.SharedPreferences
-        get() {
-            val uid = runCatching { com.yhchat.canary.data.local.SecureTokenStorage(context).getUserId() }.getOrNull() ?: "default"
-            return context.getSharedPreferences("blocklist_settings_$uid", Context.MODE_PRIVATE)
+
+    @Volatile
+    private var cachedUserId: String? = null
+    @Volatile
+    private var cachedPrefs: android.content.SharedPreferences? = null
+
+    private fun getPrefs(): android.content.SharedPreferences {
+        val currentUid = com.yhchat.canary.data.local.SecureTokenStorage.getInstance(context).getUserId() ?: "default"
+        if (cachedUserId != currentUid || cachedPrefs == null) {
+            cachedUserId = currentUid
+            cachedPrefs = context.getSharedPreferences("blocklist_settings_$currentUid", Context.MODE_PRIVATE)
         }
+        return cachedPrefs!!
+    }
     
     /**
      * 黑名单是否启用
      */
     fun isBlocklistEnabled(): Boolean {
-        return prefs.getBoolean("blocklist_enabled", false)
+        return getPrefs().getBoolean("blocklist_enabled", false)
     }
     
     /**
      * 设置黑名单启用状态
      */
     fun setBlocklistEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("blocklist_enabled", enabled).apply()
+        getPrefs().edit().putBoolean("blocklist_enabled", enabled).apply()
         Log.d(tag, "Blocklist enabled: $enabled")
     }
     

@@ -27,14 +27,11 @@ class ConversationViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val cacheRepository: CacheRepository,
     private val webSocketManager: WebSocketManager,
-    private val userRepository: UserRepository
-) : ViewModel() {
+    private var currentActiveUserId: String? = null
+    private var cacheCollectionJob: kotlinx.coroutines.Job? = null
 
     init {
         observeWebSocketMessages()
-        
-        // 立即加载缓存数据
-        loadCachedConversations()
     }
 
     fun setTokenRepository(tokenRepository: TokenRepository) {
@@ -59,32 +56,59 @@ class ConversationViewModel @Inject constructor(
     val stickyLoading: StateFlow<Boolean> = _stickyLoading.asStateFlow()
     
     /**
-     * 立即加载缓存数据
+     * 为指定账号初始化会话数据（切换账号时隔离重置，且已有缓存时不重复请求网络）
      */
-    private fun loadCachedConversations() {
-        viewModelScope.launch {
-            cacheRepository.getCachedConversations().collect { cachedConversations ->
+    fun initForUser(userId: String, token: String) {
+        if (currentActiveUserId == userId && _conversations.value.isNotEmpty()) {
+            return
+        }
+        currentActiveUserId = userId
+        
+        // 取消旧账号的 Flow 收集
+        cacheCollectionJob?.cancel()
+        
+        // 切换账号时重置置顶会话数据
+        _stickyData.value = null
+        
+        // 绑定新账号对应数据库的 Flow
+        cacheCollectionJob = viewModelScope.launch {
+            cacheRepository.getCachedConversations(userId).collect { cachedConversations ->
                 _conversations.value = cachedConversations
+                if (cachedConversations.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
+            }
+        }
+        
+        // 检查当前账号本地是否有缓存数据，仅在没有本地数据时才发起初次网络请求
+        viewModelScope.launch {
+            val cached = cacheRepository.getCachedConversationsSync(userId)
+            if (cached.isEmpty() && token.isNotBlank()) {
+                loadConversations(token, isForceOrPullRefresh = false)
+            } else {
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }
+            loadStickyConversations()
         }
     }
     
     /**
-     * 加载会话列表（从网络，并缓存）
+     * 加载会话列表（从网络，并写入对应账号的专属数据库）
      */
-    fun loadConversations(token: String) {
+    fun loadConversations(token: String, isForceOrPullRefresh: Boolean = true) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            if (isForceOrPullRefresh || _conversations.value.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             conversationRepository.getConversations()
                 .onSuccess { conversationList ->
                     _conversations.value = conversationList
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    // 缓存到本地数据库
-                    cacheRepository.cacheConversations(conversationList)
+                    // 缓存到当前账号专属本地数据库
+                    cacheRepository.cacheConversations(conversationList, currentActiveUserId)
                 }
                 .onFailure { error ->
-                    val cachedConversations = cacheRepository.getCachedConversationsSync()
+                    val cachedConversations = cacheRepository.getCachedConversationsSync(currentActiveUserId)
                     if (cachedConversations.isNotEmpty()) {
                         _conversations.value = cachedConversations
                         _uiState.value = _uiState.value.copy(isLoading = false)
@@ -173,7 +197,7 @@ class ConversationViewModel @Inject constructor(
                     currentConversations.add(0, newConversation)
                     
                     // 缓存新会话
-                    cacheRepository.cacheConversations(listOf(newConversation))
+                    cacheRepository.cacheConversations(listOf(newConversation), currentActiveUserId)
                 } else {
                     // 对于群聊消息，如果会话不存在，我们不创建新会话
                     // 群聊会话应该通过API获取，而不是通过WebSocket消息创建

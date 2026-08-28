@@ -18,7 +18,7 @@ class AccountRepository @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
     private val secureStorage: SecureTokenStorage by lazy {
-        SecureTokenStorage(context)
+        SecureTokenStorage.getInstance(context)
     }
     private val localDataCleaner: AccountLocalDataCleaner by lazy {
         AccountLocalDataCleaner(context)

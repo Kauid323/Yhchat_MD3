@@ -44,8 +44,8 @@ data class ChatUiState(
     val newMessageReceived: Boolean = false,  // 标记是否收到新消息
     val groupInfo: GroupDetail? = null,
     val groupMembers: Map<String, GroupMemberInfo> = emptyMap(),  // 群成员信息：chatId -> GroupMemberInfo
-    val groupMemberCount: Int = 0,  // 群成员总数
-    val botInfo: bot_info? = null,  // 机器人信息
+    val groupMemberCount: Int = 0,
+    val botInfo: bot_info? = null,
     val botBoard: board? = null,  // 机器人看板（单个机器人聊天）
     val groupBots: List<Bot_data> = emptyList(),  // 群聊中的机器人列表
     val groupBotBoards: Map<String, board.Board_data> = emptyMap(),  // 群聊机器人看板：botId -> board_data
@@ -78,6 +78,7 @@ class ChatViewModel @Inject constructor(
     private var hasMoreMessages: Boolean = true
     private var oldestMsgSeq: Long = 0
     private var oldestMsgId: String? = null
+    private var webSocketCollectorJob: kotlinx.coroutines.Job? = null
 
     private val tag = "ChatViewModel"
     
@@ -254,7 +255,7 @@ class ChatViewModel @Inject constructor(
         // 开始监听WebSocket消息
         startListeningToWebSocketMessages()
         
-        // 始终加载最新消息（移除跳转到上次读取位置功能）
+        // 加载最新消息
         Log.d(tag, "Loading latest messages")
         loadMessages()
     }
@@ -315,6 +316,7 @@ class ChatViewModel @Inject constructor(
                     val cachedByBot = loadCachedBotLlmParams(chatId, chatType)
                         .groupBy { it.botId }
 
+
                     val merged = list.associate { item ->
                         val parsed = parseBotLlmParamValues(item.botId, item.paramJson)
                         val cachedById = cachedByBot[item.botId].orEmpty().associateBy { it.id }
@@ -357,6 +359,38 @@ class ChatViewModel @Inject constructor(
         }
         _uiState.value = _uiState.value.copy(
             botLlmParamValues = currentMap.toMutableMap().apply { put(botId, updated) }
+        )
+        persistCurrentBotLlmParams()
+    }
+
+    fun updateBotLlmSelectValue(botId: String, paramId: String, value: String) {
+        val currentMap = _uiState.value.botLlmParamValues
+        val updated = currentMap[botId].orEmpty().map { item ->
+            if (item.id == paramId) item.copy(selectValue = value) else item
+        }
+        _uiState.value = _uiState.value.copy(
+            botLlmParamValues = currentMap.toMutableMap().apply { put(botId, updated) }
+        )
+        persistCurrentBotLlmParams()
+    }
+
+    private fun getBotLlmParamsForSending(): String? {
+        if (_uiState.value.botLlmRefParams.isEmpty()) return null
+        val filled = _uiState.value.botLlmParamValues.values
+            .flatten()
+            .mapNotNull { item ->
+                if (item.type.equals("select", ignoreCase = true)) {
+                    item.selectValue?.takeIf { it.isNotBlank() }?.let {
+                        item.copy(selectValue = it, value = null)
+                    }
+                } else {
+                    item.value?.takeIf { it.isNotBlank() }?.let {
+                        item.copy(value = it, selectValue = null)
+                    }
+                }
+            }
+        return if (filled.isEmpty()) null else gson.toJson(filled)
+    }   botLlmParamValues = currentMap.toMutableMap().apply { put(botId, updated) }
         )
         persistCurrentBotLlmParams()
     }
@@ -494,87 +528,11 @@ class ChatViewModel @Inject constructor(
             // 使用chatType=2获取群聊的看板
             botRepository.getBotBoard(chatId, 2).fold(
                 onSuccess = { boardResponse ->
-                    // boardResponse.boardList 现在是一个列表
                     val boardsDataList = boardResponse.boardList
                     Log.d(tag, "✅ 加载群聊看板成功: groupId=$chatId, 数量=${boardsDataList.size}")
-                    // 使用机器人ID作为key，创建一个map；空列表也要覆盖旧状态，避免旧看板滞留。
                     val boardsMap = boardsDataList.associateBy { it.botId }
                     _uiState.value = _uiState.value.copy(groupBotBoards = boardsMap)
                 },
-                onFailure = { error ->
-                    Log.e(tag, "❌ 加载群聊机器人看板失败: groupId=$chatId", error)
-                }
-            )
-        }
-    }
-    
-    /**
-     * 刷新单个机器人的看板（用于WebSocket更新）
-     */
-    fun refreshBotBoard(botId: String) {
-        if (currentChatType == 2) {
-            // 群聊场景
-            loadGroupBotBoards(currentChatId)
-        } else if (currentChatType == 3 && currentChatId == botId) {
-            // 单个机器人聊天场景
-            loadBotBoard(botId, 3)
-        }
-    }
-    
-    private fun loadGroupMenuButtons(groupId: String) {
-        viewModelScope.launch {
-            Log.d(tag, "Loading group menu buttons for: $groupId")
-            groupRepository.setTokenRepository(tokenRepository)
-            
-            groupRepository.getGroupMenuButtons(groupId).fold(
-                onSuccess = { menuButtons ->
-                    Log.d(tag, "✅ 加载到 ${menuButtons.size} 个菜单按钮")
-                    _uiState.value = _uiState.value.copy(menuButtons = menuButtons)
-                },
-                onFailure = { error ->
-                    Log.e(tag, "❌ 加载菜单按钮失败", error)
-                }
-            )
-        }
-    }
-    
-    /**
-     * 点击菜单按钮
-     */
-    fun clickMenuButton(button: com.yhchat.canary.data.model.MenuButton) {
-        viewModelScope.launch {
-            Log.d(tag, "点击菜单按钮: ${button.name} (ID: ${button.id})")
-            
-            groupRepository.clickMenuButton(
-                buttonId = button.id,
-                chatId = currentChatId,
-                chatType = currentChatType,
-                value = button.select
-            ).fold(
-                onSuccess = {
-                    Log.d(tag, "✅ 菜单按钮点击成功")
-                },
-                onFailure = { error ->
-                    Log.e(tag, "❌ 菜单按钮点击失败", error)
-                    _uiState.value = _uiState.value.copy(error = error.message)
-                }
-            )
-        }
-    }
-    
-    /**
-     * 开始监听WebSocket实时消息
-     */
-    private fun startListeningToWebSocketMessages() {
-        viewModelScope.launch {
-            webSocketManager.getMessageEvents().collect { event ->
-                when (event) {
-                    is MessageEvent.NewMessage -> {
-                        handleNewMessage(event.message)
-                    }
-                    is MessageEvent.MessageEdited -> {
-                        handleEditedMessage(event.message)
-                    }
                     is MessageEvent.MessageDeleted -> {
                         handleDeletedMessage(event.msgId)
                     }

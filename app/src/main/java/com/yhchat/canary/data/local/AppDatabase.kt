@@ -45,13 +45,11 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context, userId: String? = null): AppDatabase {
             val appContext = context.applicationContext
             val resolvedUserId = userId?.takeIf { it.isNotBlank() } 
-                ?: runCatching { SecureTokenStorage(appContext).getUserId() }.getOrNull()?.takeIf { it.isNotBlank() }
+                ?: SecureTokenStorage.getInstance(appContext).getUserId()?.takeIf { it.isNotBlank() }
                 ?: "default"
                 
             return INSTANCES.computeIfAbsent(resolvedUserId) { uid ->
                 val dbName = if (uid == "default") "yhchat_database" else "yhchat_database_$uid"
-                
-                checkAndMigrateLegacyDatabase(appContext, uid, dbName)
                 
                 Room.databaseBuilder(
                     appContext,
@@ -60,32 +58,6 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
-            }
-        }
-        
-        private fun checkAndMigrateLegacyDatabase(context: Context, uid: String, targetDbName: String) {
-            if (uid == "default") return
-            try {
-                val targetDbFile = context.getDatabasePath(targetDbName)
-                if (!targetDbFile.exists()) {
-                    val legacyDbFile = context.getDatabasePath("yhchat_database")
-                    if (legacyDbFile.exists()) {
-                        val currentUid = runCatching { SecureTokenStorage(context).getUserId() }.getOrNull()
-                        if (currentUid == uid) {
-                            legacyDbFile.copyTo(targetDbFile, overwrite = false)
-                            val legacyWal = context.getDatabasePath("yhchat_database-wal")
-                            if (legacyWal.exists()) {
-                                legacyWal.copyTo(context.getDatabasePath("$targetDbName-wal"), overwrite = false)
-                            }
-                            val legacyShm = context.getDatabasePath("yhchat_database-shm")
-                            if (legacyShm.exists()) {
-                                legacyShm.copyTo(context.getDatabasePath("$targetDbName-shm"), overwrite = false)
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("AppDatabase", "Legacy database migration skipped: ${e.message}")
             }
         }
         

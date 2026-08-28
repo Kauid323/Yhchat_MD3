@@ -301,12 +301,10 @@ fun ConversationScreen(
         }
     }
     
-    // 每次进入页面都拉取一次
-    LaunchedEffect(token) {
-        if (token.isNotEmpty()) {
-            viewModel.loadConversations(token)
-            // 加载置顶会话（独立加载，不影响普通会话）
-            viewModel.loadStickyConversations()
+    // 监听账号变化：当切换账号或初次进入时，初始化对应账号专属数据库与会话缓存
+    LaunchedEffect(userId, token) {
+        if (userId.isNotEmpty() && token.isNotEmpty()) {
+            viewModel.initForUser(userId, token)
         }
     }
     
@@ -674,15 +672,16 @@ fun ConversationScreen(
                 isRefreshing = refreshing,
                 onRefresh = {
                     refreshing = true
-                    viewModel.loadConversations(token)
+                    viewModel.loadConversations(token, isForceOrPullRefresh = true)
+                    viewModel.loadStickyConversations()
                     coroutineScope.launch {
-                        kotlinx.coroutines.delay(500)
+                        kotlinx.coroutines.delay(600)
                         refreshing = false
                     }
                 },
                 modifier = Modifier.fillMaxSize().yhTopBarNestedScroll()
             ) {
-                if (uiState.isLoading) {
+                if (uiState.isLoading && conversations.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
