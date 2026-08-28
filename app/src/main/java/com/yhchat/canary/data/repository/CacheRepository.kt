@@ -3,7 +3,9 @@ package com.yhchat.canary.data.repository
 import android.content.Context
 import com.yhchat.canary.data.local.AppDatabase
 import com.yhchat.canary.data.local.CachedConversation
+import com.yhchat.canary.data.local.CachedConversationDao
 import com.yhchat.canary.data.local.CachedMessage
+import com.yhchat.canary.data.local.CachedMessageDao
 import com.yhchat.canary.data.model.ChatMessage
 import com.yhchat.canary.data.model.Conversation
 import com.yhchat.canary.data.model.MessageContent
@@ -22,9 +24,12 @@ class CacheRepository @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
     
-    private val database = AppDatabase.getDatabase(context)
-    private val conversationDao = database.cachedConversationDao()
-    private val messageDao = database.cachedMessageDao()
+    private val database: AppDatabase
+        get() = AppDatabase.getDatabase(context)
+    private val conversationDao: CachedConversationDao
+        get() = database.cachedConversationDao()
+    private val messageDao: CachedMessageDao
+        get() = database.cachedMessageDao()
     
     // ========== 会话缓存 ==========
     
@@ -108,9 +113,6 @@ class CacheRepository @Inject constructor(
         conversationDao.updateDoNotDisturb(chatId, doNotDisturb)
     }
     
-    /**
-     * 增加未读数量
-     */
     /**
      * 标记会话为已读
      */

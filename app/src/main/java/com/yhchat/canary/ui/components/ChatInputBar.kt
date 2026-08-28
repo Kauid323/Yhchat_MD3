@@ -1091,20 +1091,6 @@ private fun ExpandedInputEditorSheet(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        YhOutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(18.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "收回输入框",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("收回")
-                        }
-                    }
                     BasicTextField(
                         value = text,
                         onValueChange = onTextChange,

@@ -11,10 +11,15 @@ import org.json.JSONObject
 /**
  * 黑名单Repository
  */
-class BlocklistRepository(context: Context) {
+class BlocklistRepository(private val context: Context) {
     private val tag = "BlocklistRepository"
-    private val blockedUserDao = AppDatabase.getDatabase(context).blockedUserDao()
-    private val prefs = context.getSharedPreferences("blocklist_settings", Context.MODE_PRIVATE)
+    private val blockedUserDao: com.yhchat.canary.data.local.BlockedUserDao
+        get() = AppDatabase.getDatabase(context).blockedUserDao()
+    private val prefs: android.content.SharedPreferences
+        get() {
+            val uid = runCatching { com.yhchat.canary.data.local.SecureTokenStorage(context).getUserId() }.getOrNull() ?: "default"
+            return context.getSharedPreferences("blocklist_settings_$uid", Context.MODE_PRIVATE)
+        }
     
     /**
      * 黑名单是否启用

@@ -27,8 +27,10 @@ class DiscoverRepository(
         private const val CACHE_VALIDITY_DURATION = 24 * 60 * 60 * 1000L // 1天
     }
 
-    private val database = AppDatabase.getDatabase(context)
-    private val cachedDiscoverDataDao = database.cachedDiscoverDataDao()
+    private val database: AppDatabase
+        get() = AppDatabase.getDatabase(context)
+    private val cachedDiscoverDataDao: com.yhchat.canary.data.local.CachedDiscoverDataDao
+        get() = database.cachedDiscoverDataDao()
     private val gson = Gson()
 
     /**

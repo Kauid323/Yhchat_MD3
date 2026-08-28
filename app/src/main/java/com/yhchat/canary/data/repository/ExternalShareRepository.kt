@@ -7,8 +7,9 @@ import com.yhchat.canary.data.local.SHARE_TARGET_SCOPE_GLOBAL
 import com.yhchat.canary.data.local.ShareTargetPreference
 import kotlinx.coroutines.flow.Flow
 
-class ExternalShareRepository(context: Context) {
-    private val dao = AppDatabase.getDatabase(context.applicationContext).shareTargetPreferenceDao()
+class ExternalShareRepository(private val context: Context) {
+    private val dao: com.yhchat.canary.data.local.ShareTargetPreferenceDao
+        get() = AppDatabase.getDatabase(context.applicationContext).shareTargetPreferenceDao()
 
     fun getAll(): Flow<List<ShareTargetPreference>> = dao.getAll()
 

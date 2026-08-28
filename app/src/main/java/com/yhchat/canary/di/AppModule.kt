@@ -5,6 +5,8 @@ import com.yhchat.canary.data.api.ApiClient
 import com.yhchat.canary.data.api.ApiService
 import com.yhchat.canary.data.api.WebApiService
 import com.yhchat.canary.data.local.AppDatabase
+import com.yhchat.canary.data.local.GlobalDatabase
+import com.yhchat.canary.data.local.SavedAccountDao
 import com.yhchat.canary.data.local.UserTokenDao
 import dagger.Module
 import dagger.Provides
@@ -44,4 +46,9 @@ object AppModule {
         return AppDatabase.getDatabase(context).userTokenDao()
     }
 
+    @Provides
+    @Singleton
+    fun provideSavedAccountDao(@ApplicationContext context: Context): SavedAccountDao {
+        return GlobalDatabase.getDatabase(context).savedAccountDao()
+    }
 }

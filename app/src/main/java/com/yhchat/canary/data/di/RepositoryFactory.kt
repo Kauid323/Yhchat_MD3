@@ -83,11 +83,7 @@ object RepositoryFactory {
      * 获取Token仓库实例
      */
     fun getTokenRepository(context: Context): TokenRepository {
-        val database = Room.databaseBuilder(
-            context.applicationContext,
-            AppDatabase::class.java,
-            "app_database"
-        ).build()
+        val database = AppDatabase.getDatabase(context)
         return TokenRepository(database.userTokenDao(), context)
     }
     
@@ -259,7 +255,7 @@ object RepositoryFactory {
      * 获取账号仓库实例
      */
     fun getAccountRepository(context: Context): com.yhchat.canary.data.repository.AccountRepository {
-        val database = AppDatabase.getDatabase(context)
+        val database = com.yhchat.canary.data.local.GlobalDatabase.getDatabase(context)
         return com.yhchat.canary.data.repository.AccountRepository(database.savedAccountDao(), context.applicationContext)
     }
 }

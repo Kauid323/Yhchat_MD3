@@ -8,11 +8,11 @@ import javax.inject.Singleton
 
 /**
  * 聊天草稿存储
- * 用于保存用户在聊天输入框中未发送的内容
+ * 用于保存用户在聊天输入框中未发送的内容，按用户账号隔离
  */
 @Singleton
 class DraftStore @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext private val context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         "chat_draft_prefs",
@@ -54,9 +54,10 @@ class DraftStore @Inject constructor(
     }
     
     /**
-     * 生成唯一的key
+     * 生成唯一的key（附带用户ID实现隔离）
      */
     private fun getKey(chatId: String, chatType: Int): String {
-        return "${chatType}_${chatId}"
+        val userId = runCatching { SecureTokenStorage(context).getUserId() }.getOrNull() ?: "default"
+        return "${userId}_${chatType}_${chatId}"
     }
 }

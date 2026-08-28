@@ -5,7 +5,10 @@ import com.yhchat.canary.data.local.SavedAccountDao
 import com.yhchat.canary.data.local.SecureTokenStorage
 import com.yhchat.canary.data.model.SavedAccount
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,6 +22,31 @@ class AccountRepository @Inject constructor(
     }
     private val localDataCleaner: AccountLocalDataCleaner by lazy {
         AccountLocalDataCleaner(context)
+    }
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val currentUid = secureStorage.getUserId()
+                val currentToken = secureStorage.getUserToken()
+                if (!currentUid.isNullOrEmpty() && !currentToken.isNullOrEmpty()) {
+                    val existing = savedAccountDao.getAccount(currentUid)
+                    if (existing == null) {
+                        savedAccountDao.insertAccount(
+                            SavedAccount(
+                                userId = currentUid,
+                                name = "User $currentUid",
+                                avatarUrl = null,
+                                displayId = currentUid
+                            )
+                        )
+                        secureStorage.saveAccountToken(currentUid, currentToken)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AccountRepository", "Auto sync account error: ${e.message}")
+            }
+        }
     }
 
     /**
