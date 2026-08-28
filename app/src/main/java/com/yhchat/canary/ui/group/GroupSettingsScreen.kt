@@ -60,6 +60,7 @@ import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.adaptive.YhText as Text
 import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.adaptive.YhTopBar
+import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.settings.SettingsCustomItem
@@ -85,7 +86,7 @@ fun GroupSettingsScreenRoot(
         topBar = {
             YhTopBar(
                 title = "群聊设置 · $groupName",
-                large = false,
+                large = true,
                 navigationIcon = {
                     YhIconButton(onClick = onBackClick) {
                         Icon(
@@ -185,7 +186,7 @@ private fun GroupSettingsContent(
     }
 
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.yhTopBarNestedScroll(),
         contentPadding = PaddingValues(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {

@@ -1,4 +1,4 @@
-﻿package com.yhchat.canary.ui.group
+package com.yhchat.canary.ui.group
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
@@ -110,7 +110,7 @@ fun GroupInfoScreenRoot(
             topBar = {
                 YhTopBar(
                     title = groupName,
-                    large = false,
+                    large = true,
                     navigationIcon = {
                         YhIconButton(onClick = onBackClick) {
                             Icon(
