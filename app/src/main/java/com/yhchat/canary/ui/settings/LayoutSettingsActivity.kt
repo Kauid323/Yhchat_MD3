@@ -165,21 +165,6 @@ fun LayoutSettingsScreen(
             // 发现设置
             item { DiscoverLayoutSettingsGroup(context) }
             
-            contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
-            // 会话列表设置
-            item { ConversationLayoutSettingsGroup(context) }
-            
-            // 社区设置
-            item { CommunityLayoutSettingsGroup(context) }
-            
-            // 通讯录设置
-            item { ContactsLayoutSettingsGroup(context) }
-            
-            // 发现设置
-            item { DiscoverLayoutSettingsGroup(context) }
-            
             // 我的设置
             item { ProfileLayoutSettingsGroup(context) }
             

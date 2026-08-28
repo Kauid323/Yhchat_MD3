@@ -749,13 +749,22 @@ private fun MarkdownInlineImage(
     onClick: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val cleanUrl = remember(url) {
+        url.trim().removeSurrounding("<", ">").trim()
+    }
 
     AsyncImage(
         model = ImageRequest.Builder(context)
-            .data(url)
+            .data(cleanUrl)
             .apply {
-                imageReferer?.let {
-                    setHeader("Referer", it)
+                // 筛选图片链接：只有当URL属于云湖相关域名（jwznb.com）时才添加云湖的 Referer 头，
+                // 避免对第三方图床/外部CDN乱加 Referer 导致403防盗链错误
+                val isYunhuImage = cleanUrl.contains("jwznb.com", ignoreCase = true) ||
+                                   cleanUrl.contains("chat-img.jwznb.com", ignoreCase = true) ||
+                                   cleanUrl.contains("myapp.jwznb.com", ignoreCase = true)
+                if (isYunhuImage) {
+                    val referer = imageReferer?.takeIf { it.isNotBlank() } ?: "https://myapp.jwznb.com"
+                    setHeader("Referer", referer)
                 }
                 setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
                 crossfade(true)
@@ -765,7 +774,7 @@ private fun MarkdownInlineImage(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick(url) },
+            .clickable { onClick(cleanUrl) },
         contentScale = ContentScale.FillWidth
     )
 }
@@ -1254,7 +1263,7 @@ private fun injectHighlightMark(markdown: String, keyword: String): String {
  * 从内容中提取图片，将图片和文本分离
  */
 private fun extractImagesFromContent(content: String, segments: MutableList<MarkdownSegment>) {
-    val regex = Regex("!\\[([^]]*)]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
+    val regex = Regex("!\\[([^\\]]*)\\]\\(\\s*<?([^)\\s>]+)>?(?:\\s+[\"'][^\"']*[\"'])?\\s*\\)")
     var lastIndex = 0
     var foundAnyImage = false
     
@@ -1269,7 +1278,8 @@ private fun extractImagesFromContent(content: String, segments: MutableList<Mark
         }
         
         val alt = match.groupValues.getOrNull(1).orEmpty().ifBlank { null }
-        val url = match.groupValues.getOrNull(2).orEmpty()
+        val rawUrl = match.groupValues.getOrNull(2).orEmpty().trim()
+        val url = rawUrl.removeSurrounding("<", ">").trim()
         if (url.isNotBlank()) {
             segments += MarkdownSegment.Image(url = url, alt = alt)
         }
@@ -1591,7 +1601,6 @@ private fun processTaskLists(markdown: String): String {
 private fun normalizeHeadingSpacing(markdown: String): String {
     val lines = markdown.lines()
     if (lines.isEmpty()) return markdown
-
     val output = mutableListOf<String>()
     var inFence = false
     val h1Regex = Regex("^\\s{0,3}#\\s+.+$")

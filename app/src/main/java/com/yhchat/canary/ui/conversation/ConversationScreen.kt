@@ -18,9 +18,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,20 +29,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,6 +59,9 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,9 +88,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.journeyapps.barcodescanner.ScanContract
@@ -113,12 +99,6 @@ import com.yhchat.canary.data.model.ChatType
 import com.yhchat.canary.data.model.Conversation
 import com.yhchat.canary.data.model.StickyItem
 import com.yhchat.canary.data.repository.TokenRepository
-import com.yhchat.canary.ui.components.ConversationMenuDialog
-import com.yhchat.canary.ui.components.observeScrollForNavigation
-import com.yhchat.canary.ui.components.rememberScrollAwareNavigationState
-import com.yhchat.canary.ui.components.rememberBooleanPreference
-import com.yhchat.canary.ui.components.rememberStringPreference
-import com.yhchat.canary.ui.components.rememberSharedPreferences
 import com.yhchat.canary.ui.adaptive.YhAlertDialog
 import com.yhchat.canary.ui.adaptive.YhBasicComponent
 import com.yhchat.canary.ui.adaptive.YhBottomSheet
@@ -128,9 +108,18 @@ import com.yhchat.canary.ui.adaptive.YhClickableSurface
 import com.yhchat.canary.ui.adaptive.YhIcon as Icon
 import com.yhchat.canary.ui.adaptive.YhIconButton
 import com.yhchat.canary.ui.adaptive.YhPullToRefresh
+import com.yhchat.canary.ui.adaptive.YhScaffold
 import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.adaptive.YhText as Text
 import com.yhchat.canary.ui.adaptive.YhTextButton
+import com.yhchat.canary.ui.adaptive.YhTopBar
+import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
+import com.yhchat.canary.ui.components.ConversationMenuDialog
+import com.yhchat.canary.ui.components.observeScrollForNavigation
+import com.yhchat.canary.ui.components.rememberBooleanPreference
+import com.yhchat.canary.ui.components.rememberScrollAwareNavigationState
+import com.yhchat.canary.ui.components.rememberSharedPreferences
+import com.yhchat.canary.ui.components.rememberStringPreference
 import com.yhchat.canary.ui.search.ComprehensiveSearchActivity
 import com.yhchat.canary.ui.search.SearchViewModel
 import com.yhchat.canary.utils.QRCodeUtil
@@ -574,87 +563,6 @@ fun ConversationScreen(
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
                                 }
-                itemsIndexed(
-                    items = category.list ?: emptyList(),
-                    key = { index, item -> "api_${catIndex}_${item.friendId}_${item.friendType}_$index" }
-                ) { index, searchItem ->
-                    YhSurface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onConversationClick(
-                                    searchItem.friendId,
-                                    searchItem.friendType,
-                                    searchItem.nickname,
-                                    searchItem.avatarUrl
-                                )
-                            },
-                        color = MaterialTheme.colorScheme.surface
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val avatarRequest = remember(searchItem.avatarUrl) {
-                                ImageRequest.Builder(context)
-                                    .data(searchItem.avatarUrl)
-                                    .addHeader("Referer", "https://myapp.jwznb.com")
-                                    .crossfade(true)
-                                    .build()
-                            }
-                            AsyncImage(
-                                model = avatarRequest,
-                                contentDescription = searchItem.nickname,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                                error = painterResource(id = R.drawable.ic_person)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = searchItem.nickname,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                val idLabel = when (searchItem.friendType) {
-                                    1 -> "用户"
-                                    2 -> "群组"
-                                    3 -> "机器人"
-                                    else -> "ID"
-                                }
-                                Text(
-                                    text = "$idLabel: ${searchItem.friendId}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            YhSurface(
-                                color = when (searchItem.friendType) {
-                                    1 -> MaterialTheme.colorScheme.primaryContainer
-                                    2 -> MaterialTheme.colorScheme.secondaryContainer
-                        }
-                    }
-                }
-
-                searchResult?.let { result ->
-                    result.list.forEachIndexed { catIndex, category ->
-                        category.list?.let { items ->
-                            if (items.isNotEmpty()) {
-                                item(key = "api_header_${catIndex}_${category.title}") {
-                                    Text(
-                                        text = category.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                }
                                 itemsIndexed(
                                     items = category.list ?: emptyList(),
                                     key = { index, item -> "api_${catIndex}_${item.friendId}_${item.friendType}_$index" }
@@ -757,7 +665,6 @@ fun ConversationScreen(
                             )
                         }
                     }
-                }
                 }
             }
         } else {
@@ -902,9 +809,9 @@ fun ConversationScreen(
                                     Column {
                                         if (stickyLayoutMode == "grid") {
                                             val flowArrangement = when (stickyAlignment) {
-                                                "start" -> Arrangement.Start
-                                                "end" -> Arrangement.End
-                                                else -> Arrangement.Center
+                                                "start" -> Alignment.Start
+                                                "end" -> Alignment.End
+                                                else -> Alignment.CenterHorizontally
                                             }
                                             FlowRow(
                                                 modifier = Modifier
@@ -1570,16 +1477,17 @@ fun StickyConversationCard(
             // 不显示头像：以胶囊/标签样式展示会话名称
             YhSurface(
                 modifier = modifier
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
                     .combinedClickable(
                         onClick = onClick,
                         onLongClick = onLongClick
                     ),
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
