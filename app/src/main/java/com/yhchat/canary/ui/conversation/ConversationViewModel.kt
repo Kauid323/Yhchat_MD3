@@ -27,6 +27,9 @@ class ConversationViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val cacheRepository: CacheRepository,
     private val webSocketManager: WebSocketManager,
+    private val userRepository: UserRepository
+) : ViewModel() {
+
     private var currentActiveUserId: String? = null
     private var cacheCollectionJob: kotlinx.coroutines.Job? = null
 
