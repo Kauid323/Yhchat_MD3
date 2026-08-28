@@ -5,14 +5,19 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,6 +33,10 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Email
@@ -35,6 +44,7 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Label
@@ -71,17 +81,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhScaffold
+import com.yhchat.canary.ui.adaptive.YhAlertDialog
 import com.yhchat.canary.ui.adaptive.YhIconButton
+import com.yhchat.canary.ui.adaptive.YhRadioButton
+import com.yhchat.canary.ui.adaptive.YhScaffold
+import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
-
 /**
  * 布局设置Activity - 管理各界面的显示项
  */
@@ -152,6 +165,21 @@ fun LayoutSettingsScreen(
             // 发现设置
             item { DiscoverLayoutSettingsGroup(context) }
             
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            // 会话列表设置
+            item { ConversationLayoutSettingsGroup(context) }
+            
+            // 社区设置
+            item { CommunityLayoutSettingsGroup(context) }
+            
+            // 通讯录设置
+            item { ContactsLayoutSettingsGroup(context) }
+            
+            // 发现设置
+            item { DiscoverLayoutSettingsGroup(context) }
+            
             // 我的设置
             item { ProfileLayoutSettingsGroup(context) }
             
@@ -177,9 +205,38 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
     var showUnreadBadge by remember { mutableStateOf(prefs.getBoolean("conversation_show_unread_badge", true)) }
     var showConversationList by remember { mutableStateOf(prefs.getBoolean("conversation_show_list", true)) }
     var showStickyConversations by remember { mutableStateOf(displayPrefs.getBoolean("show_sticky_conversations", true)) }
+    var stickyLayoutMode by remember { mutableStateOf(displayPrefs.getString("sticky_layout_mode", "single_line") ?: "single_line") }
+    var stickyDisplayMode by remember { mutableStateOf(displayPrefs.getString("sticky_display_mode", "no_name") ?: "no_name") }
+    var stickyAlignment by remember { mutableStateOf(displayPrefs.getString("sticky_alignment", "center") ?: "center") }
+    var showStickyCollapseToggle by remember { mutableStateOf(displayPrefs.getBoolean("show_sticky_collapse_toggle", true)) }
+
     var showAddUser by remember { mutableStateOf(prefs.getBoolean("add_menu_show_user", true)) }
     var showAddGroup by remember { mutableStateOf(prefs.getBoolean("add_menu_show_group", true)) }
     var showScan by remember { mutableStateOf(prefs.getBoolean("add_menu_show_scan", true)) }
+
+    var showLayoutModeDialog by remember { mutableStateOf(false) }
+    var showDisplayModeDialog by remember { mutableStateOf(false) }
+    var showAlignmentDialog by remember { mutableStateOf(false) }
+
+    val layoutModeOptions = listOf(
+        "single_line" to "单行展示",
+        "grid" to "平铺",
+        "list" to "列表展示"
+    )
+    val displayModeOptions = listOf(
+        "no_name" to "不显示会话名称",
+        "with_name" to "显示会话名称",
+        "no_avatar" to "不显示会话头像"
+    )
+    val alignmentOptions = listOf(
+        "center" to "居中",
+        "start" to "靠左对齐",
+        "end" to "靠右对齐"
+    )
+
+    val currentLayoutModeLabel = layoutModeOptions.find { it.first == stickyLayoutMode }?.second ?: "单行展示"
+    val currentDisplayModeLabel = displayModeOptions.find { it.first == stickyDisplayMode }?.second ?: "不显示会话名称"
+    val currentAlignmentLabel = alignmentOptions.find { it.first == stickyAlignment }?.second ?: "居中"
     
     SettingsGroup(
         title = "会话列表 - TopAppBar",
@@ -266,20 +323,69 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
     )
     
     SettingsGroup(
-        title = "会话列表 - 显示项",
-        items = listOf(
-            {
+        title = "会话列表 - 置顶设置",
+        items = buildList {
+            add {
                 SettingsSwitchItem(
                     icon = Icons.Default.PushPin,
                     title = "显示置顶会话",
-                    subtitle = "在会话列表中显示置顶的会话",
+                    subtitle = if (showStickyConversations) "在会话列表中显示置顶会话" else "不显示置顶会话",
                     checked = showStickyConversations,
                     onCheckedChange = {
                         showStickyConversations = it
                         displayPrefs.edit().putBoolean("show_sticky_conversations", it).apply()
                     }
                 )
-            },
+            }
+            if (showStickyConversations) {
+                add {
+                    SettingsItemCell(
+                        icon = Icons.Default.ViewCarousel,
+                        title = "布局方式",
+                        subtitle = "当前: $currentLayoutModeLabel",
+                        onClick = { showLayoutModeDialog = true }
+                    )
+                }
+                if (stickyLayoutMode == "list") {
+                    add {
+                        SettingsSwitchItem(
+                            icon = Icons.Default.List,
+                            title = "显示折叠/展开按钮",
+                            subtitle = if (showStickyCollapseToggle) "显示置顶会话的折叠与展开栏" else "直接展示所有置顶会话",
+                            checked = showStickyCollapseToggle,
+                            onCheckedChange = {
+                                showStickyCollapseToggle = it
+                                displayPrefs.edit().putBoolean("show_sticky_collapse_toggle", it).apply()
+                            }
+                        )
+                    }
+                } else {
+                    add {
+                        SettingsItemCell(
+                            icon = Icons.Default.Badge,
+                            title = "显示内容",
+                            subtitle = "当前: $currentDisplayModeLabel",
+                            onClick = { showDisplayModeDialog = true }
+                        )
+                    }
+                    if (stickyLayoutMode == "grid") {
+                        add {
+                            SettingsItemCell(
+                                icon = Icons.Default.FormatAlignLeft,
+                                title = "平铺对齐方式",
+                                subtitle = "当前: $currentAlignmentLabel",
+                                onClick = { showAlignmentDialog = true }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    SettingsGroup(
+        title = "会话列表 - 显示项",
+        items = listOf(
             {
                 SettingsSwitchItem(
                     icon = Icons.Default.NotificationsActive,
@@ -306,6 +412,123 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
             }
         )
     )
+
+    if (showLayoutModeDialog) {
+        YhAlertDialog(
+            onDismissRequest = { showLayoutModeDialog = false },
+            title = { Text("选择置顶布局方式") },
+            text = {
+                Column {
+                    layoutModeOptions.forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    stickyLayoutMode = value
+                                    displayPrefs.edit().putString("sticky_layout_mode", value).apply()
+                                    showLayoutModeDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            YhRadioButton(
+                                selected = stickyLayoutMode == value,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                YhTextButton(onClick = { showLayoutModeDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showDisplayModeDialog) {
+        YhAlertDialog(
+            onDismissRequest = { showDisplayModeDialog = false },
+            title = { Text("选择置顶显示内容") },
+            text = {
+                Column {
+                    displayModeOptions.forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    stickyDisplayMode = value
+                                    displayPrefs.edit().putString("sticky_display_mode", value).apply()
+                                    showDisplayModeDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            YhRadioButton(
+                                selected = stickyDisplayMode == value,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                YhTextButton(onClick = { showDisplayModeDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showAlignmentDialog) {
+        YhAlertDialog(
+            onDismissRequest = { showAlignmentDialog = false },
+            title = { Text("选择平铺对齐方式") },
+            text = {
+                Column {
+                    alignmentOptions.forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    stickyAlignment = value
+                                    displayPrefs.edit().putString("sticky_alignment", value).apply()
+                                    showAlignmentDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            YhRadioButton(
+                                selected = stickyAlignment == value,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                YhTextButton(onClick = { showAlignmentDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 /**

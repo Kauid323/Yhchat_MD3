@@ -24,9 +24,25 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -50,13 +66,13 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -101,6 +117,7 @@ import com.yhchat.canary.ui.components.ConversationMenuDialog
 import com.yhchat.canary.ui.components.observeScrollForNavigation
 import com.yhchat.canary.ui.components.rememberScrollAwareNavigationState
 import com.yhchat.canary.ui.components.rememberBooleanPreference
+import com.yhchat.canary.ui.components.rememberStringPreference
 import com.yhchat.canary.ui.components.rememberSharedPreferences
 import com.yhchat.canary.ui.adaptive.YhAlertDialog
 import com.yhchat.canary.ui.adaptive.YhBasicComponent
@@ -147,6 +164,11 @@ fun ConversationScreen(
     // 读取显示置顶会话的设置
     val context = LocalContext.current
     val showStickyConversations by rememberBooleanPreference("display_settings", "show_sticky_conversations", true)
+    val stickyLayoutMode by rememberStringPreference("display_settings", "sticky_layout_mode", "single_line")
+    val stickyDisplayMode by rememberStringPreference("display_settings", "sticky_display_mode", "no_name")
+    val stickyAlignment by rememberStringPreference("display_settings", "sticky_alignment", "center")
+    val showStickyCollapseToggle by rememberBooleanPreference("display_settings", "show_sticky_collapse_toggle", true)
+    var isStickyExpanded by rememberSaveable { mutableStateOf(true) }
 
     // 列表状态
     val listState = rememberLazyListState()
@@ -616,31 +638,110 @@ fun ConversationScreen(
                                 color = when (searchItem.friendType) {
                                     1 -> MaterialTheme.colorScheme.primaryContainer
                                     2 -> MaterialTheme.colorScheme.secondaryContainer
-                                    3 -> MaterialTheme.colorScheme.tertiaryContainer
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    text = when (searchItem.friendType) {
-                                        1 -> "用户"
-                                        2 -> "群组"
-                                        3 -> "机器人"
-                                        else -> "未知"
-                                    },
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        }
-                    }
-                }
-                            }
                         }
                     }
                 }
 
-
+                searchResult?.let { result ->
+                    result.list.forEachIndexed { catIndex, category ->
+                        category.list?.let { items ->
+                            if (items.isNotEmpty()) {
+                                item(key = "api_header_${catIndex}_${category.title}") {
+                                    Text(
+                                        text = category.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                itemsIndexed(
+                                    items = category.list ?: emptyList(),
+                                    key = { index, item -> "api_${catIndex}_${item.friendId}_${item.friendType}_$index" }
+                                ) { index, searchItem ->
+                                    YhSurface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onConversationClick(
+                                                    searchItem.friendId,
+                                                    searchItem.friendType,
+                                                    searchItem.nickname,
+                                                    searchItem.avatarUrl
+                                                )
+                                            },
+                                        color = MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val avatarRequest = remember(searchItem.avatarUrl) {
+                                                ImageRequest.Builder(context)
+                                                    .data(searchItem.avatarUrl)
+                                                    .addHeader("Referer", "https://myapp.jwznb.com")
+                                                    .crossfade(true)
+                                                    .build()
+                                            }
+                                            AsyncImage(
+                                                model = avatarRequest,
+                                                contentDescription = searchItem.nickname,
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .clip(CircleShape),
+                                                contentScale = ContentScale.Crop,
+                                                error = painterResource(id = R.drawable.ic_person)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = searchItem.nickname,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val idLabel = when (searchItem.friendType) {
+                                                    1 -> "用户"
+                                                    2 -> "群组"
+                                                    3 -> "机器人"
+                                                    else -> "ID"
+                                                }
+                                                Text(
+                                                    text = "$idLabel: ${searchItem.friendId}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            YhSurface(
+                                                color = when (searchItem.friendType) {
+                                                    1 -> MaterialTheme.colorScheme.primaryContainer
+                                                    2 -> MaterialTheme.colorScheme.secondaryContainer
+                                                    3 -> MaterialTheme.colorScheme.tertiaryContainer
+                                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                                },
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = when (searchItem.friendType) {
+                                                        1 -> "用户"
+                                                        2 -> "群组"
+                                                        3 -> "机器人"
+                                                        else -> "未知"
+                                                    },
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // 无结果提示
                 if (searchQuery.isNotBlank() && filteredConversations.isEmpty() && searchResult == null && !searchUiState.isLoading) {
@@ -658,16 +759,15 @@ fun ConversationScreen(
                     }
                 }
                 }
-            } else {
-                // ========== 正常模式 ==========
-                // 会话列表（支持下拉刷新）
-                YhPullToRefresh(
+            }
+        } else {
+            // ========== 正常模式 ==========
+            // 会话列表（支持下拉刷新）
+            YhPullToRefresh(
                 isRefreshing = refreshing,
                 onRefresh = {
-                    // 只有用户主动下拉刷新时才重新加载数据
                     refreshing = true
                     viewModel.loadConversations(token)
-                    // 延迟一下再关闭刷新状态，让用户感知到刷新动作
                     coroutineScope.launch {
                         kotlinx.coroutines.delay(500)
                         refreshing = false
@@ -683,72 +783,228 @@ fun ConversationScreen(
                         YhCircularProgressIndicator()
                     }
                 } else {
+                    val stickyList = stickyData?.sticky ?: emptyList()
+                    val stickyChatIds = remember(stickyList) { stickyList.map { it.chatId }.toSet() }
+                    val isListLayout = stickyLayoutMode == "list"
 
-                    
+                    // 优先去重：列表展示模式下去除普通会话列表中与置顶重复的会话
+                    val displayConversations = remember(conversations, stickyChatIds, isListLayout) {
+                        if (isListLayout) {
+                            conversations.filter { it.chatId !in stickyChatIds }
+                        } else {
+                            conversations
+                        }
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        // 置顶会话显示在列表最顶部 - 横向滑动样式
-                        if (showStickyConversations && !stickyData?.sticky.isNullOrEmpty()) {
-                            item(key = "sticky_conversations_section") {
-                                Column {
-                                    // 置顶会话横向列表
-                                    LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        items(
-                                            items = stickyData?.sticky ?: emptyList(),
-                                            key = { stickyItem -> "sticky_${stickyItem.chatId}_${stickyItem.id}" },
-                                            contentType = { "sticky" }
-                                        ) { stickyItem ->
-                                            StickyConversationCard(
-                                                stickyItem = stickyItem,
-                                                onClick = {
-                                                    viewModel.markConversationAsRead(stickyItem.chatId)
-                                                    
-                                                    onConversationClick(
-                                                        stickyItem.chatId,
-                                                        stickyItem.chatType,
-                                                        stickyItem.chatName,
-                                                        stickyItem.avatarUrl
-                                                    )
-                                                },
-                                                onLongClick = {
-                                                    // 创建临时Conversation对象用于菜单
-                                                    val stickyConversation = Conversation(
-                                                        chatId = stickyItem.chatId,
-                                                        chatType = stickyItem.chatType,
-                                                        name = stickyItem.chatName,
-                                                        chatContent = "",
-                                                        timestampMs = 0L,
-                                                        unreadMessage = 0,
-                                                        at = 0,
-                                                        avatarUrl = stickyItem.avatarUrl,
-                                                        timestamp = 0L,
-                                                        certificationLevel = stickyItem.certificationLevel
-                                                    )
-                                                    selectedConversation = stickyConversation
-                                                    coroutineScope.launch {
-                                                        isSelectedConversationSticky = true
-                                                        showConversationMenu = true
-                                                    }
-                                                }
+                        // 置顶会话列表
+                        if (showStickyConversations && stickyList.isNotEmpty()) {
+                            if (isListLayout) {
+                                // 模式3：列表展示（类似微信/QQ），置顶项以深色背景会话条目显示在最顶端
+                                val stickyConversations = remember(stickyList, conversations) {
+                                    stickyList.map { stickyItem ->
+                                        conversations.find { it.chatId == stickyItem.chatId } ?: Conversation(
+                                            chatId = stickyItem.chatId,
+                                            chatType = stickyItem.chatType,
+                                            name = stickyItem.chatName,
+                                            chatContent = "",
+                                            timestampMs = 0L,
+                                            unreadMessage = 0,
+                                            at = 0,
+                                            avatarUrl = stickyItem.avatarUrl,
+                                            timestamp = 0L,
+                                            certificationLevel = stickyItem.certificationLevel
+                                        )
+                                    }
+                                }
+
+                                if (showStickyCollapseToggle) {
+                                    item(key = "sticky_list_toggle_header") {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { isStickyExpanded = !isStickyExpanded }
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PushPin,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "置顶会话 (${stickyConversations.size})",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = if (isStickyExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = if (isStickyExpanded) "收起" else "展开",
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
-                                    
-                                    // 分隔线
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp)
-                                            .height(1.dp)
-                                            .background(MaterialTheme.colorScheme.outlineVariant)
-                                    )
+                                }
+
+                                if (!showStickyCollapseToggle || isStickyExpanded) {
+                                    items(
+                                        items = stickyConversations,
+                                        key = { conv -> "sticky_list_${conv.chatId}" },
+                                        contentType = { "sticky_conversation" }
+                                    ) { conversation ->
+                                        val chatId = conversation.chatId
+                                        val chatType = conversation.chatType
+                                        val chatName = conversation.name
+                                        
+                                        ConversationItem(
+                                            conversation = conversation,
+                                            isSticky = true,
+                                            onClick = {
+                                                viewModel.markConversationAsRead(chatId)
+                                                onConversationClick(chatId, chatType, chatName, conversation.avatarUrl)
+                                            },
+                                            onLongClick = {
+                                                selectedConversation = conversation
+                                                coroutineScope.launch {
+                                                    isSelectedConversationSticky = true
+                                                    showConversationMenu = true
+                                                }
+                                            }
+                                        )
+                                    }
+
+                                    if (displayConversations.isNotEmpty()) {
+                                        item(key = "sticky_list_divider") {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                    .height(1.dp)
+                                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 模式1与模式2：单行横滑或平铺展示
+                                item(key = "sticky_conversations_section") {
+                                    Column {
+                                        if (stickyLayoutMode == "grid") {
+                                            val flowArrangement = when (stickyAlignment) {
+                                                "start" -> Arrangement.Start
+                                                "end" -> Arrangement.End
+                                                else -> Arrangement.Center
+                                            }
+                                            FlowRow(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp, flowArrangement),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                stickyList.forEach { stickyItem ->
+                                                    StickyConversationCard(
+                                                        stickyItem = stickyItem,
+                                                        displayMode = stickyDisplayMode,
+                                                        onClick = {
+                                                            viewModel.markConversationAsRead(stickyItem.chatId)
+                                                            onConversationClick(
+                                                                stickyItem.chatId,
+                                                                stickyItem.chatType,
+                                                                stickyItem.chatName,
+                                                                stickyItem.avatarUrl
+                                                            )
+                                                        },
+                                                        onLongClick = {
+                                                            val stickyConversation = Conversation(
+                                                                chatId = stickyItem.chatId,
+                                                                chatType = stickyItem.chatType,
+                                                                name = stickyItem.chatName,
+                                                                chatContent = "",
+                                                                timestampMs = 0L,
+                                                                unreadMessage = 0,
+                                                                at = 0,
+                                                                avatarUrl = stickyItem.avatarUrl,
+                                                                timestamp = 0L,
+                                                                certificationLevel = stickyItem.certificationLevel
+                                                            )
+                                                            selectedConversation = stickyConversation
+                                                            coroutineScope.launch {
+                                                                isSelectedConversationSticky = true
+                                                                showConversationMenu = true
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            // 单行展示
+                                            LazyRow(
+                                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(
+                                                    items = stickyList,
+                                                    key = { stickyItem -> "sticky_${stickyItem.chatId}_${stickyItem.id}" },
+                                                    contentType = { "sticky" }
+                                                ) { stickyItem ->
+                                                    StickyConversationCard(
+                                                        stickyItem = stickyItem,
+                                                        displayMode = stickyDisplayMode,
+                                                        onClick = {
+                                                            viewModel.markConversationAsRead(stickyItem.chatId)
+                                                            onConversationClick(
+                                                                stickyItem.chatId,
+                                                                stickyItem.chatType,
+                                                                stickyItem.chatName,
+                                                                stickyItem.avatarUrl
+                                                            )
+                                                        },
+                                                        onLongClick = {
+                                                            val stickyConversation = Conversation(
+                                                                chatId = stickyItem.chatId,
+                                                                chatType = stickyItem.chatType,
+                                                                name = stickyItem.chatName,
+                                                                chatContent = "",
+                                                                timestampMs = 0L,
+                                                                unreadMessage = 0,
+                                                                at = 0,
+                                                                avatarUrl = stickyItem.avatarUrl,
+                                                                timestamp = 0L,
+                                                                certificationLevel = stickyItem.certificationLevel
+                                                            )
+                                                            selectedConversation = stickyConversation
+                                                            coroutineScope.launch {
+                                                                isSelectedConversationSticky = true
+                                                                showConversationMenu = true
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        
+                                        // 分隔线
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp)
+                                                .height(1.dp)
+                                                .background(MaterialTheme.colorScheme.outlineVariant)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -756,20 +1012,19 @@ fun ConversationScreen(
                         // 普通会话列表 - 受布局设置控制
                         if (layoutShowConversationList) {
                             items(
-                                items = conversations,
+                                items = displayConversations,
                                 key = { conversation -> "conversation_${conversation.chatId}" },
                                 contentType = { "conversation" }
                             ) { conversation ->
-                                // 使用remember确保点击时获取最新的conversation数据
                                 val chatId = conversation.chatId
                                 val chatType = conversation.chatType
                                 val chatName = conversation.name
                                 
                                 ConversationItem(
                                     conversation = conversation,
+                                    isSticky = false,
                                     onClick = {
                                         viewModel.markConversationAsRead(chatId)
-                                        
                                         onConversationClick(chatId, chatType, chatName, conversation.avatarUrl)
                                     },
                                     onLongClick = {
@@ -781,7 +1036,7 @@ fun ConversationScreen(
                                     }
                                 )
                             }
-                            if (conversations.isEmpty()) {
+                            if (displayConversations.isEmpty() && (!isListLayout || stickyList.isEmpty())) {
                                 item {
                                     Box(
                                         modifier = Modifier
@@ -794,6 +1049,7 @@ fun ConversationScreen(
                                             style = MaterialTheme.typography.bodyLarge,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+
                                     }
                                 }
                             }
@@ -1013,6 +1269,7 @@ private fun AddMenuBottomSheetContent(
 @Composable
 fun ConversationItem(
     conversation: Conversation,
+    isSticky: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -1042,8 +1299,12 @@ fun ConversationItem(
     YhSurface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 3.dp),
-        color = Color.Transparent,
+            .padding(horizontal = 4.dp, vertical = if (isSticky) 2.dp else 3.dp),
+        color = if (isSticky) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+        } else {
+            Color.Transparent
+        },
         shadowElevation = 0.dp,
         shape = RoundedCornerShape(14.dp)
     ) {
@@ -1291,90 +1552,213 @@ fun ChatTypeIcon(chatType: Int) {
 }
 
 /**
- * 置顶会话卡片 - 小尺寸横向滑动样式
+ * 置顶会话卡片 - 支持带名称、纯头像、纯名称标签三种外观
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StickyConversationCard(
     stickyItem: StickyItem,
+    displayMode: String = "no_name",
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .width(56.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // 头像容器（带认证角标）
-        Box(
-            modifier = Modifier.size(48.dp)
-        ) {
-            val context = LocalContext.current
-            val avatarRequest = remember(stickyItem.avatarUrl) {
-                ImageRequest.Builder(context)
-                    .data(stickyItem.avatarUrl)
-                    .addHeader("Referer", "https://myapp.jwznb.com")
-                    .crossfade(true)
-                    .build()
-            }
-            AsyncImage(
-                model = avatarRequest,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
-            )
-
-            // 认证标识
-            if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
-                Box(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .align(Alignment.BottomEnd)
-                        .background(
-                            when (stickyItem.certificationLevel) {
-                                1 -> Color(0xFF4CAF50) // 官方 - 绿色
-                                2 -> Color(0xFF2196F3) // 地区 - 蓝色
-                                else -> Color.Gray
-                            },
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
+    val context = LocalContext.current
+    
+    when (displayMode) {
+        "no_avatar" -> {
+            // 不显示头像：以胶囊/标签样式展示会话名称
+            YhSurface(
+                modifier = modifier
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    ),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .background(
+                                    when (stickyItem.certificationLevel) {
+                                        1 -> Color(0xFF4CAF50) // 官方 - 绿色
+                                        2 -> Color(0xFF2196F3) // 地区 - 蓝色
+                                        else -> Color.Gray
+                                    },
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = when (stickyItem.certificationLevel) {
+                                    1 -> "官"
+                                    2 -> "地"
+                                    else -> "认"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontSize = 8.sp
+                            )
+                        }
+                    }
                     Text(
-                        text = when (stickyItem.certificationLevel) {
-                            1 -> "官"
-                            2 -> "地"
-                            else -> "认"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        fontSize = 8.sp
+                        text = stickyItem.chatName,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
+        "with_name" -> {
+            // 显示会话名称：头像 + 底部文字
+            Column(
+                modifier = modifier
+                    .width(56.dp)
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    )
+                    .padding(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    val avatarRequest = remember(stickyItem.avatarUrl) {
+                        ImageRequest.Builder(context)
+                            .data(stickyItem.avatarUrl)
+                            .addHeader("Referer", "https://myapp.jwznb.com")
+                            .crossfade(true)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = avatarRequest,
+                        contentDescription = stickyItem.chatName,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
+                    )
 
-        Spacer(modifier = Modifier.height(4.dp))
+                    // 认证标识
+                    if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(
+                                    when (stickyItem.certificationLevel) {
+                                        1 -> Color(0xFF4CAF50)
+                                        2 -> Color(0xFF2196F3)
+                                        else -> Color.Gray
+                                    },
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = when (stickyItem.certificationLevel) {
+                                    1 -> "官"
+                                    2 -> "地"
+                                    else -> "认"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontSize = 8.sp
+                            )
+                        }
+                    }
+                }
 
-        // 会话名称
-        Text(
-            text = stickyItem.chatName,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.width(58.dp),
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = stickyItem.chatName,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.width(58.dp),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+        else -> {
+            // 默认不显示会话名称：纯头像（带认证角标）
+            Box(
+                modifier = modifier
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    )
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    val avatarRequest = remember(stickyItem.avatarUrl) {
+                        ImageRequest.Builder(context)
+                            .data(stickyItem.avatarUrl)
+                            .addHeader("Referer", "https://myapp.jwznb.com")
+                            .crossfade(true)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = avatarRequest,
+                        contentDescription = stickyItem.chatName,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
+                    )
+
+                    // 认证标识
+                    if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(
+                                    when (stickyItem.certificationLevel) {
+                                        1 -> Color(0xFF4CAF50)
+                                        2 -> Color(0xFF2196F3)
+                                        else -> Color.Gray
+                                    },
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = when (stickyItem.certificationLevel) {
+                                    1 -> "官"
+                                    2 -> "地"
+                                    else -> "认"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontSize = 8.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
