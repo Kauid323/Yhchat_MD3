@@ -142,7 +142,7 @@ class FriendRepository @Inject constructor(
     }
 
     suspend fun agreeApply(
-        id: Long,
+        id: Int,
         agree: Int = 1,
         usesGroupAgreeInvite: Boolean = false
     ): Result<BaseResponse> {

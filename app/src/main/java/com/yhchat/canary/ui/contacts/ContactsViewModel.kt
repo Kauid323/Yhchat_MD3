@@ -33,7 +33,7 @@ data class ContactGroup(
 )
 
 data class FriendRequestItem(
-    val requestId: Long,
+    val requestId: Int,
     val receiverName: String,
     val receiverAvatar: String,
     val name: String,
@@ -247,7 +247,7 @@ class ContactsViewModel @Inject constructor(
                 onSuccess = { resp ->
                     val list = resp.requestsList.map { r ->
                         FriendRequestItem(
-                            requestId = r.requestId.toLong(),
+                            requestId = r.requestId,
                             receiverName = r.receiverName,
                             receiverAvatar = r.receiverAvatar,
                             name = r.name,

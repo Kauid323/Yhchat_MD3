@@ -646,10 +646,18 @@ private fun FriendRequestDetailBottomSheet(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        val resultText = when (item.result) {
+                            0 -> "待处理"
+                            1 -> "已同意"
+                            2 -> "已拒绝"
+                            3 -> "已过期"
+                            else -> item.result.toString()
+                        }
+                        
                         InfoLine(label = "类型", value = item.typeLabel)
                         InfoLine(label = "请求ID", value = item.requestId.toString())
-                        InfoLine(label = "申请添加的会话ID", value = item.targetId)
-                        InfoLine(label = "处理结果", value = item.result.toString())
+                        InfoLine(label = "目标ID", value = item.targetId)
+                        InfoLine(label = "处理结果", value = resultText)
                         if (item.inviteAtStr.isNotBlank()) {
                             InfoLine(label = "时间", value = item.inviteAtStr)
                         }

@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -184,7 +186,7 @@ fun ConversationScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var isManuallyActivated by rememberSaveable { mutableStateOf(false) } // 标记是否手动激活
-    var isTextFieldEnabled by rememberSaveable { mutableStateOf(false) } // 控制输入框是否启用
+    var isInitializing by rememberSaveable { mutableStateOf(true) } // 仅在初始化阶段阻止自动焦点
     var isFocusClearing by rememberSaveable { mutableStateOf(false) } // 防止焦点清除死循环
     val searchFocusRequester = remember { FocusRequester() }
     
@@ -218,7 +220,7 @@ fun ConversationScreen(
                 }
             }
             kotlinx.coroutines.delay(200)
-            isTextFieldEnabled = true
+            isInitializing = false
         } else {
             // 安卓9及以上版本使用原有逻辑
             repeat(5) {
@@ -231,7 +233,7 @@ fun ConversationScreen(
                 }
             }
             kotlinx.coroutines.delay(200)
-            isTextFieldEnabled = true
+            isInitializing = false
         }
     }
     
@@ -394,13 +396,12 @@ fun ConversationScreen(
                 actions = {
                     if (layoutShowSearch) {
                         YhIconButton(onClick = {
-                            if (isTextFieldEnabled) {
-                                isManuallyActivated = true
-                                isSearchActive = true
-                                coroutineScope.launch {
-                                    kotlinx.coroutines.delay(100)
-                                    try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
-                                }
+                            // 直接激活搜索，不受初始化状态限制
+                            isManuallyActivated = true
+                            isSearchActive = true
+                            coroutineScope.launch {
+                                kotlinx.coroutines.delay(80)
+                                try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
                             }
                         }) {
                             Icon(
@@ -428,11 +429,13 @@ fun ConversationScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        // 搜索激活时显示内联搜索栏
+        // 搜索栏：从顶栏位置滑入动画
         AnimatedVisibility(
             visible = isSearchActive,
-            enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = tween(220)),
-            exit = fadeOut(animationSpec = tween(160)) + shrinkVertically(animationSpec = tween(200))
+            enter = slideInVertically(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it } +
+                    fadeIn(animationSpec = tween(200)),
+            exit = slideOutVertically(animationSpec = tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { -it } +
+                    fadeOut(animationSpec = tween(160))
         ) {
             val searchBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
             val onSearchColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -494,21 +497,21 @@ fun ConversationScreen(
                             .onFocusChanged { focusState ->
                                 if (!isFocusClearing) {
                                     if (focusState.isFocused && !isManuallyActivated) {
-                                        if (isLowAndroidVersion) {
-                                            coroutineScope.launch {
-                                                isFocusClearing = true
-                                                try { focusManager.clearFocus() } catch (_: Exception) {}
-                                                kotlinx.coroutines.delay(200)
-                                                isFocusClearing = false
-                                            }
-                                        } else {
-                                            coroutineScope.launch {
-                                                isFocusClearing = true
-                                                focusManager.clearFocus()
-                                                isTextFieldEnabled = false
-                                                kotlinx.coroutines.delay(100)
-                                                isTextFieldEnabled = true
-                                                isFocusClearing = false
+                                        if (isInitializing) {
+                                            if (isLowAndroidVersion) {
+                                                coroutineScope.launch {
+                                                    isFocusClearing = true
+                                                    try { focusManager.clearFocus() } catch (_: Exception) {}
+                                                    kotlinx.coroutines.delay(200)
+                                                    isFocusClearing = false
+                                                }
+                                            } else {
+                                                coroutineScope.launch {
+                                                    isFocusClearing = true
+                                                    focusManager.clearFocus()
+                                                    kotlinx.coroutines.delay(100)
+                                                    isFocusClearing = false
+                                                }
                                             }
                                         }
                                     } else if (focusState.isFocused && isManuallyActivated) {
@@ -526,7 +529,7 @@ fun ConversationScreen(
                             focusManager.clearFocus()
                         }),
                         singleLine = true,
-                        enabled = isTextFieldEnabled && (isManuallyActivated || isSearchActive)
+                        enabled = isManuallyActivated || isSearchActive
                     )
                 }
                 if (searchQuery.isNotEmpty()) {

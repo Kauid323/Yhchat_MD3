@@ -18,7 +18,7 @@ data class DeleteFriendRequest(
  */
 data class AgreeApplyRequest(
     @SerializedName("id")
-    val id: Long,  // 申请ID
+    val id: Int,  // 申请ID
     
     @SerializedName("agree")
     val agree: Int  // 1-通过请求，2-拒绝请求，3-显示请求过期，4-显示已解散
