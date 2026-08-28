@@ -10,6 +10,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -186,6 +187,7 @@ fun MessageItem(
             }
         }
     } else {
+
         null
     }
     val saveAudioAction: (() -> Unit)? = if (message.contentType == 11 && !message.content.audioUrl.isNullOrBlank()) {
@@ -369,19 +371,35 @@ fun MessageItem(
                 )
             }
 
-            val bubbleColor = if (isMyMessage) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+            val bubbleShape = remember(isMyMessage) {
+                RoundedCornerShape(
+                    topStart = if (isMyMessage) 16.dp else 4.dp,
+                    topEnd = if (isMyMessage) 4.dp else 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp
+                )
+            }
+            val bubbleColor = if (isMyMessage) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
 
             YhSurface(
                 modifier = Modifier
                     .wrapContentWidth()
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = if (isMyMessage) 16.dp else 4.dp,
-                            topEnd = if (isMyMessage) 4.dp else 16.dp,
-                            bottomStart = 16.dp,
-                            bottomEnd = 16.dp
-                        )
+                    .then(
+                        if (!isMyMessage) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                shape = bubbleShape
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
+                    .clip(bubbleShape)
                     // Long-press anywhere inside the bubble (including padding/empty area) to open context menu.
                     // This does not handle normal taps, so inner links/buttons keep working.
                     .pointerInput(message.msgId, isMultiSelectMode, openMessageActions) {
@@ -395,7 +413,8 @@ fun MessageItem(
                         }
                     },
                 color = bubbleColor,
-                shadowElevation = if (isMyMessage) 0.dp else 2.dp
+                shape = bubbleShape,
+                shadowElevation = if (isMyMessage) 0.dp else 1.dp
             ) {
                 if (isCollapsed && onToggleCollapse != null) {
                     Column(modifier = Modifier.padding(12.dp)) {
