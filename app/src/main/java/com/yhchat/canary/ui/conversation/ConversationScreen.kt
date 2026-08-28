@@ -146,11 +146,11 @@ fun ConversationScreen(
     
     // 读取显示置顶会话的设置
     val context = LocalContext.current
-    val prefs = rememberSharedPreferences("display_settings")
     val showStickyConversations by rememberBooleanPreference("display_settings", "show_sticky_conversations", true)
 
     // 列表状态
     val listState = rememberLazyListState()
+    val searchListState = rememberLazyListState()
     
     // 监听滚动状态，自动隐藏/显示导航栏
     if (navigationState != null) {
@@ -185,13 +185,7 @@ fun ConversationScreen(
     // 顶部搜索栏状态
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
-    var isManuallyActivated by rememberSaveable { mutableStateOf(false) } // 标记是否手动激活
-    var isInitializing by rememberSaveable { mutableStateOf(true) } // 仅在初始化阶段阻止自动焦点
-    var isFocusClearing by rememberSaveable { mutableStateOf(false) } // 防止焦点清除死循环
     val searchFocusRequester = remember { FocusRequester() }
-    
-    // 检测安卓版本
-    val isLowAndroidVersion = remember { android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.O_MR1 }
 
     // 顶栏左侧自己的头像（来自 UserRepository.getUserProfile）
     var myAvatarUrl by rememberSaveable { mutableStateOf<String?>(null) }
@@ -205,50 +199,16 @@ fun ConversationScreen(
         }
     }
 
-    // 防止安卓8及以下自动聚焦 - 多层防护
-    LaunchedEffect(Unit) {
-        if (isLowAndroidVersion) {
-            // 安卓8及以下版本使用温和的初始化
-            kotlinx.coroutines.delay(300)
-            repeat(3) {
-                kotlinx.coroutines.delay(100)
-                if (!isSearchActive && !isManuallyActivated && !isFocusClearing) {
-                    try {
-                        focusManager.clearFocus()
-                        searchFocusRequester.freeFocus()
-                    } catch (_: Exception) {}
-                }
-            }
-            kotlinx.coroutines.delay(200)
-            isInitializing = false
-        } else {
-            // 安卓9及以上版本使用原有逻辑
-            repeat(5) {
-                kotlinx.coroutines.delay(50)
-                if (!isSearchActive && !isManuallyActivated) {
-                    try {
-                        focusManager.clearFocus()
-                        searchFocusRequester.freeFocus()
-                    } catch (_: Exception) {}
-                }
-            }
-            kotlinx.coroutines.delay(200)
-            isInitializing = false
-        }
-    }
-    
-    // 监听搜索状态变化，在退出搜索时清除焦点
+    // 监听搜索状态变化：激活时自动请求焦点并弹出键盘，退出时清除焦点
     LaunchedEffect(isSearchActive) {
-        if (!isSearchActive && searchQuery.isEmpty() && !isFocusClearing) {
-            coroutineScope.launch {
-                isFocusClearing = true
-                try {
-                    focusManager.clearFocus()
-                    searchFocusRequester.freeFocus()
-                } catch (_: Exception) {}
-                kotlinx.coroutines.delay(if (isLowAndroidVersion) 200 else 100)
-                isFocusClearing = false
-            }
+        if (isSearchActive) {
+            kotlinx.coroutines.delay(100)
+            try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
+        } else {
+            try {
+                focusManager.clearFocus()
+                searchFocusRequester.freeFocus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -293,14 +253,12 @@ fun ConversationScreen(
             }
         }
     }
-
     // 扫码启动器
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
         if (result.contents != null) {
             handleScanResult(result.contents)
         }
     }
-
     // 相册启动器
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
@@ -325,7 +283,7 @@ fun ConversationScreen(
     
     // 启动WebSocket连接（只在第一次或token/userId变化时执行）
     // 检查是否禁用了 WebSocket
-    val isWebSocketDisabledValue = prefs.getBoolean("disable_websocket", false)
+    val isWebSocketDisabledValue by rememberBooleanPreference("display_settings", "disable_websocket", false)
     LaunchedEffect(token, userId, isWebSocketDisabledValue) {
         if (token.isNotEmpty() && userId.isNotEmpty() && !isWebSocketDisabledValue) {
             viewModel.startWebSocket(userId)
@@ -341,12 +299,6 @@ fun ConversationScreen(
         }
     }
     
-    LaunchedEffect(isSearchActive) {
-        if (!isSearchActive) {
-            try { searchFocusRequester.freeFocus() } catch (_: Exception) {}
-        }
-    }
-
     YhScaffold(
         modifier = modifier,
         topBar = {
@@ -396,13 +348,7 @@ fun ConversationScreen(
                 actions = {
                     if (layoutShowSearch) {
                         YhIconButton(onClick = {
-                            // 直接激活搜索，不受初始化状态限制
-                            isManuallyActivated = true
                             isSearchActive = true
-                            coroutineScope.launch {
-                                kotlinx.coroutines.delay(80)
-                                try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
-                            }
                         }) {
                             Icon(
                                 imageVector = Icons.Default.Search,
@@ -459,11 +405,9 @@ fun ConversationScreen(
                             if (searchQuery.isNotEmpty()) {
                                 searchQuery = ""
                                 searchViewModel.clearSearch()
-                            } else {
-                                isSearchActive = false
-                                isManuallyActivated = false
-                                focusManager.clearFocus()
                             }
+                            isSearchActive = false
+                            focusManager.clearFocus()
                         }
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -482,46 +426,17 @@ fun ConversationScreen(
                     BasicTextField(
                         value = searchQuery,
                         onValueChange = {
-                            if (isManuallyActivated) {
-                                searchQuery = it
-                                if (it.isNotEmpty()) {
-                                    isSearchActive = true
-                                    searchViewModel.search(it)
-                                }
+                            searchQuery = it
+                            if (it.isNotEmpty()) {
+                                searchViewModel.search(it)
+                            } else {
+                                searchViewModel.clearSearch()
                             }
                         },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = onSearchColor),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(searchFocusRequester)
-                            .onFocusChanged { focusState ->
-                                if (!isFocusClearing) {
-                                    if (focusState.isFocused && !isManuallyActivated) {
-                                        if (isInitializing) {
-                                            if (isLowAndroidVersion) {
-                                                coroutineScope.launch {
-                                                    isFocusClearing = true
-                                                    try { focusManager.clearFocus() } catch (_: Exception) {}
-                                                    kotlinx.coroutines.delay(200)
-                                                    isFocusClearing = false
-                                                }
-                                            } else {
-                                                coroutineScope.launch {
-                                                    isFocusClearing = true
-                                                    focusManager.clearFocus()
-                                                    kotlinx.coroutines.delay(100)
-                                                    isFocusClearing = false
-                                                }
-                                            }
-                                        }
-                                    } else if (focusState.isFocused && isManuallyActivated) {
-                                        isSearchActive = true
-                                    } else if (!focusState.isFocused && isSearchActive && searchQuery.isEmpty()) {
-                                        isSearchActive = false
-                                        isManuallyActivated = false
-                                    }
-                                }
-                            },
+                            .focusRequester(searchFocusRequester),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {
@@ -529,7 +444,7 @@ fun ConversationScreen(
                             focusManager.clearFocus()
                         }),
                         singleLine = true,
-                        enabled = isManuallyActivated || isSearchActive
+                        enabled = isSearchActive
                     )
                 }
                 if (searchQuery.isNotEmpty()) {
@@ -537,9 +452,6 @@ fun ConversationScreen(
                         onClick = {
                             searchQuery = ""
                             searchViewModel.clearSearch()
-                            isSearchActive = false
-                            isManuallyActivated = false
-                            focusManager.clearFocus()
                         },
                         modifier = Modifier.size(20.dp)
                     ) {
@@ -570,13 +482,13 @@ fun ConversationScreen(
             }
         }
 
-            if (isSearchActive) {
-                // ========== 搜索模式 ==========
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
+        if (isSearchActive) {
+            // ========== 搜索模式 ==========
+            LazyColumn(
+                state = searchListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
                 // 本地会话匹配结果
                 if (filteredConversations.isNotEmpty()) {
                     item(key = "local_header") {
@@ -728,6 +640,8 @@ fun ConversationScreen(
                     }
                 }
 
+
+
                 // 无结果提示
                 if (searchQuery.isNotBlank() && filteredConversations.isEmpty() && searchResult == null && !searchUiState.isLoading) {
                     item(key = "no_results") {
@@ -769,7 +683,7 @@ fun ConversationScreen(
                         YhCircularProgressIndicator()
                     }
                 } else {
-                    val allConversations by viewModel.conversations.collectAsState()
+
                     
                     LazyColumn(
                         state = listState,
@@ -842,7 +756,7 @@ fun ConversationScreen(
                         // 普通会话列表 - 受布局设置控制
                         if (layoutShowConversationList) {
                             items(
-                                items = allConversations,
+                                items = conversations,
                                 key = { conversation -> "conversation_${conversation.chatId}" },
                                 contentType = { "conversation" }
                             ) { conversation ->
@@ -867,7 +781,7 @@ fun ConversationScreen(
                                     }
                                 )
                             }
-                            if (allConversations.isEmpty()) {
+                            if (conversations.isEmpty()) {
                                 item {
                                     Box(
                                         modifier = Modifier
@@ -900,7 +814,7 @@ fun ConversationScreen(
                             }
                         }
                         // 加载更多提示
-                        if (uiState.isLoading && allConversations.isNotEmpty()) {
+                        if (uiState.isLoading && conversations.isNotEmpty()) {
                             item {
                                 Box(
                                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -974,7 +888,6 @@ fun ConversationScreen(
         )
     }
 
-    // 添加菜单 BottomSheet
     if (showAddMenuBottomSheet) {
         YhBottomSheet(
             show = showAddMenuBottomSheet,
@@ -1126,8 +1039,7 @@ fun ConversationItem(
         }
     }
     
-    YhClickableSurface(
-        onClick = onClick,
+    YhSurface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 3.dp),
@@ -1149,148 +1061,148 @@ fun ConversationItem(
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-            // 头像 - 性能优化：remember ImageRequest避免重复构建
-            Box {
-                val context = LocalContext.current
-                val avatarModel = remember(avatarUrl72) {
-                    if (avatarUrl72 != null) {
-                        ImageRequest.Builder(context)
-                            .data(avatarUrl72)
-                            .addHeader("Referer", "https://myapp.jwznb.com")
-                            .crossfade(true)
-                            .build()
-                    } else {
-                        null
+                // 头像 - 性能优化：remember ImageRequest避免重复构建
+                Box {
+                    val context = LocalContext.current
+                    val avatarModel = remember(avatarUrl72) {
+                        if (avatarUrl72 != null) {
+                            ImageRequest.Builder(context)
+                                .data(avatarUrl72)
+                                .addHeader("Referer", "https://myapp.jwznb.com")
+                                .crossfade(true)
+                                .build()
+                        } else {
+                            null
+                        }
                     }
+                    AsyncImage(
+                        model = avatarModel,
+                        contentDescription = "头像",
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
+                    )
+                    
+                    // 未读消息徽章
+                    UnreadBadge(
+                        count = conversation.unreadMessage,
+                        isDoNotDisturb = conversation.doNotDisturb == 1,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    )
                 }
-                AsyncImage(
-                    model = avatarModel,
-                    contentDescription = "头像",
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
-                )
                 
-                // 未读消息徽章
-                UnreadBadge(
-                    count = conversation.unreadMessage,
-                    isDoNotDisturb = conversation.doNotDisturb == 1,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            // 会话信息
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // 会话信息
+                Column(
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = conversation.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        
-                        // 认证标识
-                        if (conversation.certificationLevel != null && conversation.certificationLevel > 0) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .background(
-                                        when (conversation.certificationLevel) {
-                                            1 -> Color(0xFF4CAF50) // 官方 - 绿色
-                                            2 -> Color(0xFF2196F3) // 地区 - 蓝色
-                                            else -> Color.Gray
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = conversation.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            
+                            // 认证标识
+                            if (conversation.certificationLevel != null && conversation.certificationLevel > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .background(
+                                            when (conversation.certificationLevel) {
+                                                1 -> Color(0xFF4CAF50) // 官方 - 绿色
+                                                2 -> Color(0xFF2196F3) // 地区 - 蓝色
+                                                else -> Color.Gray
+                                            },
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = when (conversation.certificationLevel) {
+                                            1 -> "官"
+                                            2 -> "地"
+                                            else -> "认"
                                         },
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = when (conversation.certificationLevel) {
-                                        1 -> "官"
-                                        2 -> "地"
-                                        else -> "认"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontSize = 10.sp
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            
+                            // 免打扰图标
+                            if (conversation.doNotDisturb == 1) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                                    contentDescription = "免打扰",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         
-                        // 免打扰图标
-                        if (conversation.doNotDisturb == 1) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.VolumeOff,
-                                contentDescription = "免打扰",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(2.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 性能优化：remember displayContent避免重复计算
+                        val displayContent = remember(conversation.chatContent, conversation.at) {
+                            if (conversation.at > 0) {
+                                "@${conversation.chatContent}"
+                            } else {
+                                conversation.chatContent
+                            }
+                        }
+                        
+                        Text(
+                            text = displayContent,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (conversation.at > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        // @标识
+                        if (conversation.at > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary,
+                                        CircleShape
+                                    )
                             )
                         }
                     }
-                    
-                    Text(
-                        text = timeText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(2.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 性能优化：remember displayContent避免重复计算
-                    val displayContent = remember(conversation.chatContent, conversation.at) {
-                        if (conversation.at > 0) {
-                            "@${conversation.chatContent}"
-                        } else {
-                            conversation.chatContent
-                        }
-                    }
-                    
-                    Text(
-                        text = displayContent,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (conversation.at > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    // @标识
-                    if (conversation.at > 0) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary,
-                                    CircleShape
-                                )
-                        )
-                    }
                 }
             }
-        }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1337,39 +1249,26 @@ fun UnreadBadge(
         }
     }
     
-    // 进入动画：缩放和淡入
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn(animationSpec = tween(200)) + scaleIn(
-            initialScale = 0.3f,
-            animationSpec = tween(200)
-        ),
-        exit = fadeOut(animationSpec = tween(150)) + scaleOut(
-            targetScale = 0.3f,
-            animationSpec = tween(150)
-        )
+    Box(
+        modifier = modifier
+            .height(18.dp)
+            .widthIn(min = 18.dp, max = badgeSize)
+            .background(
+                MaterialTheme.colorScheme.error,
+                CircleShape
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = modifier
-                .height(18.dp)
-                .widthIn(min = 18.dp, max = badgeSize)
-                .background(
-                    MaterialTheme.colorScheme.error,
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = displayText,
-                color = MaterialTheme.colorScheme.onError,
-                fontSize = fontSize,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    lineHeight = fontSize  // 确保行高与字体大小一致
-                )
+        Text(
+            text = displayText,
+            color = MaterialTheme.colorScheme.onError,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            style = MaterialTheme.typography.labelSmall.copy(
+                lineHeight = fontSize
             )
-        }
+        )
     }
 }
 
@@ -1405,7 +1304,6 @@ fun StickyConversationCard(
     Column(
         modifier = modifier
             .width(56.dp)
-            .clickable { onClick() }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -1413,50 +1311,10 @@ fun StickyConversationCard(
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 头像 - 优化GIF性能
-        val context = LocalContext.current
-        val avatarRequest = remember(stickyItem.avatarUrl) {
-            ImageRequest.Builder(context)
-                .data(stickyItem.avatarUrl)
-                .addHeader("Referer", "https://myapp.jwznb.com")
-                .crossfade(true)
-                .build()
-        }
-        AsyncImage(
-            model = avatarRequest,
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop,
-            error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
-        )
-    }
-}
-
-/**
- * 集成的置顶会话项
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun IntegratedStickyItem(
-    stickyItem: com.yhchat.canary.data.model.StickyItem,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .width(64.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // 头像
-        Box {
+        // 头像容器（带认证角标）
+        Box(
+            modifier = Modifier.size(48.dp)
+        ) {
             val context = LocalContext.current
             val avatarRequest = remember(stickyItem.avatarUrl) {
                 ImageRequest.Builder(context)
@@ -1467,19 +1325,20 @@ fun IntegratedStickyItem(
             }
             AsyncImage(
                 model = avatarRequest,
-                contentDescription = "头像",
+                contentDescription = null,
                 modifier = Modifier
-                    .size(42.dp)
+                    .fillMaxSize()
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop,
                 error = painterResource(id = com.yhchat.canary.R.drawable.ic_person)
             )
 
             // 认证标识
-            if (stickyItem.certificationLevel > 0) {
+            if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
                 Box(
                     modifier = Modifier
                         .size(14.dp)
+                        .align(Alignment.BottomEnd)
                         .background(
                             when (stickyItem.certificationLevel) {
                                 1 -> Color(0xFF4CAF50) // 官方 - 绿色
@@ -1487,8 +1346,7 @@ fun IntegratedStickyItem(
                                 else -> Color.Gray
                             },
                             CircleShape
-                        )
-                        .align(Alignment.BottomEnd),
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -1504,6 +1362,8 @@ fun IntegratedStickyItem(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 会话名称
         Text(
