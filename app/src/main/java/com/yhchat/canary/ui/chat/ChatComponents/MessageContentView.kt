@@ -930,15 +930,15 @@ fun MessageContentView(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp
                             )
-                            // 显示引用的 msgId（调试用，可选）
-                            message.quoteMsgId?.let { quoteMsgId ->
-                                if (quoteMsgId.isNotEmpty()) {
-                                    Text(
-                                        text = "ID: ${quoteMsgId.take(8)}...",
-                                        color = textColor.copy(alpha = 0.3f),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp
-                                    )
+                         // 显示引用的 msgId（调试用，可选）
+                         //   message.quoteMsgId?.let { quoteMsgId ->
+                         //       if (quoteMsgId.isNotEmpty()) {
+                         //           Text(
+                         //               text = "ID: ${quoteMsgId.take(8)}...",
+                         //               color = textColor.copy(alpha = 0.3f),
+                         //               style = MaterialTheme.typography.labelSmall,
+                         //               fontSize = 9.sp
+                         //           )
                                 }
                             }
                         }

@@ -29,6 +29,8 @@ import com.yhchat.canary.proto.bot.bot_info
 import com.yhchat.canary.proto.group.Bot_data
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -723,6 +725,17 @@ class ChatViewModel @Inject constructor(
         return uploadToken
     }
 
+    private var uploadJob: Job? = null
+
+    /**
+     * 取消当前附件上传
+     */
+    fun cancelUpload() {
+        uploadJob?.cancel()
+        uploadJob = null
+        _uiState.value = _uiState.value.copy(uploadProgress = null)
+    }
+
     /**
      * 上传并发送图片
      */
@@ -736,7 +749,8 @@ class ChatViewModel @Inject constructor(
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null
     ) {
-        viewModelScope.launch {
+        uploadJob?.cancel()
+        uploadJob = viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送图片: $imageUri")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
@@ -814,11 +828,14 @@ class ChatViewModel @Inject constructor(
                     }
                 )
 
+            } catch (e: CancellationException) {
+                Log.d(tag, "上传图片已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送图片异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送图片失败: ${e.message}")
             } finally {
                 _uiState.value = _uiState.value.copy(uploadProgress = null)
+                uploadJob = null
             }
         }
     }
@@ -836,7 +853,8 @@ class ChatViewModel @Inject constructor(
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null
     ) {
-        viewModelScope.launch {
+        uploadJob?.cancel()
+        uploadJob = viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送视频: $videoUri")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
@@ -902,11 +920,14 @@ class ChatViewModel @Inject constructor(
                     }
                 )
 
+            } catch (e: CancellationException) {
+                Log.d(tag, "上传视频已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送视频异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送视频失败: ${e.message}")
             } finally {
                 _uiState.value = _uiState.value.copy(uploadProgress = null)
+                uploadJob = null
             }
         }
     }
@@ -924,7 +945,8 @@ class ChatViewModel @Inject constructor(
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null
     ) {
-        viewModelScope.launch {
+        uploadJob?.cancel()
+        uploadJob = viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送文件")
                 Log.d(tag, "文件URI: $fileUri")
@@ -999,12 +1021,15 @@ class ChatViewModel @Inject constructor(
                     }
                 )
 
+            } catch (e: CancellationException) {
+                Log.d(tag, "上传文件已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送文件异常", e)
                 e.printStackTrace()
                 _uiState.value = _uiState.value.copy(error = "发送文件失败: ${e.message}")
             } finally {
                 _uiState.value = _uiState.value.copy(uploadProgress = null)
+                uploadJob = null
             }
         }
     }
@@ -1022,7 +1047,8 @@ class ChatViewModel @Inject constructor(
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null
     ) {
-        viewModelScope.launch {
+        uploadJob?.cancel()
+        uploadJob = viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送音频")
                 Log.d(tag, "音频URI: $audioUri")
@@ -1119,12 +1145,15 @@ class ChatViewModel @Inject constructor(
                     }
                 )
 
+            } catch (e: CancellationException) {
+                Log.d(tag, "上传音频已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送音频异常", e)
                 e.printStackTrace()
                 _uiState.value = _uiState.value.copy(error = "发送音频失败: ${e.message}")
             } finally {
                 _uiState.value = _uiState.value.copy(uploadProgress = null)
+                uploadJob = null
             }
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.MaterialTheme
 import com.yhchat.canary.ui.adaptive.YhIcon as Icon
@@ -1248,22 +1249,39 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         androidx.compose.foundation.layout.Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            androidx.compose.material3.Text(
-                                text = "正在上传附件...",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            androidx.compose.material3.Text(
-                                text = "${(uiState.uploadProgress!! * 100).toInt()}%",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary
-                            )
+                            androidx.compose.foundation.layout.Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Text(
+                                    text = "正在上传附件...",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
+                                androidx.compose.material3.Text(
+                                    text = "${(uiState.uploadProgress!! * 100).toInt()}%",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            androidx.compose.material3.IconButton(
+                                onClick = { viewModel.cancelUpload() },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "取消上传",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(4.dp))
                         androidx.compose.material3.LinearProgressIndicator(

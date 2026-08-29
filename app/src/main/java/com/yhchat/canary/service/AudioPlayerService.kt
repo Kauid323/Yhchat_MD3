@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -27,6 +29,9 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.media.app.NotificationCompat.MediaStyle
 import com.yhchat.canary.MainActivity
 import com.yhchat.canary.R
+import com.yhchat.canary.data.local.AppDatabase
+import com.yhchat.canary.data.local.AudioPlayMode
+import com.yhchat.canary.ncm.NcmAudioMatcher
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -106,9 +111,27 @@ class AudioPlayerService : Service() {
             runCatching {
                 context.stopService(Intent(context, AudioPlayerService::class.java))
             }
-            val notificationManager =
-                context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            notificationManager?.cancel(NOTIFICATION_ID)
+        }
+
+        fun setPlayMode(context: Context, mode: AudioPlayMode) {
+            val prefs = context.getSharedPreferences("audio_player_settings", Context.MODE_PRIVATE)
+            prefs.edit().putString("play_mode", mode.name).apply()
+        }
+
+        fun getPlayMode(context: Context): AudioPlayMode {
+            val prefs = context.getSharedPreferences("audio_player_settings", Context.MODE_PRIVATE)
+            val modeStr = prefs.getString("play_mode", AudioPlayMode.SEQUENCE.name) ?: AudioPlayMode.SEQUENCE.name
+            return runCatching { AudioPlayMode.valueOf(modeStr) }.getOrDefault(AudioPlayMode.SEQUENCE)
+        }
+
+        fun setActivePlaylistId(context: Context, playlistId: String) {
+            val prefs = context.getSharedPreferences("audio_player_settings", Context.MODE_PRIVATE)
+            prefs.edit().putString("active_playlist_id", playlistId).apply()
+        }
+
+        fun getActivePlaylistId(context: Context): String {
+            val prefs = context.getSharedPreferences("audio_player_settings", Context.MODE_PRIVATE)
+            return prefs.getString("active_playlist_id", "auto_queue") ?: "auto_queue"
         }
 
         fun seekTo(context: Context, positionMs: Long) {
@@ -144,6 +167,9 @@ class AudioPlayerService : Service() {
     private var isPlaying: Boolean = false
     private lateinit var audioCacheManager: AudioCacheManager
     private var currentTitle: String = "语音消息"
+    private var currentArtist: String = ""
+    private var currentCoverUrl: String? = null
+    private var currentCoverBitmap: Bitmap? = null
     private lateinit var audioManager: AudioManager
     private var audioFocusGranted: Boolean = false
     private lateinit var mediaSession: MediaSessionCompat
@@ -397,35 +423,175 @@ class AudioPlayerService : Service() {
         return results
     }
 
-    private fun skipToNext() {
-        // 仅当当前播放的是“保存音频队列”中的内容时才允许切歌
-        if (!currentIsSavedAudio) return
-        if (currentContentUri.isNullOrBlank()) return
-        if (savedAudioQueue.isEmpty()) {
-            refreshSavedAudioQueue(selectedContentUri = currentContentUri)
+    private fun handlePlaybackCompletion(tempAudioFileToDelete: File? = null) {
+        Log.d(TAG, "handlePlaybackCompletion, currentTitle=$currentTitle")
+        this@AudioPlayerService.isPlaying = false
+        saveProgressForCurrentAudio(0L)
+        stopProgressUpdates()
+        updatePlaybackState(playing = false)
+
+        tempAudioFileToDelete?.let { file ->
+            if (file.name.startsWith("temp_audio_")) {
+                file.delete()
+                Log.d(TAG, "清理临时音频文件: ${file.name}")
+            }
         }
-        val nextIndex = savedQueueIndex + 1
-        if (nextIndex in savedAudioQueue.indices) {
-            savedQueueIndex = nextIndex
-            val item = savedAudioQueue[savedQueueIndex]
-            currentContentUri = item.contentUri
-            playSavedAudioUri(item.contentUri, item.title)
+
+        serviceScope.launch {
+            val mode = getPlayMode(this@AudioPlayerService)
+            when (mode) {
+                AudioPlayMode.SINGLE_LOOP -> {
+                    // 单曲循环：重新从头播放当前音频
+                    currentLocalPath?.let { playLocalAudio(it, currentTitle) }
+                        ?: currentContentUri?.let { playSavedAudioUri(it, currentTitle) }
+                        ?: currentAudioUrl?.let { playAudio(it, currentTitle) }
+                        ?: stopSelf()
+                }
+                AudioPlayMode.SEQUENCE, AudioPlayMode.LIST_LOOP, AudioPlayMode.SHUFFLE -> {
+                    val dao = AppDatabase.getDatabase(this@AudioPlayerService).audioPlaylistDao()
+                    val activePlaylistId = getActivePlaylistId(this@AudioPlayerService)
+                    val items = dao.getItemsForPlaylistSync(activePlaylistId)
+                    if (items.isEmpty()) {
+                        stopSelf()
+                        return@launch
+                    }
+
+                    val currentIdx = items.indexOfFirst {
+                        (currentAudioUrl != null && it.url == currentAudioUrl) ||
+                        (currentContentUri != null && it.url == currentContentUri) ||
+                        it.title == currentTitle
+                    }
+
+                    val nextIdx = when (mode) {
+                        AudioPlayMode.SHUFFLE -> {
+                            if (items.size == 1) 0
+                            else {
+                                var rand = items.indices.random()
+                                if (rand == currentIdx && items.size > 1) {
+                                    rand = (rand + 1) % items.size
+                                }
+                                rand
+                            }
+                        }
+                        AudioPlayMode.LIST_LOOP -> {
+                            if (currentIdx >= 0) (currentIdx + 1) % items.size else 0
+                        }
+                        AudioPlayMode.SEQUENCE -> {
+                            if (currentIdx in 0 until items.size - 1) currentIdx + 1 else null
+                        }
+                        else -> null
+                    }
+
+                    if (nextIdx != null && nextIdx in items.indices) {
+                        val nextItem = items[nextIdx]
+                        if (nextItem.url.startsWith("content://") || nextItem.url.startsWith("file://")) {
+                            playSavedAudioUri(nextItem.url, nextItem.title)
+                        } else {
+                            playAudio(nextItem.url, nextItem.title)
+                        }
+                    } else {
+                        stopSelf()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun skipToNext() {
+        serviceScope.launch {
+            val mode = getPlayMode(this@AudioPlayerService)
+            val dao = AppDatabase.getDatabase(this@AudioPlayerService).audioPlaylistDao()
+            val activePlaylistId = getActivePlaylistId(this@AudioPlayerService)
+            val items = dao.getItemsForPlaylistSync(activePlaylistId)
+
+            if (items.isNotEmpty()) {
+                val currentIdx = items.indexOfFirst {
+                    (currentAudioUrl != null && it.url == currentAudioUrl) ||
+                    (currentContentUri != null && it.url == currentContentUri) ||
+                    it.title == currentTitle
+                }
+                val nextIdx = when (mode) {
+                    AudioPlayMode.SHUFFLE -> {
+                        if (items.size == 1) 0
+                        else {
+                            var rand = items.indices.random()
+                            if (rand == currentIdx && items.size > 1) {
+                                rand = (rand + 1) % items.size
+                            }
+                            rand
+                        }
+                    }
+                    AudioPlayMode.SINGLE_LOOP -> if (currentIdx in items.indices) currentIdx else 0
+                    AudioPlayMode.LIST_LOOP -> if (currentIdx >= 0) (currentIdx + 1) % items.size else 0
+                    AudioPlayMode.SEQUENCE -> if (currentIdx in 0 until items.size - 1) currentIdx + 1 else 0
+                }
+                val nextItem = items[nextIdx]
+                if (nextItem.url.startsWith("content://") || nextItem.url.startsWith("file://")) {
+                    playSavedAudioUri(nextItem.url, nextItem.title)
+                } else {
+                    playAudio(nextItem.url, nextItem.title)
+                }
+            } else if (currentIsSavedAudio && !currentContentUri.isNullOrBlank()) {
+                if (savedAudioQueue.isEmpty()) {
+                    refreshSavedAudioQueue(selectedContentUri = currentContentUri)
+                }
+                val nextIndex = savedQueueIndex + 1
+                if (nextIndex in savedAudioQueue.indices) {
+                    savedQueueIndex = nextIndex
+                    val item = savedAudioQueue[savedQueueIndex]
+                    currentContentUri = item.contentUri
+                    playSavedAudioUri(item.contentUri, item.title)
+                }
+            }
         }
     }
 
     private fun skipToPrevious() {
-        // 仅当当前播放的是“保存音频队列”中的内容时才允许切歌
-        if (!currentIsSavedAudio) return
-        if (currentContentUri.isNullOrBlank()) return
-        if (savedAudioQueue.isEmpty()) {
-            refreshSavedAudioQueue(selectedContentUri = currentContentUri)
-        }
-        val prevIndex = savedQueueIndex - 1
-        if (prevIndex in savedAudioQueue.indices) {
-            savedQueueIndex = prevIndex
-            val item = savedAudioQueue[savedQueueIndex]
-            currentContentUri = item.contentUri
-            playSavedAudioUri(item.contentUri, item.title)
+        serviceScope.launch {
+            val mode = getPlayMode(this@AudioPlayerService)
+            val dao = AppDatabase.getDatabase(this@AudioPlayerService).audioPlaylistDao()
+            val activePlaylistId = getActivePlaylistId(this@AudioPlayerService)
+            val items = dao.getItemsForPlaylistSync(activePlaylistId)
+
+            if (items.isNotEmpty()) {
+                val currentIdx = items.indexOfFirst {
+                    (currentAudioUrl != null && it.url == currentAudioUrl) ||
+                    (currentContentUri != null && it.url == currentContentUri) ||
+                    it.title == currentTitle
+                }
+                val prevIdx = when (mode) {
+                    AudioPlayMode.SHUFFLE -> {
+                        if (items.size == 1) 0
+                        else {
+                            var rand = items.indices.random()
+                            if (rand == currentIdx && items.size > 1) {
+                                rand = (rand + 1) % items.size
+                            }
+                            rand
+                        }
+                    }
+                    AudioPlayMode.SINGLE_LOOP -> if (currentIdx in items.indices) currentIdx else 0
+                    AudioPlayMode.LIST_LOOP -> if (currentIdx > 0) currentIdx - 1 else items.size - 1
+                    AudioPlayMode.SEQUENCE -> if (currentIdx > 0) currentIdx - 1 else items.size - 1
+                }
+                val prevItem = items[prevIdx]
+                if (prevItem.url.startsWith("content://") || prevItem.url.startsWith("file://")) {
+                    playSavedAudioUri(prevItem.url, prevItem.title)
+                } else {
+                    playAudio(prevItem.url, prevItem.title)
+                }
+            } else if (currentIsSavedAudio && !currentContentUri.isNullOrBlank()) {
+                if (savedAudioQueue.isEmpty()) {
+                    refreshSavedAudioQueue(selectedContentUri = currentContentUri)
+                }
+                val prevIndex = savedQueueIndex - 1
+                if (prevIndex in savedAudioQueue.indices) {
+                    savedQueueIndex = prevIndex
+                    val item = savedAudioQueue[savedQueueIndex]
+                    currentContentUri = item.contentUri
+                    playSavedAudioUri(item.contentUri, item.title)
+                }
+            }
         }
     }
 
@@ -494,11 +660,7 @@ class AudioPlayerService : Service() {
                     }
 
                     setOnCompletionListener {
-                        this@AudioPlayerService.isPlaying = false
-                        saveProgressForCurrentAudio(0L)
-                        stopProgressUpdates()
-                        updatePlaybackState(playing = false)
-                        stopSelf()
+                        handlePlaybackCompletion()
                     }
 
                     setOnErrorListener { _, what, extra ->
@@ -651,6 +813,9 @@ class AudioPlayerService : Service() {
         currentLocalPath = null
         currentContentUri = contentUri
         currentTitle = title
+        currentArtist = ""
+        currentCoverUrl = null
+        currentCoverBitmap = null
         currentDurationMs = 0L
         currentIsSavedAudio = true
         if (savedAudioQueue.isEmpty() || savedQueueIndex !in savedAudioQueue.indices) {
@@ -687,13 +852,36 @@ class AudioPlayerService : Service() {
                         updatePlaybackState(playing = true)
                         updateNotification(title, "正在播放")
                         startProgressUpdates()
+
+                        // 异步启动网易云听歌识别
+                        serviceScope.launch(Dispatchers.IO) {
+                            try {
+                                val tempFile = File(cacheDir, "identify_saved_${System.currentTimeMillis()}.m4a")
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    FileOutputStream(tempFile).use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                if (tempFile.exists() && tempFile.length() > 0) {
+                                    val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, tempFile, title)
+                                    tempFile.delete()
+                                    if (matched != null) {
+                                        withContext(Dispatchers.Main) {
+                                            updateAudioInfo(
+                                                newTitle = matched.name,
+                                                newArtist = matched.artist,
+                                                newCoverUrl = matched.coverUrl
+                                            )
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "已保存音频识别异常", e)
+                            }
+                        }
                     }
                     setOnCompletionListener {
-                        this@AudioPlayerService.isPlaying = false
-                        saveProgressForCurrentAudio(0L)
-                        stopProgressUpdates()
-                        updatePlaybackState(playing = false)
-                        stopSelf()
+                        handlePlaybackCompletion()
                     }
                     setOnErrorListener { _, _, _ ->
                         this@AudioPlayerService.isPlaying = false
@@ -714,6 +902,9 @@ class AudioPlayerService : Service() {
     }
     
     private suspend fun playAudioFile(audioFile: File, title: String) = withContext(Dispatchers.Main) {
+        currentArtist = ""
+        currentCoverUrl = null
+        currentCoverBitmap = null
         try {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -738,21 +929,29 @@ class AudioPlayerService : Service() {
                     updateNotification(title, "正在播放")
                     startProgressUpdates()
                     Log.d(TAG, "开始播放音频")
+
+                    // 异步启动网易云听歌识别与热更新
+                    serviceScope.launch(Dispatchers.IO) {
+                        try {
+                            val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
+                            if (matched != null) {
+                                withContext(Dispatchers.Main) {
+                                    updateAudioInfo(
+                                        newTitle = matched.name,
+                                        newArtist = matched.artist,
+                                        newCoverUrl = matched.coverUrl
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "听歌识别失败", e)
+                        }
+                    }
                 }
                 
                 setOnCompletionListener {
                     Log.d(TAG, "音频播放完成")
-
-                    this@AudioPlayerService.isPlaying = false
-                    saveProgressForCurrentAudio(0L)
-                    stopProgressUpdates()
-                    updatePlaybackState(playing = false)
-                    // 只清理临时文件，保留缓存文件
-                    if (audioFile.name.startsWith("temp_audio_")) {
-                        audioFile.delete()
-                        Log.d(TAG, "清理临时音频文件")
-                    }
-                    stopSelf()
+                    handlePlaybackCompletion(tempAudioFileToDelete = audioFile)
                 }
                 
                 setOnErrorListener { _, what, extra ->
@@ -893,12 +1092,87 @@ class AudioPlayerService : Service() {
         val builder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
-        
+
+        if (currentArtist.isNotBlank()) {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
+        }
+        if (!currentCoverUrl.isNullOrBlank()) {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, currentCoverUrl)
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, currentCoverUrl)
+        }
+        currentCoverBitmap?.let {
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, it)
+        }
         currentContentUri?.let {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, it)
+        }
+        currentAudioUrl?.let {
             builder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, it)
         }
         
         mediaSession.setMetadata(builder.build())
+    }
+
+    /**
+     * 听歌识曲识别成功后的热更新函数
+     * 实时覆盖正在播放的音频标题、歌手、封面图，并热更新通知栏与播放列表
+     */
+    fun updateAudioInfo(newTitle: String, newArtist: String = "", newCoverUrl: String? = null) {
+        Log.d(TAG, "听歌识曲热更新: title=$newTitle, artist=$newArtist, coverUrl=$newCoverUrl")
+        currentTitle = newTitle
+        currentArtist = newArtist
+        currentCoverUrl = newCoverUrl
+
+        updateMetadata(title = newTitle, durationMs = currentDurationMs)
+
+        // 异步下载封面 Bitmap 供系统通知栏 LargeIcon 及 MediaSession 展示
+        if (!newCoverUrl.isNullOrBlank() && currentCoverBitmap == null) {
+            serviceScope.launch(Dispatchers.IO) {
+                try {
+                    val req = Request.Builder().url(newCoverUrl).build()
+                    okHttpClient.newCall(req).execute().use { resp ->
+                        val bytes = resp.body?.bytes()
+                        if (bytes != null) {
+                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bmp != null) {
+                                currentCoverBitmap = bmp
+                                val updatedMeta = MediaMetadataCompat.Builder(mediaSession.controller.metadata)
+                                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bmp)
+                                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bmp)
+                                    .build()
+                                mediaSession.setMetadata(updatedMeta)
+                                withContext(Dispatchers.Main) {
+                                    val status = if (isPlaying) "正在播放" else "已暂停"
+                                    val subtext = if (currentArtist.isNotBlank()) "$currentArtist · $status" else status
+                                    updateNotification(currentTitle, subtext)
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        val status = if (isPlaying) "正在播放" else "已暂停"
+        val subtext = if (newArtist.isNotBlank()) "$newArtist · $status" else status
+        updateNotification(newTitle, subtext)
+
+        // 同步更新 Room 播放列表数据库项名称
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val dao = AppDatabase.getDatabase(this@AudioPlayerService).audioPlaylistDao()
+                val activePlaylistId = getActivePlaylistId(this@AudioPlayerService)
+                val items = dao.getItemsForPlaylistSync(activePlaylistId)
+                val matchItem = items.firstOrNull {
+                    (currentAudioUrl != null && it.url == currentAudioUrl) ||
+                    (currentContentUri != null && it.url == currentContentUri)
+                }
+                if (matchItem != null && matchItem.title != newTitle) {
+                    dao.updateItem(matchItem.copy(title = newTitle))
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun getCurrentPositionMs(): Long {
@@ -1041,6 +1315,10 @@ class AudioPlayerService : Service() {
                     .setShowActionsInCompactView(0, 1, 3)
             )
             .setOngoing(true)
+
+        currentCoverBitmap?.let {
+            builder.setLargeIcon(it)
+        }
 
         val duration = currentDurationMs
         val position = getCurrentPositionMs()

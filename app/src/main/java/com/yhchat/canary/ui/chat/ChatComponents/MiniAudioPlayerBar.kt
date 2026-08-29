@@ -9,6 +9,11 @@ import android.provider.MediaStore
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,8 +21,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -25,15 +30,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import coil.compose.AsyncImage
 import com.yhchat.canary.data.local.AppDatabase
+import com.yhchat.canary.data.local.AudioPlayMode
 import com.yhchat.canary.data.local.AudioPlaylist
 import com.yhchat.canary.data.local.AudioPlaylistItem
+import com.yhchat.canary.ncm.NcmApiClient
+import com.yhchat.canary.ncm.NcmSong
 import com.yhchat.canary.service.AudioPlayerService
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -85,29 +97,25 @@ suspend fun appendToAutoQueue(context: Context, title: String, url: String, sour
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 主组件：MiniAudioPlayerBar
+// 主组件：MiniAudioPlayerBar（聊天界面顶栏下方的微型条）
 // ─────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var mediaController by remember { mutableStateOf<MediaControllerCompat?>(null) }
-    // 真实状态（来自 MediaController 回调）
     var realIsPlaying by remember { mutableStateOf(false) }
-    // 乐观更新状态（点击后立刻翻转，等服务回调校正）
     var optimisticIsPlaying by remember { mutableStateOf(false) }
 
     var title by remember { mutableStateOf("") }
+    var coverUrl by remember { mutableStateOf<String?>(null) }
     var progressMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
     var showBottomSheet by remember { mutableStateOf(false) }
-    // 防止服务未就绪时 isVisible 闪烁出现
     var hasEverPlayed by remember { mutableStateOf(false) }
 
-    // 防抖 Job
     var debounceJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // 绑定 AudioPlayerService
@@ -125,6 +133,8 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                 realIsPlaying = state?.state == PlaybackStateCompat.STATE_PLAYING
                 optimisticIsPlaying = realIsPlaying
                 title = meta?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: ""
+                coverUrl = meta?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
+                    ?: meta?.getString(MediaMetadataCompat.METADATA_KEY_ART_URI)
                 progressMs = state?.position ?: 0L
                 durationMs = meta?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: 0L
                 if (realIsPlaying || title.isNotEmpty()) hasEverPlayed = true
@@ -144,6 +154,8 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                             title = newTitle
                             hasEverPlayed = true
                         }
+                        coverUrl = meta?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
+                            ?: meta?.getString(MediaMetadataCompat.METADATA_KEY_ART_URI)
                         durationMs = meta?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: durationMs
                     }
                 })
@@ -163,7 +175,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
         onDispose { runCatching { context.unbindService(connection) } }
     }
 
-    // 轮询进度（只在播放时跑，Slider 拖动期间跳过更新由 isDragging 控制）
+    // 轮询播放进度
     LaunchedEffect(mediaController, realIsPlaying) {
         while (isActive && realIsPlaying && mediaController != null) {
             val state = mediaController?.playbackState
@@ -178,71 +190,105 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
         }
     }
 
-    // 只有曾经播放过、且当前媒体仍有标题，才显示
     val isVisible = hasEverPlayed && title.isNotEmpty()
     val displayIsPlaying = optimisticIsPlaying
 
-    if (isVisible) {
-        Row(
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = slideInVertically { -it } + fadeIn(),
+        exit = slideOutVertically { -it } + fadeOut()
+    ) {
+        Surface(
             modifier = modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { showBottomSheet = true }
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 3.dp,
+            shadowElevation = 2.dp
         ) {
-            // 播放/暂停（乐观更新 + 防抖 300ms）
-            IconButton(
-                onClick = {
-                    val newState = !displayIsPlaying
-                    optimisticIsPlaying = newState
-                    debounceJob?.cancel()
-                    debounceJob = coroutineScope.launch {
-                        delay(300)
-                        if (newState) mediaController?.transportControls?.play()
-                        else mediaController?.transportControls?.pause()
-                    }
-                },
-                modifier = Modifier.size(36.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showBottomSheet = true }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (displayIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (displayIsPlaying) "暂停" else "播放"
-                )
-            }
+                // 封面或播放/暂停按钮
+                if (!coverUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = coverUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
 
-            Spacer(Modifier.width(8.dp))
+                // 播放/暂停
+                FilledIconButton(
+                    onClick = {
+                        val newState = !displayIsPlaying
+                        optimisticIsPlaying = newState
+                        debounceJob?.cancel()
+                        debounceJob = coroutineScope.launch {
+                            delay(300)
+                            if (newState) mediaController?.transportControls?.play()
+                            else mediaController?.transportControls?.pause()
+                        }
+                    },
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (displayIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (displayIsPlaying) "暂停" else "播放",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+                Spacer(Modifier.width(10.dp))
 
-            Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${formatTime(progressMs)} / ${formatTime(durationMs)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            Text(
-                text = "${formatTime(progressMs)}/${formatTime(durationMs)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Spacer(Modifier.width(8.dp))
 
-            Spacer(Modifier.width(4.dp))
-
-            IconButton(
-                onClick = {
-                    AudioPlayerService.stopPlayAudio(context)
-                    title = ""
-                    progressMs = 0L
-                    durationMs = 0L
-                    hasEverPlayed = false
-                },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "关闭")
+                IconButton(
+                    onClick = {
+                        AudioPlayerService.stopPlayAudio(context)
+                        title = ""
+                        coverUrl = null
+                        progressMs = 0L
+                        durationMs = 0L
+                        hasEverPlayed = false
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "关闭",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -251,6 +297,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
     if (showBottomSheet) {
         AudioPlayerBottomSheet(
             title = title,
+            coverUrl = coverUrl,
             progressMs = progressMs,
             durationMs = durationMs,
             isPlaying = displayIsPlaying,
@@ -272,19 +319,29 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                 }
                 AudioPlayerService.startPlayAudio(context, url, itemTitle)
             },
+            onClosePlayer = {
+                AudioPlayerService.stopPlayAudio(context)
+                title = ""
+                coverUrl = null
+                progressMs = 0L
+                durationMs = 0L
+                hasEverPlayed = false
+                showBottomSheet = false
+            },
             onDismiss = { showBottomSheet = false }
         )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BottomSheet：播放详情 + 播放列表
+// BottomSheet：分层结构（上层 Tab + 搜索，底层可滑动列表，前景浮动播放器）
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun AudioPlayerBottomSheet(
     title: String,
+    coverUrl: String?,
     progressMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
@@ -292,6 +349,7 @@ private fun AudioPlayerBottomSheet(
     onProgressChange: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayUrl: (url: String, title: String) -> Unit,
+    onClosePlayer: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -302,6 +360,7 @@ private fun AudioPlayerBottomSheet(
     var searchQuery by remember { mutableStateOf("") }
     var isDragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
+    var playMode by remember { mutableStateOf(AudioPlayerService.getPlayMode(context)) }
 
     // 播放列表数据
     val allPlaylists by dao.getAllPlaylists().collectAsState(initial = emptyList())
@@ -311,8 +370,13 @@ private fun AudioPlayerBottomSheet(
     // 本地已保存录音列表
     var localAudios by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) } // title to uri
 
-    // 搜索结果
+    // 本地/队列搜索结果
     var searchResults by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    // 网易云音乐搜索状态
+    var ncmSearchResults by remember { mutableStateOf<List<NcmSong>>(emptyList()) }
+    var isNcmSearching by remember { mutableStateOf(false) }
+    var ncmPlayingId by remember { mutableStateOf<Long?>(null) }
 
     // 对话框状态
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -362,126 +426,141 @@ private fun AudioPlayerBottomSheet(
         selectedPlaylistForView = playlist
         if (playlist != null) {
             currentPlaylistItems = dao.getItemsForPlaylistSync(playlist.id)
+            AudioPlayerService.setActivePlaylistId(context, playlist.id)
         }
     }
 
-    // 搜索
+    // 搜索（支持本地、当前队列和网易云在线搜索）
     LaunchedEffect(searchQuery, selectedTab, currentPlaylistItems, localAudios) {
         if (searchQuery.isBlank()) {
             searchResults = emptyList()
+            ncmSearchResults = emptyList()
+            isNcmSearching = false
             return@LaunchedEffect
         }
-        val q = searchQuery.lowercase()
-        searchResults = when (selectedTab) {
-            0 -> currentPlaylistItems
-                .filter { it.title.lowercase().contains(q) }
-                .map { it.title to it.url }
-            1 -> localAudios.filter { it.first.lowercase().contains(q) }
-            else -> emptyList()
+        val q = searchQuery.trim()
+        when (selectedTab) {
+            0 -> {
+                searchResults = currentPlaylistItems
+                    .filter { it.title.lowercase().contains(q.lowercase()) }
+                    .map { it.title to it.url }
+            }
+            1 -> {
+                isNcmSearching = true
+                delay(350) // 防抖
+                val res = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    NcmApiClient.searchSongs(q).getOrDefault(emptyList())
+                }
+                ncmSearchResults = res
+                isNcmSearching = false
+            }
+            2 -> {
+                searchResults = localAudios.filter { it.first.lowercase().contains(q.lowercase()) }
+            }
+            else -> {
+                searchResults = emptyList()
+            }
         }
+    }
+
+    // 切歌函数（支持顺序、单曲循环、列表循环、随机播放）
+    val currentIndex = currentPlaylistItems.indexOfFirst { it.title == title }
+    fun playNext() {
+        if (currentPlaylistItems.isEmpty()) return
+        val nextIdx = when (playMode) {
+            AudioPlayMode.SHUFFLE -> {
+                if (currentPlaylistItems.size == 1) 0
+                else {
+                    var rand = currentPlaylistItems.indices.random()
+                    if (rand == currentIndex && currentPlaylistItems.size > 1) {
+                        rand = (rand + 1) % currentPlaylistItems.size
+                    }
+                    rand
+                }
+            }
+            AudioPlayMode.SINGLE_LOOP -> if (currentIndex in currentPlaylistItems.indices) currentIndex else 0
+            AudioPlayMode.LIST_LOOP -> if (currentIndex >= 0) (currentIndex + 1) % currentPlaylistItems.size else 0
+            AudioPlayMode.SEQUENCE -> if (currentIndex in 0 until currentPlaylistItems.size - 1) currentIndex + 1 else 0
+        }
+        val nextItem = currentPlaylistItems[nextIdx]
+        onPlayUrl(nextItem.url, nextItem.title)
+    }
+
+    fun playPrev() {
+        if (currentPlaylistItems.isEmpty()) return
+        val prevIdx = when (playMode) {
+            AudioPlayMode.SHUFFLE -> {
+                if (currentPlaylistItems.size == 1) 0
+                else {
+                    var rand = currentPlaylistItems.indices.random()
+                    if (rand == currentIndex && currentPlaylistItems.size > 1) {
+                        rand = (rand + 1) % currentPlaylistItems.size
+                    }
+                    rand
+                }
+            }
+            AudioPlayMode.SINGLE_LOOP -> if (currentIndex in currentPlaylistItems.indices) currentIndex else 0
+            AudioPlayMode.LIST_LOOP -> if (currentIndex > 0) currentIndex - 1 else currentPlaylistItems.size - 1
+            AudioPlayMode.SEQUENCE -> if (currentIndex > 0) currentIndex - 1 else currentPlaylistItems.size - 1
+        }
+        val prevItem = currentPlaylistItems[prevIdx]
+        onPlayUrl(prevItem.url, prevItem.title)
     }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f)
+                .fillMaxHeight(0.92f)
         ) {
-            // ── 顶部：当前播放控制 ──────────────────────────────────────
-            Column(
+            // ── 顶部：Tab 栏 ──────────────────────────────────────────────
+            val tabs = listOf("当前播放", "网易云", "本地录音", "我的列表")
+            SecondaryTabRow(
+                selectedTabIndex = selectedTab,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 16.dp),
+                containerColor = Color.Transparent,
+                divider = {}
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                // Slider（拖动时不被轮询覆盖）
-                Slider(
-                    value = if (durationMs > 0 && !isDragging)
-                        (progressMs.toFloat() / durationMs).coerceIn(0f, 1f)
-                    else if (isDragging) dragValue else 0f,
-                    onValueChange = { v ->
-                        isDragging = true
-                        dragValue = v
-                        onProgressChange((v * durationMs).toLong())
-                    },
-                    onValueChangeFinished = {
-                        mediaController?.transportControls?.seekTo((dragValue * durationMs).toLong())
-                        isDragging = false
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(formatTime(progressMs), style = MaterialTheme.typography.labelSmall)
-                    Text(formatTime(durationMs), style = MaterialTheme.typography.labelSmall)
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // 控制按钮行
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { mediaController?.transportControls?.skipToPrevious() }) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "上一首", modifier = Modifier.size(32.dp))
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    FilledIconButton(
-                        onClick = onTogglePlayPause,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "暂停" else "播放",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    IconButton(onClick = { mediaController?.transportControls?.skipToNext() }) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "下一首", modifier = Modifier.size(32.dp))
-                    }
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            // ── Tab：当前播放 / 本地录音 / 我的播放列表 ────────────────────
-            val tabs = listOf("当前播放", "本地录音", "我的列表")
-            TabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, label ->
                     Tab(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index; searchQuery = "" },
-                        text = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                        text = {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
                 }
             }
 
-            // 搜索框（Tab 0 和 1 可用）
-            if (selectedTab in 0..1) {
+            // 搜索框（Tab 0、1、2）
+            if (selectedTab in 0..2) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("搜索") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    placeholder = {
+                        Text(
+                            text = if (selectedTab == 1) "搜索网易云音乐 (歌曲/歌手)..." else "搜索音频名称...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
@@ -490,100 +569,408 @@ private fun AudioPlayerBottomSheet(
                         }
                     },
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.3f),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 )
+            } else {
+                Spacer(Modifier.height(4.dp))
             }
 
-            // ── Tab 内容 ──────────────────────────────────────────────────
-            when (selectedTab) {
-                // Tab 0: 当前播放队列
-                0 -> {
-                    val items = if (searchQuery.isNotEmpty()) searchResults else
-                        currentPlaylistItems.map { it.title to it.url }
-                    LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(
-                            items = if (searchQuery.isNotEmpty()) searchResults
-                            else currentPlaylistItems.map { it.title to it.url },
-                            key = { it.second }
-                        ) { (itemTitle, url) ->
-                            PlaylistItemRow(
-                                title = itemTitle,
-                                isCurrentlyPlaying = itemTitle == title,
-                                onClick = { onPlayUrl(url, itemTitle) },
-                                onLongClick = { showAddToPlaylistDialog = url to itemTitle }
-                            )
-                        }
-                        if (items.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("暂无音频", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // ── 主体区域：底层可滑动列表 + 前景悬浮播放器 ────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                // 【底层 / 背景】：可自由滑动的音频列表（contentPadding 预留底部播放器高度）
+                when (selectedTab) {
+                    // Tab 0: 当前播放队列
+                    0 -> {
+                        val items = if (searchQuery.isNotEmpty()) searchResults
+                        else currentPlaylistItems.map { it.title to it.url }
+
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(
+                                items = items,
+                                key = { it.second }
+                            ) { (itemTitle, url) ->
+                                PlaylistItemCard(
+                                    title = itemTitle,
+                                    subtitle = if (url.startsWith("content://") || url.startsWith("file://")) "本地音频" else "网络音频",
+                                    isCurrentlyPlaying = itemTitle == title,
+                                    onClick = { onPlayUrl(url, itemTitle) },
+                                    onLongClick = { showAddToPlaylistDialog = url to itemTitle }
+                                )
+                            }
+                            if (items.isEmpty()) {
+                                item {
+                                    EmptyStateView(text = if (searchQuery.isNotEmpty()) "未找到匹配音频" else "暂无播放记录")
                                 }
                             }
                         }
                     }
-                }
 
-                // Tab 1: 本地录音
-                1 -> {
-                    val items = if (searchQuery.isNotEmpty()) searchResults else localAudios
-                    LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(items = items, key = { it.second }) { (itemTitle, uri) ->
-                            PlaylistItemRow(
-                                title = itemTitle,
-                                isCurrentlyPlaying = false,
-                                onClick = {
-                                    coroutineScope.launch { appendToAutoQueue(context, itemTitle, uri, "LOCAL") }
-                                    AudioPlayerService.startPlaySavedAudio(context, uri, itemTitle)
-                                },
-                                onLongClick = { showAddToPlaylistDialog = uri to itemTitle }
-                            )
-                        }
-                        if (items.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("暂无本地录音", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                    // Tab 1: 网易云音乐搜索与播放
+                    1 -> {
+                        if (isNcmSearching) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(36.dp))
                             }
-                        }
-                    }
-                }
-
-                // Tab 2: 我的播放列表
-                2 -> {
-                    val userPlaylists = allPlaylists.filter { !it.isAutoQueue }
-                    LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(userPlaylists, key = { it.id }) { playlist ->
-                            PlaylistRow(
-                                playlist = playlist,
-                                onClick = {
-                                    selectedPlaylistForView = playlist
-                                    selectedTab = 0 // 切到当前播放 tab 显示内容
-                                },
-                                onRename = {
-                                    renameText = playlist.name
-                                    showRenameDialog = playlist
-                                },
-                                onDelete = {
-                                    coroutineScope.launch { dao.deletePlaylist(playlist.id) }
-                                }
-                            )
-                        }
-                        item {
-                            TextButton(
-                                onClick = { showCreatePlaylistDialog = true },
-                                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                        } else if (searchQuery.isBlank()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = 40.dp, bottom = 220.dp, start = 24.dp, end = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("新建播放列表")
+                                Icon(
+                                    Icons.Default.CloudQueue,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(56.dp)
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = "网易云音乐搜索",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "在上方搜索框输入歌曲名或歌手名，即可在线解析并播放高品质网易云音乐",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(items = ncmSearchResults, key = { it.id }) { ncmSong ->
+                                    val isThisPlaying = ncmSong.name == title || "${ncmSong.name} - ${ncmSong.artist}" == title
+                                    val isLoadingThis = ncmPlayingId == ncmSong.id
+                                    NcmSongItemCard(
+                                        song = ncmSong,
+                                        isCurrentlyPlaying = isThisPlaying,
+                                        isLoading = isLoadingThis,
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                ncmPlayingId = ncmSong.id
+                                                val playUrl = withContext(Dispatchers.IO) {
+                                                    NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull()
+                                                }
+                                                ncmPlayingId = null
+                                                if (!playUrl.isNullOrBlank()) {
+                                                    val songTitle = "${ncmSong.name} - ${ncmSong.artist}"
+                                                    appendToAutoQueue(context, songTitle, playUrl, "NCM")
+                                                    onPlayUrl(playUrl, songTitle)
+                                                } else {
+                                                    Toast.makeText(context, "解析网易云音频失败", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        onAddToPlaylist = {
+                                            coroutineScope.launch {
+                                                val playUrl = withContext(Dispatchers.IO) {
+                                                    NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull()
+                                                } ?: ""
+                                                showAddToPlaylistDialog = playUrl to "${ncmSong.name} - ${ncmSong.artist}"
+                                            }
+                                        }
+                                    )
+                                }
+                                if (ncmSearchResults.isEmpty()) {
+                                    item {
+                                        EmptyStateView(text = "未找到相关网易云歌曲")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Tab 2: 本地录音
+                    2 -> {
+                        val items = if (searchQuery.isNotEmpty()) searchResults else localAudios
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(items = items, key = { it.second }) { (itemTitle, uri) ->
+                                PlaylistItemCard(
+                                    title = itemTitle,
+                                    subtitle = "本地录音",
+                                    isCurrentlyPlaying = itemTitle == title,
+                                    onClick = {
+                                        coroutineScope.launch { appendToAutoQueue(context, itemTitle, uri, "LOCAL") }
+                                        AudioPlayerService.startPlaySavedAudio(context, uri, itemTitle)
+                                    },
+                                    onLongClick = { showAddToPlaylistDialog = uri to itemTitle }
+                                )
+                            }
+                            if (items.isEmpty()) {
+                                item {
+                                    EmptyStateView(text = if (searchQuery.isNotEmpty()) "未找到匹配录音" else "暂无已保存的本地录音")
+                                }
+                            }
+                        }
+                    }
+
+                    // Tab 3: 我的播放列表
+                    3 -> {
+                        val userPlaylists = allPlaylists.filter { !it.isAutoQueue }
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            item {
+                                OutlinedButton(
+                                    onClick = { showCreatePlaylistDialog = true },
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("新建播放列表", fontWeight = FontWeight.Medium)
+                                }
+                            }
+
+                            items(userPlaylists, key = { it.id }) { playlist ->
+                                PlaylistFolderCard(
+                                    playlist = playlist,
+                                    isSelected = selectedPlaylistForView?.id == playlist.id,
+                                    onClick = {
+                                        selectedPlaylistForView = playlist
+                                        selectedTab = 0 // 切到列表查看
+                                    },
+                                    onRename = {
+                                        renameText = playlist.name
+                                        showRenameDialog = playlist
+                                    },
+                                    onDelete = {
+                                        coroutineScope.launch { dao.deletePlaylist(playlist.id) }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 【顶层 / 前景】：悬浮在列表最下方的播放器控制面板（浮动卡片）
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // 顶部行：音频唱片/封面图标 + 标题 + 关闭按钮
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (!coverUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = coverUrl,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isPlaying) Icons.Default.GraphicEq else Icons.Default.MusicNote,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (title.isNotEmpty()) title else "未在播放",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${if (isPlaying) "正在播放" else "已暂停"} · ${playMode.title}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            IconButton(
+                                onClick = onClosePlayer,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "停止播放",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // 进度条 Slider
+                        Slider(
+                            value = if (durationMs > 0 && !isDragging)
+                                (progressMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                            else if (isDragging) dragValue else 0f,
+                            onValueChange = { v ->
+                                isDragging = true
+                                dragValue = v
+                                onProgressChange((v * durationMs).toLong())
+                            },
+                            onValueChangeFinished = {
+                                mediaController?.transportControls?.seekTo((dragValue * durationMs).toLong())
+                                isDragging = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // 进度时间戳
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = formatTime(progressMs),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = formatTime(durationMs),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+
+                        // 控制按钮行（播放模式切换、上一首、播放/暂停、下一首、快进10秒）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 播放模式切换按钮（顺序播放 -> 列表循环 -> 单曲循环 -> 随机播放）
+                            IconButton(
+                                onClick = {
+                                    val next = playMode.next()
+                                    playMode = next
+                                    AudioPlayerService.setPlayMode(context, next)
+                                    Toast.makeText(context, next.title, Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Icon(
+                                    imageVector = when (playMode) {
+                                        AudioPlayMode.SEQUENCE -> Icons.Default.FormatListNumbered
+                                        AudioPlayMode.LIST_LOOP -> Icons.Default.Repeat
+                                        AudioPlayMode.SINGLE_LOOP -> Icons.Default.RepeatOne
+                                        AudioPlayMode.SHUFFLE -> Icons.Default.Shuffle
+                                    },
+                                    contentDescription = playMode.title,
+                                    tint = if (playMode != AudioPlayMode.SEQUENCE) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { playPrev() },
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SkipPrevious,
+                                    contentDescription = "上一首",
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+
+                            FilledIconButton(
+                                onClick = onTogglePlayPause,
+                                modifier = Modifier.size(54.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "暂停" else "播放",
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { playNext() },
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SkipNext,
+                                    contentDescription = "下一首",
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val target = (progressMs + 10000L).coerceAtMost(durationMs)
+                                    mediaController?.transportControls?.seekTo(target)
+                                    onProgressChange(target)
+                                },
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.FastForward,
+                                    contentDescription = "快进10秒",
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
                         }
                     }
@@ -607,7 +994,7 @@ private fun AudioPlayerBottomSheet(
                 )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (newPlaylistName.isNotBlank()) {
                             val playlist = AudioPlaylist(
@@ -633,7 +1020,7 @@ private fun AudioPlayerBottomSheet(
     showRenameDialog?.let { playlist ->
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
-            title = { Text("重命名") },
+            title = { Text("重命名播放列表") },
             text = {
                 OutlinedTextField(
                     value = renameText,
@@ -643,7 +1030,7 @@ private fun AudioPlayerBottomSheet(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                Button(onClick = {
                     if (renameText.isNotBlank()) {
                         coroutineScope.launch { dao.renamePlaylist(playlist.id, renameText.trim()) }
                     }
@@ -662,32 +1049,43 @@ private fun AudioPlayerBottomSheet(
             onDismissRequest = { showAddToPlaylistDialog = null },
             title = { Text("加入播放列表") },
             text = {
-                LazyColumn {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(allPlaylists, key = { it.id }) { playlist ->
-                        TextButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    val maxOrder = dao.getMaxSortOrder(playlist.id) ?: -1
-                                    dao.insertItem(
-                                        AudioPlaylistItem(
-                                            id = UUID.randomUUID().toString(),
-                                            playlistId = playlist.id,
-                                            title = itemTitle,
-                                            url = url,
-                                            source = "CHAT",
-                                            sortOrder = maxOrder + 1
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    coroutineScope.launch {
+                                        val maxOrder = dao.getMaxSortOrder(playlist.id) ?: -1
+                                        dao.insertItem(
+                                            AudioPlaylistItem(
+                                                id = UUID.randomUUID().toString(),
+                                                playlistId = playlist.id,
+                                                title = itemTitle,
+                                                url = url,
+                                                source = "CHAT",
+                                                sortOrder = maxOrder + 1
+                                            )
                                         )
-                                    )
+                                    }
+                                    showAddToPlaylistDialog = null
                                 }
-                                showAddToPlaylistDialog = null
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(playlist.name) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            color = Color.Transparent
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(12.dp))
+                                Text(playlist.name, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
                     }
                     item {
-                        TextButton(
+                        OutlinedButton(
                             onClick = { showCreatePlaylistDialog = true; showAddToPlaylistDialog = null },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
@@ -705,84 +1103,299 @@ private fun AudioPlayerBottomSheet(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 子组件
+// 子组件：音频项卡片 / 播放列表文件夹卡片 / 空状态
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PlaylistItemRow(
+private fun PlaylistItemCard(
     title: String,
+    subtitle: String,
     isCurrentlyPlaying: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    Row(
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = if (isCurrentlyPlaying) 4.dp else 1.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = if (isCurrentlyPlaying) Icons.Default.GraphicEq else Icons.Default.AudioFile,
-            contentDescription = null,
-            tint = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isCurrentlyPlaying) Icons.Default.GraphicEq else Icons.Default.Audiotrack,
+                        contentDescription = null,
+                        tint = if (isCurrentlyPlaying) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (isCurrentlyPlaying) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isCurrentlyPlaying) {
+                Spacer(Modifier.width(8.dp))
+                SuggestionChip(
+                    onClick = onClick,
+                    label = { Text("播放中", fontSize = 10.sp) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        labelColor = MaterialTheme.colorScheme.primary
+                    ),
+                    border = null
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun PlaylistRow(
+private fun PlaylistFolderCard(
     playlist: AudioPlaylist,
+    isSelected: Boolean,
     onClick: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    Row(
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = playlist.name,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Box {
-            IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.MoreVert, contentDescription = "更多")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
-            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text("重命名") },
-                    onClick = { showMenu = false; onRename() },
-                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = playlist.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                DropdownMenuItem(
-                    text = { Text("删除", color = MaterialTheme.colorScheme.error) },
-                    onClick = { showMenu = false; onDelete() },
-                    leadingIcon = {
-                        Icon(Icons.Default.Delete, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error)
+                Text(
+                    text = "点击查看列表内容",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Box {
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "更多",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("重命名") },
+                        onClick = { showMenu = false; onRename() },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                        onClick = { showMenu = false; onDelete() },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateView(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(48.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Default.MusicOff,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.outlineVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun NcmSongItemCard(
+    song: NcmSong,
+    isCurrentlyPlaying: Boolean,
+    isLoading: Boolean,
+    onClick: () -> Unit,
+    onAddToPlaylist: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = if (isCurrentlyPlaying) 4.dp else 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 封面图
+            if (song.coverUrl.isNotBlank()) {
+                AsyncImage(
+                    model = song.coverUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = song.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (isCurrentlyPlaying) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Text(
+                    text = song.displaySubtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .padding(2.dp),
+                    strokeWidth = 2.dp
+                )
+            } else if (isCurrentlyPlaying) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            } else {
+                IconButton(
+                    onClick = onAddToPlaylist,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PlaylistAdd,
+                        contentDescription = "添加到播放列表",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

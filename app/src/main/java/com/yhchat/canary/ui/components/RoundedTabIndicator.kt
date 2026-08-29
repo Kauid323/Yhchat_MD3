@@ -38,8 +38,8 @@ fun TabIndicatorScope.RoundedCornerTabIndicator(
     indicatorColor: Color = MaterialTheme.colorScheme.primary,
     indicatorHeight: Dp = DefaultIndicatorHeight
 ) {
-    var startAnimatable by remember { mutableStateOf<Animatable<Dp, AnimationVector1D>?>(null) }
-    var endAnimatable by remember { mutableStateOf<Animatable<Dp, AnimationVector1D>?>(null) }
+    var leftAnimatable by remember { mutableStateOf<Animatable<Dp, AnimationVector1D>?>(null) }
+    var widthAnimatable by remember { mutableStateOf<Animatable<Dp, AnimationVector1D>?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     Box(
@@ -53,62 +53,47 @@ fun TabIndicatorScope.RoundedCornerTabIndicator(
                 }
 
                 val safeIndex = index.coerceIn(0, tabPositions.lastIndex)
-                val newStart = tabPositions[safeIndex].left
-                val newEnd = tabPositions[safeIndex].right
+                val tabPosition = tabPositions[safeIndex]
 
-                val startAnim =
-                    startAnimatable
-                        ?: Animatable(newStart, Dp.VectorConverter).also { startAnimatable = it }
+                val targetWidth = tabPosition.contentWidth.coerceAtLeast(24.dp)
+                val targetLeft = tabPosition.left + (tabPosition.width - targetWidth) / 2
 
-                val endAnim =
-                    endAnimatable
-                        ?: Animatable(newEnd, Dp.VectorConverter).also { endAnimatable = it }
+                val leftAnim = leftAnimatable
+                    ?: Animatable(targetLeft, Dp.VectorConverter).also { leftAnimatable = it }
+                val widthAnim = widthAnimatable
+                    ?: Animatable(targetWidth, Dp.VectorConverter).also { widthAnimatable = it }
 
-                if (endAnim.targetValue != newEnd) {
+                val animSpec = spring<Dp>(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+
+                if (leftAnim.targetValue != targetLeft) {
                     coroutineScope.launch {
-                        endAnim.animateTo(
-                            newEnd,
-                            animationSpec = if (endAnim.value < newEnd) {
-                                spring(stiffness = Spring.StiffnessHigh)
-                            } else {
-                                spring(stiffness = Spring.StiffnessMedium)
-                            }
-                        )
+                        leftAnim.animateTo(targetLeft, animSpec)
                     }
                 }
 
-                if (startAnim.targetValue != newStart) {
+                if (widthAnim.targetValue != targetWidth) {
                     coroutineScope.launch {
-                        startAnim.animateTo(
-                            newStart,
-                            animationSpec = if (startAnim.value < newStart) {
-                                spring(stiffness = Spring.StiffnessMedium)
-                            } else {
-                                spring(stiffness = Spring.StiffnessHigh)
-                            }
-                        )
+                        widthAnim.animateTo(targetWidth, animSpec)
                     }
                 }
 
-                val indicatorEnd = endAnim.value.roundToPx()
-                val indicatorStart = startAnim.value.roundToPx()
-                val indicatorWidth = indicatorEnd - indicatorStart
+                val currentLeft = leftAnim.value.roundToPx()
+                val currentWidth = widthAnim.value.roundToPx().coerceAtLeast(0)
                 val indicatorHeightPx = indicatorHeight.roundToPx()
-                val horizontalPadding =
-                    (tabPositions[safeIndex].width - tabPositions[safeIndex].contentWidth)
-                        .times(0.5f)
-                        .roundToPx()
 
                 val placeable = measurable.measure(
                     Constraints.fixed(
-                        width = (indicatorWidth - horizontalPadding * 2).coerceIn(0, indicatorWidth),
+                        width = currentWidth,
                         height = indicatorHeightPx
                     )
                 )
 
                 layout(constraints.maxWidth, constraints.maxHeight) {
                     placeable.place(
-                        x = indicatorStart + horizontalPadding,
+                        x = currentLeft,
                         y = constraints.maxHeight - indicatorHeightPx
                     )
                 }
