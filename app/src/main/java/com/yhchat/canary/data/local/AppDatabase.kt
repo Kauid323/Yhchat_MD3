@@ -22,9 +22,11 @@ import java.util.concurrent.ConcurrentHashMap
         CachedDiscoverData::class,
         CachedProfileData::class,
         DownloadedFileRecord::class,
-        ShareTargetPreference::class
+        ShareTargetPreference::class,
+        AudioPlaylist::class,
+        AudioPlaylistItem::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedProfileDataDao(): CachedProfileDataDao
     abstract fun downloadedFileRecordDao(): DownloadedFileRecordDao
     abstract fun shareTargetPreferenceDao(): ShareTargetPreferenceDao
+    abstract fun audioPlaylistDao(): AudioPlaylistDao
     
     companion object {
         private val INSTANCES = ConcurrentHashMap<String, AppDatabase>()

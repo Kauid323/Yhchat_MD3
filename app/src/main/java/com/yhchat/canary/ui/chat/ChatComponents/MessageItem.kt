@@ -79,6 +79,7 @@ import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.components.rememberMessageActionMenuLauncher
 import com.yhchat.canary.ui.webview.WebViewActivity
 import com.yhchat.canary.ui.share.ExternalShareUtils
+import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.FavoriteMessageStore
 import com.yhchat.canary.utils.UnifiedLinkHandler
 import kotlinx.coroutines.Dispatchers
@@ -207,6 +208,19 @@ fun MessageItem(
     } else {
         null
     }
+    val addToPlaylistAction: (() -> Unit)? = if (message.contentType == 11 && !message.content.audioUrl.isNullOrBlank()) {
+        {
+            val audioUrl = message.content.audioUrl!!
+            val senderName = message.sender.name
+            coroutineScope.launch {
+                // 弹出选择列表的逻辑交给调用处的 showAddToPlaylistDialog，这里先追加到当前播放队列
+                appendToAutoQueue(context, senderName, audioUrl, "CHAT")
+                Toast.makeText(context, "已加入播放列表", Toast.LENGTH_SHORT).show()
+            }
+        }
+    } else {
+        null
+    }
     val speechToTextAction: (() -> Unit)? = if (message.contentType == 11 && !message.content.audioUrl.isNullOrBlank()) {
         {
             val audioUrl = message.content.audioUrl
@@ -248,6 +262,7 @@ fun MessageItem(
             { onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl) }
         } else null,
         onSaveAudio = saveAudioAction,
+        onAddToPlaylist = addToPlaylistAction,
         onSpeechToText = speechToTextAction,
         onExternalShare = externalShareMessage
     )
@@ -546,6 +561,7 @@ fun MessageItem(
     }
 
 
+
     if (showContextMenuDialog) {
         MessageContextMenu(
             message = message,
@@ -591,6 +607,12 @@ fun MessageItem(
                 }
             } else null,
             onSaveAudio = saveAudioAction?.let { action ->
+                {
+                    action()
+                    showContextMenuDialog = false
+                }
+            },
+            onAddToPlaylist = addToPlaylistAction?.let { action ->
                 {
                     action()
                     showContextMenuDialog = false

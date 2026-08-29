@@ -63,6 +63,7 @@ fun MessageContextMenu(
     onAddExpression: (() -> Unit)? = null,
     onBlockUser: (() -> Unit)? = null,
     onSaveAudio: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,   // 加入播放列表
     onSpeechToText: (() -> Unit)? = null,  // 语音转文字
     onPlusOne: (() -> Unit)? = null,  // +1 复制发送同样消息
     onFavorite: (() -> Unit)? = null,  // 收藏消息到本地
@@ -156,6 +157,15 @@ fun MessageContextMenu(
                         onClick = onSaveAudio,
                         icon = Icons.Default.Download,
                         text = "保存语音"
+                    )
+                }
+
+                // 加入播放列表（仅对语音消息显示）
+                if (onAddToPlaylist != null && message.contentType == 11) {
+                    ContextMenuAction(
+                        onClick = onAddToPlaylist,
+                        icon = Icons.Default.PlaylistAdd,
+                        text = "加入播放列表"
                     )
                 }
                 

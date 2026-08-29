@@ -39,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import com.yhchat.canary.service.AudioPlayerService
 import com.yhchat.canary.service.FileDownloadService
 import com.yhchat.canary.ui.adaptive.YhSurface
+import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.PermissionUtils
+import kotlinx.coroutines.launch
 
 /**
  * 格式化文件大小
@@ -207,6 +209,7 @@ fun AudioMessageView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var isCurrentlyPlaying by remember { mutableStateOf(false) }
 
     LaunchedEffect(audioUrl) {
@@ -217,10 +220,14 @@ fun AudioMessageView(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .clickable {
+                val displayTitle = "$senderName 的语音"
+                coroutineScope.launch {
+                    appendToAutoQueue(context, displayTitle, audioUrl, "CHAT")
+                }
                 AudioPlayerService.startPlayAudio(
                     context = context,
                     audioUrl = audioUrl,
-                    title = "$senderName 的语音"
+                    title = displayTitle
                 )
                 isCurrentlyPlaying = !isCurrentlyPlaying
             },

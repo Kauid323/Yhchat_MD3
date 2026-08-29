@@ -416,7 +416,7 @@ fun LoginScreen(
                                 },
                                 enabled = !uiState.isLoading && smsCountdown == 0 && mobile.isNotBlank() && imageCaptcha.isNotBlank(),
                                 modifier = Modifier
-                                    .height(56.dp)
+                                    .height(60.dp)
                                     .widthIn(min = 108.dp)
                             ) {
                                 Text(
