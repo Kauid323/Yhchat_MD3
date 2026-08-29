@@ -24,6 +24,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -424,7 +425,11 @@ private fun AudioPlayerBottomSheet(
     // 网易云音乐搜索状态
     var ncmSearchResults by remember { mutableStateOf<List<NcmSong>>(emptyList()) }
     var isNcmSearching by remember { mutableStateOf(false) }
+    var isNcmLoadingMore by remember { mutableStateOf(false) }
+    var ncmHasMore by remember { mutableStateOf(true) }
+    var ncmOffset by remember { mutableIntStateOf(0) }
     var ncmPlayingId by remember { mutableStateOf<Long?>(null) }
+    val ncmListState = rememberLazyListState()
 
     // 对话框状态
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -512,6 +517,9 @@ private fun AudioPlayerBottomSheet(
             searchResults = emptyList()
             ncmSearchResults = emptyList()
             isNcmSearching = false
+            isNcmLoadingMore = false
+            ncmOffset = 0
+            ncmHasMore = true
             return@LaunchedEffect
         }
         val q = searchQuery.trim()
@@ -521,11 +529,16 @@ private fun AudioPlayerBottomSheet(
             }
             1 -> {
                 isNcmSearching = true
+                isNcmLoadingMore = false
+                ncmHasMore = true
+                ncmOffset = 0
                 delay(300) // 防抖
                 val res = withContext(Dispatchers.IO) {
-                    NcmApiClient.searchSongs(q).getOrDefault(emptyList())
+                    NcmApiClient.searchSongs(q, limit = 30, offset = 0).getOrDefault(emptyList())
                 }
                 ncmSearchResults = res
+                ncmOffset = res.size
+                ncmHasMore = res.size >= 30
                 isNcmSearching = false
             }
             2 -> {
@@ -534,6 +547,35 @@ private fun AudioPlayerBottomSheet(
             else -> {
                 searchResults = emptyList()
             }
+        }
+    }
+
+    // 网易云音乐滚动触底自动加载更多
+    val shouldNcmLoadMore by remember {
+        derivedStateOf {
+            val totalCount = ncmListState.layoutInfo.totalItemsCount
+            val lastVisibleItem = ncmListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalCount > 0 && lastVisibleItem >= totalCount - 4
+        }
+    }
+
+    LaunchedEffect(shouldNcmLoadMore) {
+        if (shouldNcmLoadMore && selectedTab == 1 && !isNcmSearching && !isNcmLoadingMore && ncmHasMore && searchQuery.isNotBlank()) {
+            isNcmLoadingMore = true
+            val q = searchQuery.trim()
+            val more = withContext(Dispatchers.IO) {
+                NcmApiClient.searchSongs(q, limit = 30, offset = ncmOffset).getOrDefault(emptyList())
+            }
+            if (more.isNotEmpty()) {
+                val existingIds = ncmSearchResults.map { it.id }.toSet()
+                val uniqueMore = more.filter { it.id !in existingIds }
+                ncmSearchResults = ncmSearchResults + uniqueMore
+                ncmOffset += more.size
+                ncmHasMore = more.size >= 30
+            } else {
+                ncmHasMore = false
+            }
+            isNcmLoadingMore = false
         }
     }
 
@@ -595,12 +637,13 @@ private fun AudioPlayerBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
+        windowInsets = WindowInsets(0, 0, 0, 0)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.96f)
+                .fillMaxSize()
+                .statusBarsPadding()
                 .onGloballyPositioned { coordinates ->
                     sheetHeightPx = coordinates.size.height
                 }
@@ -824,6 +867,7 @@ private fun AudioPlayerBottomSheet(
                             }
                         } else {
                             LazyColumn(
+                                state = ncmListState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp, start = 14.dp, end = 14.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -862,7 +906,42 @@ private fun AudioPlayerBottomSheet(
                                         }
                                     )
                                 }
-                                if (ncmSearchResults.isEmpty()) {
+                                if (isNcmLoadingMore) {
+                                    item(key = "ncm_loading_more_item") {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = "正在自动加载更多歌曲...",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                } else if (!ncmHasMore && ncmSearchResults.isNotEmpty()) {
+                                    item(key = "ncm_no_more_item") {
+                                        Text(
+                                            text = "已加载全部 ${ncmSearchResults.size} 首歌曲",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                                if (ncmSearchResults.isEmpty() && !isNcmSearching) {
                                     item {
                                         EmptyStateView(text = "未找到相关网易云歌曲")
                                     }
