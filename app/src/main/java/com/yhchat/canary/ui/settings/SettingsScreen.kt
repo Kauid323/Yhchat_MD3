@@ -307,6 +307,53 @@ fun SettingsScreen(
                                     com.yhchat.canary.ui.blocklist.BlacklistActivity.start(context)
                                 }
                             )
+                        },
+                        {
+                            var ncmLoggedIn by remember { mutableStateOf(com.yhchat.canary.ncm.NcmAccountManager.isLoggedIn(context)) }
+                            var showNcmAccountDialog by remember { mutableStateOf(false) }
+
+                            LaunchedEffect(Unit) {
+                                ncmLoggedIn = com.yhchat.canary.ncm.NcmAccountManager.isLoggedIn(context)
+                            }
+
+                            if (showNcmAccountDialog) {
+                                YhAlertDialog(
+                                    onDismissRequest = { showNcmAccountDialog = false },
+                                    title = { Text("网易云账号管理") },
+                                    text = { Text("当前已登录网易云音乐账号。\n如需更换或重新抓取Cookie，可点击“重新登录”；如需退出可点击“退出登录”。") },
+                                    confirmButton = {
+                                        YhButton(onClick = {
+                                            showNcmAccountDialog = false
+                                            com.yhchat.canary.ui.webview.WebViewActivity.startNcmLogin(context)
+                                        }) {
+                                            Text("重新登录")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        YhTextButton(onClick = {
+                                            com.yhchat.canary.ncm.NcmAccountManager.clearCookie(context)
+                                            ncmLoggedIn = false
+                                            showNcmAccountDialog = false
+                                            android.widget.Toast.makeText(context, "已退出网易云账号", android.widget.Toast.LENGTH_SHORT).show()
+                                        }) {
+                                            Text("退出登录")
+                                        }
+                                    }
+                                )
+                            }
+
+                            SettingsItemCell(
+                                icon = Icons.Default.CloudQueue,
+                                title = "网易云账号",
+                                subtitle = if (ncmLoggedIn) "已登录 (点击可管理或退出)" else "未登录，点击进入网页端电脑版登录",
+                                onClick = {
+                                    if (ncmLoggedIn) {
+                                        showNcmAccountDialog = true
+                                    } else {
+                                        com.yhchat.canary.ui.webview.WebViewActivity.startNcmLogin(context)
+                                    }
+                                }
+                            )
                         }
                     )
                 )

@@ -9,7 +9,8 @@ data class NcmSong(
     val artist: String,
     val album: String,
     val coverUrl: String,
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    val artistIds: List<Long> = emptyList()
 ) {
     val displaySubtitle: String
         get() = buildString {

@@ -1072,6 +1072,7 @@ class MessageRepository @Inject constructor(
             if (response.isSuccessful) {
                 response.body()?.let { body ->
                     val code = body["code"] as? Double
+                    val msg = body["msg"] as? String ?: "Unknown error"
                     if (code == 1.0) {
                         val data = body["data"] as? Map<*, *>
                         val list = data?.get("list") as? List<*>

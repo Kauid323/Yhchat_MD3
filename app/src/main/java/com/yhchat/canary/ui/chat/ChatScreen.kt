@@ -1325,7 +1325,7 @@ fun ChatScreen(
                                 // 发送成功后清除草稿
                                 viewModel.clearDraft()
                             },
-                            onError = { error ->
+                            onError = { error: String ->
                                 // 发送失败，保留输入框内容
                                 android.util.Log.e("ChatScreen", "发送消息失败: $error")
                                 // 可以选择显示Toast提示

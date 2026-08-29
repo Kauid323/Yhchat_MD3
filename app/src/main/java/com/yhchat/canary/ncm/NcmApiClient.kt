@@ -93,10 +93,13 @@ object NcmApiClient {
 
                     // 艺术家列表
                     val arArray = songObj.optJSONArray("ar")
+                    val artistIds = mutableListOf<Long>()
                     val artistName = buildString {
                         if (arArray != null) {
                             for (j in 0 until arArray.length()) {
                                 val ar = arArray.getJSONObject(j)
+                                val aId = ar.optLong("id", 0L)
+                                if (aId > 0L) artistIds.add(aId)
                                 val aName = ar.optString("name")
                                 if (aName.isNotBlank()) {
                                     if (isNotEmpty()) append(" / ")
@@ -121,7 +124,8 @@ object NcmApiClient {
                             artist = artistName,
                             album = albumName,
                             coverUrl = picUrl,
-                            durationMs = duration
+                            durationMs = duration,
+                            artistIds = artistIds
                         )
                     )
                 }
@@ -249,10 +253,13 @@ object NcmApiClient {
                     val duration = sObj.optLong("dt", 0L)
 
                     val arArray = sObj.optJSONArray("ar")
+                    val artistIds = mutableListOf<Long>()
                     val artistName = buildString {
                         if (arArray != null) {
                             for (j in 0 until arArray.length()) {
                                 val ar = arArray.getJSONObject(j)
+                                val aId = ar.optLong("id", 0L)
+                                if (aId > 0L) artistIds.add(aId)
                                 val aName = ar.optString("name")
                                 if (aName.isNotBlank()) {
                                     if (isNotEmpty()) append(" / ")
@@ -276,7 +283,8 @@ object NcmApiClient {
                             artist = artistName,
                             album = albumName,
                             coverUrl = picUrl,
-                            durationMs = duration
+                            durationMs = duration,
+                            artistIds = artistIds
                         )
                     )
                 }
@@ -375,10 +383,14 @@ object NcmApiClient {
 
                     // 歌手
                     val ar = song.optJSONArray("artists") ?: song.optJSONArray("ar")
+                    val artistIds = mutableListOf<Long>()
                     val artistName = buildString {
                         if (ar != null) {
                             for (k in 0 until ar.length()) {
-                                val aName = ar.getJSONObject(k).optString("name")
+                                val obj = ar.getJSONObject(k)
+                                val aId = obj.optLong("id", 0L)
+                                if (aId > 0L) artistIds.add(aId)
+                                val aName = obj.optString("name")
                                 if (aName.isNotBlank()) {
                                     if (isNotEmpty()) append(" / ")
                                     append(aName)
@@ -393,7 +405,8 @@ object NcmApiClient {
                             name = songName,
                             artist = artistName,
                             album = albumName,
-                            coverUrl = picUrl
+                            coverUrl = picUrl,
+                            artistIds = artistIds
                         )
                     )
                 }
@@ -406,6 +419,96 @@ object NcmApiClient {
             }
         } catch (e: Exception) {
             Log.e(TAG, "网易云 EAPI 听歌识别失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 听完网络音频后调用网易云活动打卡接口 (+1)
+     * @param context Context 用于获取持久化的网易云 Cookie
+     * @param songId 网易云歌曲 ID
+     * @param artistIds 艺人 ID 列表
+     */
+    suspend fun reportSongListened(
+        context: android.content.Context,
+        songId: Long,
+        artistIds: List<Long> = emptyList()
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            if (songId <= 0L) {
+                return@withContext Result.failure(IllegalArgumentException("无效的歌曲ID: $songId"))
+            }
+
+            val actualArtistIds = if (artistIds.isEmpty()) {
+                val detailResult = getSongDetail(listOf(songId)).getOrNull()
+                detailResult?.firstOrNull()?.artistIds ?: emptyList()
+            } else {
+                artistIds
+            }
+
+            val artistIdsFormatted = if (actualArtistIds.isNotEmpty()) {
+                actualArtistIds.joinToString(",") { "{$it}" }
+            } else {
+                "{0}"
+            }
+
+            val dataJson = JSONObject().apply {
+                put("songId", songId.toString())
+                put("artistIds", artistIdsFormatted)
+                put("header", "{}")
+                put("e_r", true)
+            }
+
+            // EAPI 加密: url 为 /api/activity/attract/artist/song/listened
+            val encryptedParams = NcmCrypto.encryptEApi(
+                "/api/activity/attract/artist/song/listened",
+                dataJson.toString()
+            )
+
+            val formBody = FormBody.Builder()
+                .add("params", encryptedParams)
+                .build()
+
+            val cookieHeader = NcmAccountManager.buildFullCookie(context)
+            val userAgent = "NeteaseMusic/8.10.60.230824122627(8010060);Dalvik/2.1.0 (Linux; U; ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL} Build/${android.os.Build.ID})"
+
+            val request = Request.Builder()
+                .url("https://interface3.music.163.com/eapi/activity/bonus/playpage/time/query")
+                .post(formBody)
+                .addHeader("cm_no_encrypt_native_tag_20220105", "false")
+                .addHeader("x-music-loc-site", "300_st.music.163.com/c/poplayer")
+                .addHeader("user-agent", userAgent)
+                .addHeader("cmpageid", "PlayerActivity")
+                .addHeader("x-mam-custommark", "okhttp")
+                .addHeader("Cookie", cookieHeader)
+                .build()
+
+            Log.d(TAG, "开始调用网易云打卡接口(+1): songId=$songId, artistIds=$artistIdsFormatted")
+
+            httpClient.newCall(request).execute().use { response ->
+                val respBytes = response.body?.bytes() ?: return@withContext Result.failure(Exception("响应体为空"))
+                val decryptedJsonStr = NcmCrypto.decryptEApi(respBytes)
+                Log.d(TAG, "网易云打卡(+1)解密响应: $decryptedJsonStr")
+
+                if (decryptedJsonStr.isBlank()) {
+                    return@withContext Result.failure(Exception("解密响应为空"))
+                }
+
+                val json = JSONObject(decryptedJsonStr)
+                val code = json.optInt("code", -1)
+                val data = json.optBoolean("data", false)
+
+                if (code == 200 && data) {
+                    Log.d(TAG, "🎉 网易云打卡(+1)成功: songId=$songId")
+                    Result.success(true)
+                } else {
+                    val msg = json.optString("msg", "打卡返回数据不符合成功预期")
+                    Log.w(TAG, "⚠️ 网易云打卡未能成功: code=$code, data=$data, msg=$msg")
+                    Result.failure(Exception(msg))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "网易云打卡接口调用异常: songId=$songId", e)
             Result.failure(e)
         }
     }

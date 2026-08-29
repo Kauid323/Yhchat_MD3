@@ -317,7 +317,7 @@ class ChatViewModel @Inject constructor(
                         return@fold
                     }
 
-                    val cachedByBot = loadCachedBotLlmParams(chatId, chatType)
+                    val cachedByBot = loadCachedBotLlmParams(chatId, chatType).groupBy { it.botId }
                     val merged = list.associate { item ->
                         val parsed = parseBotLlmParamValues(item.botId, item.paramJson)
                         val cachedById = cachedByBot[item.botId].orEmpty().associateBy { it.id }
@@ -1457,6 +1457,17 @@ class ChatViewModel @Inject constructor(
 
                         // 更新最旧消息的序列号和ID
                         if (newMessages.isNotEmpty()) {
+                            oldestMsgId = filteredMessages.minByOrNull { it.sendTime }?.msgId
+                            oldestMsgSeq = filteredMessages.minByOrNull { it.sendTime }?.msgSeq ?: 0L
+                        }
+
+                        _uiState.value = _uiState.value.copy(isLoading = false, error = null)
+                    },
+                    onFailure = { error ->
+                        Log.e(tag, "Failed to load messages from position: $msgId", error)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "加载消息失败: ${error.message}"
                         )
                         // 失败则加载最新消息
                         loadMessages()

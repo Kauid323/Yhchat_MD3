@@ -58,6 +58,8 @@ class AudioPlayerService : Service() {
         
         const val EXTRA_AUDIO_URL = "extra_audio_url"
         const val EXTRA_AUDIO_TITLE = "extra_audio_title"
+        const val EXTRA_NCM_SONG_ID = "extra_ncm_song_id"
+        const val EXTRA_NCM_ARTIST_IDS = "extra_ncm_artist_ids"
         private const val EXTRA_LOCAL_AUDIO_PATH = "extra_local_audio_path"
         private const val EXTRA_IS_SAVED_AUDIO = "extra_is_saved_audio"
         private const val EXTRA_AUDIO_CONTENT_URI = "extra_audio_content_uri"
@@ -68,11 +70,23 @@ class AudioPlayerService : Service() {
         /**
          * 启动语音播放服务
          */
-        fun startPlayAudio(context: Context, audioUrl: String, title: String = "语音消息") {
+        fun startPlayAudio(
+            context: Context,
+            audioUrl: String,
+            title: String = "语音消息",
+            ncmSongId: Long? = null,
+            ncmArtistIds: String? = null
+        ) {
             val intent = Intent(context, AudioPlayerService::class.java).apply {
                 action = ACTION_PLAY
                 putExtra(EXTRA_AUDIO_URL, audioUrl)
                 putExtra(EXTRA_AUDIO_TITLE, title)
+                if (ncmSongId != null) {
+                    putExtra(EXTRA_NCM_SONG_ID, ncmSongId)
+                }
+                if (!ncmArtistIds.isNullOrBlank()) {
+                    putExtra(EXTRA_NCM_ARTIST_IDS, ncmArtistIds)
+                }
             }
             context.startForegroundService(intent)
         }
@@ -165,6 +179,8 @@ class AudioPlayerService : Service() {
         .build()
     
     private var currentAudioUrl: String? = null
+    private var currentNcmSongId: Long? = null
+    private var currentNcmArtistIds: String? = null
     private var isPlaying: Boolean = false
     private lateinit var audioCacheManager: AudioCacheManager
     private var currentTitle: String = "语音消息"
@@ -271,6 +287,12 @@ class AudioPlayerService : Service() {
                 val contentUri = intent.getStringExtra(EXTRA_AUDIO_CONTENT_URI)
                 val isSaved = intent.getBooleanExtra(EXTRA_IS_SAVED_AUDIO, false)
                 val audioUrl = intent.getStringExtra(EXTRA_AUDIO_URL)
+                val ncmSongIdExtra = intent.getLongExtra(EXTRA_NCM_SONG_ID, 0L).takeIf { it > 0L }
+                val ncmArtistIdsExtra = intent.getStringExtra(EXTRA_NCM_ARTIST_IDS)
+                if (ncmSongIdExtra != null) {
+                    currentNcmSongId = ncmSongIdExtra
+                    currentNcmArtistIds = ncmArtistIdsExtra
+                }
                 if (!contentUri.isNullOrBlank()) {
                     // 对于 contentUri：默认认为它可能来自“已保存音频”，因此尝试建立队列并判断
                     // 即使外部没有显式传 EXTRA_IS_SAVED_AUDIO，也能实现按文件夹顺序切歌
@@ -438,6 +460,53 @@ class AudioPlayerService : Service() {
             }
         }
 
+        // 尝试触发网易云打卡(+1)
+        val finishedUrl = currentAudioUrl
+        val songIdToReport = currentNcmSongId
+        val artistIdsToReport = currentNcmArtistIds
+
+        serviceScope.launch(Dispatchers.IO) {
+            var targetSongId: Long? = songIdToReport
+            var targetArtistIds: List<Long> = artistIdsToReport?.split(",")?.mapNotNull { it.trim().toLongOrNull() } ?: emptyList()
+
+            // 如果没有直接记录的 NcmSongId，尝试从当前活跃播放列表中根据 URL 查找
+            if (targetSongId == null && !finishedUrl.isNullOrBlank()) {
+                val dao = AppDatabase.getDatabase(this@AudioPlayerService).audioPlaylistDao()
+                val activePlaylistId = getActivePlaylistId(this@AudioPlayerService)
+                val currentItem = dao.getItemsForPlaylistSync(activePlaylistId).find { it.url == finishedUrl }
+                if (currentItem != null && currentItem.source.startsWith("NCM:")) {
+                    val rawNcm = currentItem.source.removePrefix("NCM:")
+                    val parts = rawNcm.split(":")
+                    targetSongId = parts.getOrNull(0)?.toLongOrNull()
+                    if (targetArtistIds.isEmpty() && parts.size > 1) {
+                        targetArtistIds = parts[1].split(",").mapNotNull { it.trim().toLongOrNull() }
+                    }
+                }
+            }
+
+            if (targetSongId != null && targetSongId > 0L) {
+                Log.d(TAG, "检测到网络音频播放完成，准备请求网易云打卡接口(+1): songId=$targetSongId")
+                val reportResult = NcmApiClient.reportSongListened(
+                    context = this@AudioPlayerService,
+                    songId = targetSongId,
+                    artistIds = targetArtistIds
+                )
+                reportResult.onSuccess { success ->
+                    if (success) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                this@AudioPlayerService,
+                                "+1成功，又听一遍",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }.onFailure { e ->
+                    Log.w(TAG, "网易云打卡接口调用未成功: songId=$targetSongId", e)
+                }
+            }
+        }
+
         serviceScope.launch {
             val mode = getPlayMode(this@AudioPlayerService)
             when (mode) {
@@ -485,6 +554,15 @@ class AudioPlayerService : Service() {
 
                     if (nextIdx != null && nextIdx in items.indices) {
                         val nextItem = items[nextIdx]
+                        if (nextItem.source.startsWith("NCM:")) {
+                            val rawNcm = nextItem.source.removePrefix("NCM:")
+                            val parts = rawNcm.split(":")
+                            currentNcmSongId = parts.getOrNull(0)?.toLongOrNull()
+                            currentNcmArtistIds = parts.getOrNull(1)
+                        } else {
+                            currentNcmSongId = null
+                            currentNcmArtistIds = null
+                        }
                         if (nextItem.url.startsWith("content://") || nextItem.url.startsWith("file://")) {
                             playSavedAudioUri(nextItem.url, nextItem.title)
                         } else {
@@ -529,7 +607,11 @@ class AudioPlayerService : Service() {
                 }
                 val nextItem = items[nextIdx]
                 val targetUrl = if (nextItem.source.startsWith("NCM")) {
-                    val songId = nextItem.source.removePrefix("NCM:").toLongOrNull()
+                    val rawNcm = nextItem.source.removePrefix("NCM:")
+                    val parts = rawNcm.split(":")
+                    val songId = parts.getOrNull(0)?.toLongOrNull()
+                    currentNcmSongId = songId
+                    currentNcmArtistIds = parts.getOrNull(1)
                     if (songId != null) {
                         val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
                         if (!fresh.isNullOrBlank()) {
@@ -539,7 +621,11 @@ class AudioPlayerService : Service() {
                             fresh
                         } else nextItem.url
                     } else nextItem.url
-                } else nextItem.url
+                } else {
+                    currentNcmSongId = null
+                    currentNcmArtistIds = null
+                    nextItem.url
+                }
 
                 if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
                     playSavedAudioUri(targetUrl, nextItem.title)
@@ -592,7 +678,11 @@ class AudioPlayerService : Service() {
                 }
                 val prevItem = items[prevIdx]
                 val targetUrl = if (prevItem.source.startsWith("NCM")) {
-                    val songId = prevItem.source.removePrefix("NCM:").toLongOrNull()
+                    val rawNcm = prevItem.source.removePrefix("NCM:")
+                    val parts = rawNcm.split(":")
+                    val songId = parts.getOrNull(0)?.toLongOrNull()
+                    currentNcmSongId = songId
+                    currentNcmArtistIds = parts.getOrNull(1)
                     if (songId != null) {
                         val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
                         if (!fresh.isNullOrBlank()) {
@@ -602,7 +692,11 @@ class AudioPlayerService : Service() {
                             fresh
                         } else prevItem.url
                     } else prevItem.url
-                } else prevItem.url
+                } else {
+                    currentNcmSongId = null
+                    currentNcmArtistIds = null
+                    prevItem.url
+                }
 
                 if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
                     playSavedAudioUri(targetUrl, prevItem.title)
@@ -699,6 +793,8 @@ class AudioPlayerService : Service() {
                                     if (audioFile != null && audioFile.exists()) {
                                         val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
                                         if (matched != null) {
+                                            currentNcmSongId = matched.id
+                                            currentNcmArtistIds = matched.artistIds.joinToString(",")
                                             withContext(Dispatchers.Main) {
                                                 updateAudioInfo(
                                                     newTitle = matched.name,
@@ -1017,6 +1113,8 @@ class AudioPlayerService : Service() {
                         try {
                             val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
                             if (matched != null) {
+                                currentNcmSongId = matched.id
+                                currentNcmArtistIds = matched.artistIds.joinToString(",")
                                 withContext(Dispatchers.Main) {
                                     updateAudioInfo(
                                         newTitle = matched.name,

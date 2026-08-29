@@ -480,8 +480,13 @@ private fun AudioPlayerBottomSheet(
     // 播放指定 Item 并自动刷新可能过期的网络 URL
     val playPlaylistItem: (AudioPlaylistItem) -> Unit = { item ->
         coroutineScope.launch {
+            var songId: Long? = null
+            var artistIdsStr: String? = null
             val targetUrl = if (item.source.startsWith("NCM")) {
-                val songId = item.source.removePrefix("NCM:").toLongOrNull()
+                val rawNcm = item.source.removePrefix("NCM:")
+                val parts = rawNcm.split(":")
+                songId = parts.getOrNull(0)?.toLongOrNull()
+                artistIdsStr = parts.getOrNull(1)
                 if (songId != null) {
                     val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
                     if (!fresh.isNullOrBlank()) {
@@ -496,7 +501,7 @@ private fun AudioPlayerBottomSheet(
             if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
                 AudioPlayerService.startPlaySavedAudio(context, targetUrl, item.title)
             } else {
-                onPlayUrl(targetUrl, item.title)
+                AudioPlayerService.startPlayAudio(context, targetUrl, item.title, songId, artistIdsStr)
             }
         }
     }
@@ -637,8 +642,7 @@ private fun AudioPlayerBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface,
-        windowInsets = WindowInsets(0, 0, 0, 0)
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
@@ -886,8 +890,10 @@ private fun AudioPlayerBottomSheet(
                                                 ncmPlayingId = null
                                                 if (!playUrl.isNullOrBlank()) {
                                                     val songTitle = "${ncmSong.name} - ${ncmSong.artist}"
-                                                    appendToAutoQueue(context, songTitle, playUrl, "NCM:${ncmSong.id}", ncmSong.durationMs)
-                                                    onPlayUrl(playUrl, songTitle)
+                                                    val artistIdsStr = ncmSong.artistIds.joinToString(",")
+                                                    val ncmSource = if (artistIdsStr.isNotBlank()) "NCM:${ncmSong.id}:$artistIdsStr" else "NCM:${ncmSong.id}"
+                                                    appendToAutoQueue(context, songTitle, playUrl, ncmSource, ncmSong.durationMs)
+                                                    AudioPlayerService.startPlayAudio(context, playUrl, songTitle, ncmSong.id, artistIdsStr)
                                                 } else {
                                                     Toast.makeText(context, "解析网易云音频失败", Toast.LENGTH_SHORT).show()
                                                 }
@@ -896,10 +902,12 @@ private fun AudioPlayerBottomSheet(
                                         onAddToPlaylist = {
                                             coroutineScope.launch {
                                                 val playUrl = NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull() ?: ""
+                                                val artistIdsStr = ncmSong.artistIds.joinToString(",")
+                                                val ncmSource = if (artistIdsStr.isNotBlank()) "NCM:${ncmSong.id}:$artistIdsStr" else "NCM:${ncmSong.id}"
                                                 showAddToPlaylistDialog = AddToPlaylistTarget(
                                                     url = playUrl,
                                                     title = "${ncmSong.name} - ${ncmSong.artist}",
-                                                    source = "NCM:${ncmSong.id}",
+                                                    source = ncmSource,
                                                     durationMs = ncmSong.durationMs
                                                 )
                                             }

@@ -82,6 +82,20 @@ class WebViewActivity : BaseActivity() {
         private const val EXTRA_TOKEN = "extra_token"
         private const val EXTRA_HTML = "extra_html"
         private const val EXTRA_BASE_URL = "extra_base_url"
+        const val EXTRA_IS_NCM_LOGIN = "extra_is_ncm_login"
+        const val PC_DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        fun startNcmLogin(context: Context) {
+            val intent = Intent(context, WebViewActivity::class.java).apply {
+                putExtra(EXTRA_URL, "https://music.163.com/")
+                putExtra(EXTRA_TITLE, "网易云音乐登录")
+                putExtra(EXTRA_IS_NCM_LOGIN, true)
+                if (context !is android.app.Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(intent)
+        }
 
         fun start(context: Context, url: String, title: String? = null, token: String? = null) {
             val intent = Intent(context, WebViewActivity::class.java).apply {
@@ -138,6 +152,8 @@ class WebViewActivity : BaseActivity() {
         val token = intent.getStringExtra(EXTRA_TOKEN)
         val baseUrl = intent.getStringExtra(EXTRA_BASE_URL)
 
+        val isNcmLogin = intent.getBooleanExtra(EXTRA_IS_NCM_LOGIN, false)
+
         if (url.isEmpty() && html.isNullOrEmpty()) {
             finish()
             return
@@ -151,6 +167,7 @@ class WebViewActivity : BaseActivity() {
                     initialBaseUrl = baseUrl,
                     initialTitle = initialTitle,
                     token = token,
+                    isNcmLogin = isNcmLogin,
                     viewModel = viewModel,
                     onBack = { finish() }
                 )
@@ -166,6 +183,7 @@ fun WebViewScreen(
     initialBaseUrl: String?,
     initialTitle: String,
     token: String?,
+    isNcmLogin: Boolean = false,
     viewModel: WebViewViewModel,
     onBack: () -> Unit
 ) {
@@ -324,7 +342,7 @@ fun WebViewScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                        setupWebViewSettings()
+                        setupWebViewSettings(isNcmLogin)
                         
                         webViewClient = object : WebViewClient() {
                             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
@@ -367,6 +385,9 @@ fun WebViewScreen(
                                     canGoBack = view?.canGoBack() ?: false,
                                     canGoForward = view?.canGoForward() ?: false
                                 )
+                                if (isNcmLogin) {
+                                    checkAndSaveNcmCookie(context)
+                                }
                             }
 
                             override fun onPageFinished(view: WebView?, urlStr: String?) {
@@ -376,6 +397,9 @@ fun WebViewScreen(
                                     canGoBack = view?.canGoBack() ?: false,
                                     canGoForward = view?.canGoForward() ?: false
                                 )
+                                if (isNcmLogin) {
+                                    checkAndSaveNcmCookie(context)
+                                }
                             }
 
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -548,8 +572,10 @@ fun WebViewScreen(
     }
 }
 
+private var hasNotifiedNcmLogin = false
+
 @SuppressLint("SetJavaScriptEnabled")
-private fun WebView.setupWebViewSettings() {
+private fun WebView.setupWebViewSettings(isNcmLogin: Boolean = false) {
     settings.apply {
         javaScriptEnabled = true
         domStorageEnabled = true
@@ -561,7 +587,36 @@ private fun WebView.setupWebViewSettings() {
         displayZoomControls = false
         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         cacheMode = WebSettings.LOAD_DEFAULT
-        userAgentString = "$userAgentString Yunhu/Canary"
+        userAgentString = if (isNcmLogin) {
+            WebViewActivity.PC_DESKTOP_UA
+        } else {
+            "$userAgentString Yunhu/Canary"
+        }
+    }
+    try {
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(this, true)
+    } catch (e: Exception) {
+        Log.w("WebViewActivity", "设置CookieManager失败", e)
+    }
+}
+
+private fun checkAndSaveNcmCookie(context: Context) {
+    try {
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        val c1 = cookieManager.getCookie("https://music.163.com") ?: ""
+        val c2 = cookieManager.getCookie("https://163.com") ?: ""
+        val full = if (c1.isNotBlank() && c2.isNotBlank()) "$c1; $c2" else "$c1$c2"
+        if (full.contains("MUSIC_U") || full.contains("__csrf")) {
+            com.yhchat.canary.ncm.NcmAccountManager.saveCookie(context, full)
+            if (!hasNotifiedNcmLogin) {
+                hasNotifiedNcmLogin = true
+                Toast.makeText(context, "网易云账号已登录，已保存Cookie", Toast.LENGTH_SHORT).show()
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("WebViewActivity", "检查网易云Cookie失败", e)
     }
 }
 
