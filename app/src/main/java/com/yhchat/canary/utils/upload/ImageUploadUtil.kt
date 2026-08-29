@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import com.yhchat.canary.data.api.QiniuUploadResponse
+import com.yhchat.canary.utils.upload.ProgressRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -18,6 +19,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 

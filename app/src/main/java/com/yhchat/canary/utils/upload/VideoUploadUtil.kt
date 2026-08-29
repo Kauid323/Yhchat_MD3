@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
 import com.yhchat.canary.data.api.QiniuUploadResponse
+import com.yhchat.canary.utils.upload.ProgressRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -17,6 +18,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+
 
 /**
  * 视频上传工具类

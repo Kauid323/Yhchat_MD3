@@ -746,11 +746,11 @@ class ChatViewModel @Inject constructor(
                 } ?: return@launch
 
                 Log.d(tag, "开始上传图片到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.upload.ImageUploadUtil.uploadImage(
+                val uploadResult = com.yhchat.canary.utils.ImageUploadUtil.uploadImage(
                     context = context,
                     imageUri = imageUri,
                     uploadToken = uploadToken,
-                    onProgress = { progress ->
+                    onProgress = { progress: Float ->
                         _uiState.value = _uiState.value.copy(uploadProgress = progress)
                     }
                 )
@@ -846,11 +846,11 @@ class ChatViewModel @Inject constructor(
                 } ?: return@launch
 
                 Log.d(tag, "开始上传视频到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.upload.VideoUploadUtil.uploadVideo(
+                val uploadResult = com.yhchat.canary.utils.VideoUploadUtil.uploadVideo(
                     context = context,
                     videoUri = videoUri,
                     uploadToken = uploadToken,
-                    onProgress = { progress ->
+                    onProgress = { progress: Float ->
                         _uiState.value = _uiState.value.copy(uploadProgress = progress)
                     }
                 )
@@ -936,11 +936,11 @@ class ChatViewModel @Inject constructor(
                 } ?: return@launch
 
                 Log.d(tag, "开始上传文件到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.upload.FileUploadUtil.uploadFile(
+                val uploadResult = com.yhchat.canary.utils.FileUploadUtil.uploadFile(
                     context = context,
                     fileUri = fileUri,
                     uploadToken = uploadToken,
-                    onProgress = { progress ->
+                    onProgress = { progress: Float ->
                         _uiState.value = _uiState.value.copy(uploadProgress = progress)
                     }
                 )
