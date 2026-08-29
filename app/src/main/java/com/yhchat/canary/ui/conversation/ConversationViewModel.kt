@@ -1,6 +1,7 @@
 
 package com.yhchat.canary.ui.conversation
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,7 @@ import com.yhchat.canary.data.repository.UserRepository
 import com.yhchat.canary.data.websocket.MessageEvent
 import com.yhchat.canary.data.websocket.WebSocketManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,12 +26,14 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class ConversationViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val conversationRepository: ConversationRepository,
     private val cacheRepository: CacheRepository,
     private val webSocketManager: WebSocketManager,
     private val userRepository: UserRepository
 ) : ViewModel() {
 
+    private val blocklistRepository by lazy { com.yhchat.canary.data.repository.BlocklistRepository(context) }
     private var currentActiveUserId: String? = null
     private var cacheCollectionJob: kotlinx.coroutines.Job? = null
 
@@ -76,8 +80,12 @@ class ConversationViewModel @Inject constructor(
         // 绑定新账号对应数据库的 Flow
         cacheCollectionJob = viewModelScope.launch {
             cacheRepository.getCachedConversations(userId).collect { cachedConversations ->
-                _conversations.value = cachedConversations
-                if (cachedConversations.isNotEmpty()) {
+                val blockedSet = blocklistRepository.getBlockedUserIdsSet()
+                val filtered = if (blockedSet.isEmpty()) cachedConversations else cachedConversations.filter { conv ->
+                    !(conv.chatType == 1 && conv.chatId in blockedSet)
+                }
+                _conversations.value = filtered
+                if (filtered.isNotEmpty()) {
                     _uiState.value = _uiState.value.copy(isLoading = false)
                 }
             }
@@ -105,7 +113,11 @@ class ConversationViewModel @Inject constructor(
             }
             conversationRepository.getConversations()
                 .onSuccess { conversationList ->
-                    _conversations.value = conversationList
+                    val blockedSet = blocklistRepository.getBlockedUserIdsSet()
+                    val filtered = if (blockedSet.isEmpty()) conversationList else conversationList.filter { conv ->
+                        !(conv.chatType == 1 && conv.chatId in blockedSet)
+                    }
+                    _conversations.value = filtered
                     _uiState.value = _uiState.value.copy(isLoading = false)
                     // 缓存到当前账号专属本地数据库
                     cacheRepository.cacheConversations(conversationList, currentActiveUserId)
@@ -113,7 +125,11 @@ class ConversationViewModel @Inject constructor(
                 .onFailure { error ->
                     val cachedConversations = cacheRepository.getCachedConversationsSync(currentActiveUserId)
                     if (cachedConversations.isNotEmpty()) {
-                        _conversations.value = cachedConversations
+                        val blockedSet = blocklistRepository.getBlockedUserIdsSet()
+                        val filtered = if (blockedSet.isEmpty()) cachedConversations else cachedConversations.filter { conv ->
+                            !(conv.chatType == 1 && conv.chatId in blockedSet)
+                        }
+                        _conversations.value = filtered
                         _uiState.value = _uiState.value.copy(isLoading = false)
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -159,6 +175,11 @@ class ConversationViewModel @Inject constructor(
             val isPrivateChat = message.chatId == message.recvId
             val targetChatId = if (isPrivateChat) message.sender.chatId else message.chatId ?: ""
             val targetChatType = if (isPrivateChat) message.sender.chatType else message.chatType ?: 0
+            
+            if (blocklistRepository.isUserBlocked(message.sender.chatId) || (isPrivateChat && blocklistRepository.isUserBlocked(targetChatId))) {
+                Log.d("ConversationViewModel", "Message from blocked user ignored for conversation: $targetChatId")
+                return@launch
+            }
             
             val conversationIndex = currentConversations.indexOfFirst { it.chatId == targetChatId }
             
@@ -314,7 +335,15 @@ class ConversationViewModel @Inject constructor(
             try {
                 userRepository.getStickyList()
                     .onSuccess { stickyData ->
-                        _stickyData.value = stickyData
+                        val blockedSet = blocklistRepository.getBlockedUserIdsSet()
+                        val filteredSticky = if (blockedSet.isEmpty()) {
+                            stickyData.sticky
+                        } else {
+                            stickyData.sticky.filter { item ->
+                                !(item.chatType == 1 && item.chatId in blockedSet)
+                            }
+                        }
+                        _stickyData.value = stickyData.copy(sticky = filteredSticky)
                         _stickyLoading.value = false
                     }
                     .onFailure { error ->

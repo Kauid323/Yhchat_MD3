@@ -212,9 +212,11 @@ fun MessageItem(
         {
             val audioUrl = message.content.audioUrl!!
             val senderName = message.sender.name
+            val dur = message.content.duration ?: 0L
+            val durMs = if (dur > 600L) dur else dur * 1000L
+            val displayTitle = if (senderName.isNotBlank()) "$senderName 的语音" else "语音消息"
             coroutineScope.launch {
-                // 弹出选择列表的逻辑交给调用处的 showAddToPlaylistDialog，这里先追加到当前播放队列
-                appendToAutoQueue(context, senderName, audioUrl, "CHAT")
+                appendToAutoQueue(context, displayTitle, audioUrl, "CHAT", durMs)
                 Toast.makeText(context, "已加入播放列表", Toast.LENGTH_SHORT).show()
             }
         }

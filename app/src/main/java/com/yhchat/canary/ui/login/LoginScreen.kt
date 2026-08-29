@@ -1,13 +1,18 @@
 package com.yhchat.canary.ui.login
 
 import android.graphics.BitmapFactory
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -213,380 +218,432 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // 分段选择器（手机号 / 邮箱 / Token）
-            Row(
+            // 现代化胶囊分段选择器（手机号 / 邮箱 / Token）
+            val loginTabs = listOf(
+                Triple("短信登录", Icons.Default.Phone, 0),
+                Triple("密码登录", Icons.Default.Lock, 1),
+                Triple("Token", Icons.Default.Key, 2)
+            )
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(vertical = 2.dp)
             ) {
-                val tabs = listOf("短信登录", "密码登录", "Token 登录")
-                tabs.forEachIndexed { index, label ->
-                    val isSelected = selectedTab == index
-                    val tabBgColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "tabBgColor"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(tabBgColor)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                selectedTab = index
-                                viewModel.clearError()
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    loginTabs.forEach { (label, icon, index) ->
+                        val isSelected = selectedTab == index
+                        val tabBgColor by animateColorAsState(
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "loginTabBg"
                         )
+                        val contentColor by animateColorAsState(
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "loginTabColor"
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = tabBgColor,
+                            tonalElevation = if (isSelected) 3.dp else 0.dp,
+                            shadowElevation = if (isSelected) 1.5.dp else 0.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    selectedTab = index
+                                    viewModel.clearError()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = contentColor,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // 表单输入区
+            // 表单输入区 - 丝滑左右平滑过渡
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                when (selectedTab) {
-                    0 -> {
-                        // 手机号输入
-                        YhOutlinedTextField(
-                            value = mobile,
-                            onValueChange = { 
-                                mobile = it
-                                viewModel.clearError()
-                            },
-                            label = { Text("手机号") },
-                            placeholder = { Text("请输入手机号码") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Phone,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            trailingIcon = {
-                                if (mobile.isNotEmpty()) {
-                                    YhIconButton(onClick = { mobile = "" }) {
-                                        Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
-                                    }
-                                }
-                            },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Phone,
-                                imeAction = ImeAction.Next
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-
-                        // 图形验证码 - 人体工学并列设计（输入框与图片相邻并支持直接点击刷新）
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            YhOutlinedTextField(
-                                value = imageCaptcha,
-                                onValueChange = { 
-                                    imageCaptcha = it
-                                    viewModel.clearError()
-                                },
-                                label = { Text("图形验证码") },
-                                placeholder = { Text("请输入图形码") },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Text,
-                                    imeAction = ImeAction.Next
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                                ),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-
-                            // 图形码预览及点击刷新区域
-                            Surface(
-                                modifier = Modifier
-                                    .height(56.dp)
-                                    .width(112.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .border(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable(enabled = !uiState.isLoading) {
-                                        viewModel.getCaptcha()
+                AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            (slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { width -> width } +
+                                    fadeIn(animationSpec = tween(220))) togetherWith
+                                    (slideOutHorizontally(animationSpec = tween(200, easing = FastOutSlowInEasing)) { width -> -width } +
+                                            fadeOut(animationSpec = tween(180)))
+                        } else {
+                            (slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { width -> -width } +
+                                    fadeIn(animationSpec = tween(220))) togetherWith
+                                    (slideOutHorizontally(animationSpec = tween(200, easing = FastOutSlowInEasing)) { width -> width } +
+                                            fadeOut(animationSpec = tween(180)))
+                        }
+                    },
+                    label = "LoginFormTransition"
+                ) { targetTab ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        when (targetTab) {
+                            0 -> {
+                                // 手机号输入
+                                YhOutlinedTextField(
+                                    value = mobile,
+                                    onValueChange = { 
+                                        mobile = it
+                                        viewModel.clearError()
                                     },
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    if (captchaBitmap != null) {
-                                        Image(
-                                            bitmap = captchaBitmap,
-                                            contentDescription = "验证码，点击刷新",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Fit
+                                    label = { Text("手机号") },
+                                    placeholder = { Text("请输入手机号码") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Phone,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                    } else {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Refresh,
-                                                contentDescription = "刷新",
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = "点击加载",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 短信验证码
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            YhOutlinedTextField(
-                                value = smsCaptcha,
-                                onValueChange = { 
-                                    smsCaptcha = it
-                                    viewModel.clearError()
-                                },
-                                label = { Text("短信验证码") },
-                                placeholder = { Text("请输入6位验证码") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.MarkEmailRead,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number,
-                                    imeAction = ImeAction.Done
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onDone = {
-                                        if (isFormValid) {
-                                            focusManager.clearFocus()
-                                            viewModel.loginWithCaptcha(mobile.trim(), smsCaptcha.trim())
-                                        }
-                                    }
-                                ),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-
-                            // 发送验证码按钮
-                            YhButton(
-                                onClick = { 
-                                    focusManager.clearFocus()
-                                    viewModel.getSmsCaptcha(mobile.trim(), imageCaptcha.trim())
-                                },
-                                enabled = !uiState.isLoading && smsCountdown == 0 && mobile.isNotBlank() && imageCaptcha.isNotBlank(),
-                                modifier = Modifier
-                                    .height(60.dp)
-                                    .widthIn(min = 108.dp)
-                            ) {
-                                Text(
-                                    text = if (smsCountdown > 0) "${smsCountdown}s" else "获取验证码",
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-
-                        // 短信成功发送提示
-                        if (uiState.smsSuccess && smsCountdown > 0) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "短信验证码已发送至手机，请注意查收",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-
-                    1 -> {
-                        // 邮箱输入
-                        YhOutlinedTextField(
-                            value = email,
-                            onValueChange = { 
-                                email = it
-                                viewModel.clearError()
-                            },
-                            label = { Text("邮箱地址") },
-                            placeholder = { Text("请输入你的邮箱") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Email,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            trailingIcon = {
-                                if (email.isNotEmpty()) {
-                                    YhIconButton(onClick = { email = "" }) {
-                                        Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
-                                    }
-                                }
-                            },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Email,
-                                imeAction = ImeAction.Next
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-
-                        // 密码输入
-                        YhOutlinedTextField(
-                            value = password,
-                            onValueChange = { 
-                                password = it
-                                viewModel.clearError()
-                            },
-                            label = { Text("登录密码") },
-                            placeholder = { Text("请输入密码") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Password,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    if (isFormValid) {
-                                        focusManager.clearFocus()
-                                        viewModel.loginWithEmail(email.trim(), password.trim())
-                                    }
-                                }
-                            ),
-                            trailingIcon = {
-                                YhIconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                    }
-
-                    2 -> {
-                        // Token 输入
-                        YhOutlinedTextField(
-                            value = tokenInput,
-                            onValueChange = { 
-                                tokenInput = it
-                                viewModel.clearError()
-                            },
-                            label = { Text("账号 Token") },
-                            placeholder = { Text("粘贴已有的用户 Token 凭证...") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Key,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            trailingIcon = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (tokenInput.isEmpty()) {
-                                        YhIconButton(onClick = {
-                                            val clip = clipboardManager.getText()?.text
-                                            if (!clip.isNullOrBlank()) {
-                                                tokenInput = clip.trim()
-                                                viewModel.clearError()
+                                    },
+                                    trailingIcon = {
+                                        if (mobile.isNotEmpty()) {
+                                            YhIconButton(onClick = { mobile = "" }) {
+                                                Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
                                             }
-                                        }) {
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Phone,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                // 图形验证码 - 人体工学并列设计（输入框与图片相邻并支持直接点击刷新）
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    YhOutlinedTextField(
+                                        value = imageCaptcha,
+                                        onValueChange = { 
+                                            imageCaptcha = it
+                                            viewModel.clearError()
+                                        },
+                                        label = { Text("图形验证码") },
+                                        placeholder = { Text("请输入图形码") },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Text,
+                                            imeAction = ImeAction.Next
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+
+                                    // 图形码预览及点击刷新区域
+                                    Surface(
+                                        modifier = Modifier
+                                            .height(56.dp)
+                                            .width(112.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .border(
+                                                width = 1.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable(enabled = !uiState.isLoading) {
+                                                viewModel.getCaptcha()
+                                            },
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            if (captchaBitmap != null) {
+                                                Image(
+                                                    bitmap = captchaBitmap,
+                                                    contentDescription = "验证码，点击刷新",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Fit
+                                                )
+                                            } else {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Refresh,
+                                                        contentDescription = "刷新",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = "点击加载",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 短信验证码
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    YhOutlinedTextField(
+                                        value = smsCaptcha,
+                                        onValueChange = { 
+                                            smsCaptcha = it
+                                            viewModel.clearError()
+                                        },
+                                        label = { Text("短信验证码") },
+                                        placeholder = { Text("请输入6位验证码") },
+                                        leadingIcon = {
                                             Icon(
-                                                imageVector = Icons.Default.ContentPaste,
-                                                contentDescription = "粘贴"
+                                                imageVector = Icons.Default.MarkEmailRead,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Number,
+                                            imeAction = ImeAction.Done
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = {
+                                                if (isFormValid) {
+                                                    focusManager.clearFocus()
+                                                    viewModel.loginWithCaptcha(mobile.trim(), smsCaptcha.trim())
+                                                }
+                                            }
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+
+                                    // 发送验证码按钮
+                                    YhButton(
+                                        onClick = { 
+                                            focusManager.clearFocus()
+                                            viewModel.getSmsCaptcha(mobile.trim(), imageCaptcha.trim())
+                                        },
+                                        enabled = !uiState.isLoading && smsCountdown == 0 && mobile.isNotBlank() && imageCaptcha.isNotBlank(),
+                                        modifier = Modifier
+                                            .height(60.dp)
+                                            .widthIn(min = 108.dp)
+                                    ) {
+                                        Text(
+                                            text = if (smsCountdown > 0) "${smsCountdown}s" else "获取验证码",
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    }
+                                }
+
+                                // 短信成功发送提示
+                                if (uiState.smsSuccess && smsCountdown > 0) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "短信验证码已发送至手机，请注意查收",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+
+                            1 -> {
+                                // 邮箱输入
+                                YhOutlinedTextField(
+                                    value = email,
+                                    onValueChange = { 
+                                        email = it
+                                        viewModel.clearError()
+                                    },
+                                    label = { Text("邮箱地址") },
+                                    placeholder = { Text("请输入你的邮箱") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Email,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (email.isNotEmpty()) {
+                                            YhIconButton(onClick = { email = "" }) {
+                                                Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Email,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                // 密码输入
+                                YhOutlinedTextField(
+                                    value = password,
+                                    onValueChange = { 
+                                        password = it
+                                        viewModel.clearError()
+                                    },
+                                    label = { Text("登录密码") },
+                                    placeholder = { Text("请输入密码") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Password,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = {
+                                            if (isFormValid) {
+                                                focusManager.clearFocus()
+                                                viewModel.loginWithEmail(email.trim(), password.trim())
+                                            }
+                                        }
+                                    ),
+                                    trailingIcon = {
+                                        YhIconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                            Icon(
+                                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
                                             )
                                         }
-                                    } else {
-                                        YhIconButton(onClick = { tokenInput = "" }) {
-                                            Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
-                                        }
-                                    }
-                                }
-                            },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Text,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    if (isFormValid) {
-                                        focusManager.clearFocus()
-                                        viewModel.loginWithToken(tokenInput.trim())
-                                    }
-                                }
-                            ),
-                            maxLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
 
-                        Text(
-                            text = "可通过粘贴旧设备或授权提取的 Token 快速登入账号",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
+                            2 -> {
+                                // Token 输入
+                                YhOutlinedTextField(
+                                    value = tokenInput,
+                                    onValueChange = { 
+                                        tokenInput = it
+                                        viewModel.clearError()
+                                    },
+                                    label = { Text("账号 Token") },
+                                    placeholder = { Text("粘贴已有的用户 Token 凭证...") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Key,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (tokenInput.isEmpty()) {
+                                                YhIconButton(onClick = {
+                                                    val clip = clipboardManager.getText()?.text
+                                                    if (!clip.isNullOrBlank()) {
+                                                        tokenInput = clip.trim()
+                                                        viewModel.clearError()
+                                                    }
+                                                }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.ContentPaste,
+                                                        contentDescription = "粘贴"
+                                                    )
+                                                }
+                                            } else {
+                                                YhIconButton(onClick = { tokenInput = "" }) {
+                                                    Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
+                                                }
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Text,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = {
+                                            if (isFormValid) {
+                                                focusManager.clearFocus()
+                                                viewModel.loginWithToken(tokenInput.trim())
+                                            }
+                                        }
+                                    ),
+                                    maxLines = 3,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Text(
+                                    text = "可通过粘贴旧设备或授权提取的 Token 快速登入账号",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
 

@@ -508,7 +508,8 @@ class AudioPlayerService : Service() {
                 val currentIdx = items.indexOfFirst {
                     (currentAudioUrl != null && it.url == currentAudioUrl) ||
                     (currentContentUri != null && it.url == currentContentUri) ||
-                    it.title == currentTitle
+                    (currentLocalPath != null && it.url == currentLocalPath) ||
+                    (it.title == currentTitle && currentTitle.isNotBlank() && currentTitle != "语音消息" && !currentTitle.endsWith("的语音"))
                 }
                 val nextIdx = when (mode) {
                     AudioPlayMode.SHUFFLE -> {
@@ -526,10 +527,23 @@ class AudioPlayerService : Service() {
                     AudioPlayMode.SEQUENCE -> if (currentIdx in 0 until items.size - 1) currentIdx + 1 else 0
                 }
                 val nextItem = items[nextIdx]
-                if (nextItem.url.startsWith("content://") || nextItem.url.startsWith("file://")) {
-                    playSavedAudioUri(nextItem.url, nextItem.title)
+                val targetUrl = if (nextItem.source.startsWith("NCM")) {
+                    val songId = nextItem.source.removePrefix("NCM:").toLongOrNull()
+                    if (songId != null) {
+                        val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
+                        if (!fresh.isNullOrBlank()) {
+                            if (fresh != nextItem.url) {
+                                dao.updateItem(nextItem.copy(url = fresh))
+                            }
+                            fresh
+                        } else nextItem.url
+                    } else nextItem.url
+                } else nextItem.url
+
+                if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
+                    playSavedAudioUri(targetUrl, nextItem.title)
                 } else {
-                    playAudio(nextItem.url, nextItem.title)
+                    playAudio(targetUrl, nextItem.title)
                 }
             } else if (currentIsSavedAudio && !currentContentUri.isNullOrBlank()) {
                 if (savedAudioQueue.isEmpty()) {
@@ -557,7 +571,8 @@ class AudioPlayerService : Service() {
                 val currentIdx = items.indexOfFirst {
                     (currentAudioUrl != null && it.url == currentAudioUrl) ||
                     (currentContentUri != null && it.url == currentContentUri) ||
-                    it.title == currentTitle
+                    (currentLocalPath != null && it.url == currentLocalPath) ||
+                    (it.title == currentTitle && currentTitle.isNotBlank() && currentTitle != "语音消息" && !currentTitle.endsWith("的语音"))
                 }
                 val prevIdx = when (mode) {
                     AudioPlayMode.SHUFFLE -> {
@@ -575,10 +590,23 @@ class AudioPlayerService : Service() {
                     AudioPlayMode.SEQUENCE -> if (currentIdx > 0) currentIdx - 1 else items.size - 1
                 }
                 val prevItem = items[prevIdx]
-                if (prevItem.url.startsWith("content://") || prevItem.url.startsWith("file://")) {
-                    playSavedAudioUri(prevItem.url, prevItem.title)
+                val targetUrl = if (prevItem.source.startsWith("NCM")) {
+                    val songId = prevItem.source.removePrefix("NCM:").toLongOrNull()
+                    if (songId != null) {
+                        val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
+                        if (!fresh.isNullOrBlank()) {
+                            if (fresh != prevItem.url) {
+                                dao.updateItem(prevItem.copy(url = fresh))
+                            }
+                            fresh
+                        } else prevItem.url
+                    } else prevItem.url
+                } else prevItem.url
+
+                if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
+                    playSavedAudioUri(targetUrl, prevItem.title)
                 } else {
-                    playAudio(prevItem.url, prevItem.title)
+                    playAudio(targetUrl, prevItem.title)
                 }
             } else if (currentIsSavedAudio && !currentContentUri.isNullOrBlank()) {
                 if (savedAudioQueue.isEmpty()) {
@@ -598,7 +626,6 @@ class AudioPlayerService : Service() {
     private fun playAudio(audioUrl: String, title: String) {
         // 如果正在播放相同的音频，则停止
         if (currentAudioUrl == audioUrl && isPlaying) {
-
             stopAudio()
             return
         }
@@ -614,102 +641,110 @@ class AudioPlayerService : Service() {
         currentDurationMs = 0L
 
         requestAudioFocus()
-        
-        // 开始前台服务
-        startForeground(NOTIFICATION_ID, createNotification(title, "正在缓冲..."))
+        startForeground(NOTIFICATION_ID, createNotification(title, "正在加载..."))
 
-        // 优先：若存在并验证通过的缓存文件，则直接播放缓存（避免重复请求）
-        audioCacheManager.getCachedAudioFile(audioUrl)?.let { cachedFile ->
-            if (audioCacheManager.verifyCachedFile(audioUrl)) {
-                updateNotification(title, "从缓存加载")
-                serviceScope.launch {
-                    playAudioFile(cachedFile, title)
-                }
-                return
-            }
-        }
-
-        // 否则：流式播放（边下边播），不再等待整段下载完成
-        serviceScope.launch(Dispatchers.Main) {
+        serviceScope.launch(Dispatchers.IO) {
             try {
-                val uri = Uri.parse(audioUrl)
-                val headers = buildStreamHeadersForUrl(audioUrl)
+                // 1. 优先检查本地缓存
+                val cachedFile = audioCacheManager.getCachedAudioFile(audioUrl)
+                if (cachedFile != null && audioCacheManager.verifyCachedFile(audioUrl)) {
+                    withContext(Dispatchers.Main) {
+                        updateNotification(title, "从缓存加载")
+                    }
+                    playAudioFile(cachedFile, title)
+                    return@launch
+                }
 
-                mediaPlayer = MediaPlayer().apply {
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .build()
-                    )
-                    setDataSource(this@AudioPlayerService, uri, headers)
-                    prepareAsync()
+                // 2. 使用 OkHttp 高速下载到缓存（极速响应，消除网络原生流式挂起与多次点击问题）
+                val downloadedFile = getOrDownloadAudio(audioUrl, title)
+                if (downloadedFile != null && downloadedFile.exists()) {
+                    playAudioFile(downloadedFile, title)
+                    return@launch
+                }
 
-                    setOnPreparedListener {
-                        start()
-                        this@AudioPlayerService.isPlaying = true
-                        currentDurationMs = this.duration.toLong().coerceAtLeast(0L)
-                        updateMetadata(title = title, durationMs = currentDurationMs)
-                        val restored = restoreProgressForCurrentAudio()
-                        if (restored > 0L && restored < currentDurationMs) {
-                            runCatching { seekTo(restored) }
-                        }
-                        updatePlaybackState(playing = true)
-                        updateNotification(title, "正在播放")
-                        startProgressUpdates()
+                // 3. 降级：流式边下边播
+                withContext(Dispatchers.Main) {
+                    val uri = Uri.parse(audioUrl)
+                    val headers = buildStreamHeadersForUrl(audioUrl)
 
-                        // 异步启动网易云听歌识别与热更新（流式播放）
-                        serviceScope.launch(Dispatchers.IO) {
-                            try {
-                                val audioFile = audioCacheManager.getCachedAudioFile(audioUrl)
-                                    ?: downloadAudioChunkForRecognition(audioUrl)
-                                if (audioFile != null && audioFile.exists()) {
-                                    val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
-                                    if (matched != null) {
-                                        withContext(Dispatchers.Main) {
-                                            updateAudioInfo(
-                                                newTitle = matched.name,
-                                                newArtist = matched.artist,
-                                                newCoverUrl = matched.coverUrl
-                                            )
+                    mediaPlayer = MediaPlayer().apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build()
+                        )
+                        setDataSource(this@AudioPlayerService, uri, headers)
+                        prepareAsync()
+
+                        setOnPreparedListener {
+                            start()
+                            this@AudioPlayerService.isPlaying = true
+                            currentDurationMs = this.duration.toLong().coerceAtLeast(0L)
+                            updateMetadata(title = title, durationMs = currentDurationMs)
+                            val restored = restoreProgressForCurrentAudio()
+                            if (restored > 0L && restored < currentDurationMs) {
+                                runCatching { seekTo(restored) }
+                            }
+                            updatePlaybackState(playing = true)
+                            updateNotification(title, "正在播放")
+                            startProgressUpdates()
+
+                            // 异步启动听歌识别
+                            serviceScope.launch(Dispatchers.IO) {
+                                try {
+                                    val audioFile = audioCacheManager.getCachedAudioFile(audioUrl)
+                                        ?: downloadAudioChunkForRecognition(audioUrl)
+                                    if (audioFile != null && audioFile.exists()) {
+                                        val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
+                                        if (matched != null) {
+                                            withContext(Dispatchers.Main) {
+                                                updateAudioInfo(
+                                                    newTitle = matched.name,
+                                                    newArtist = matched.artist,
+                                                    newCoverUrl = matched.coverUrl
+                                                )
+                                            }
                                         }
                                     }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "流式听歌识别失败", e)
                                 }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "流式听歌识别失败", e)
                             }
                         }
-                    }
 
-                    setOnCompletionListener {
-                        handlePlaybackCompletion()
-                    }
-
-                    setOnErrorListener { _, what, extra ->
-                        Log.e(TAG, "MediaPlayer错误(流式): what=$what, extra=$extra")
-                        this@AudioPlayerService.isPlaying = false
-                        saveProgressForCurrentAudio(getCurrentPositionMs())
-                        stopProgressUpdates()
-                        updatePlaybackState(playing = false)
-                        updateNotification(title, "播放出错")
-                        stopSelf()
-                        true
-                    }
-
-                    setOnInfoListener { _, what, _ ->
-                        when (what) {
-                            MediaPlayer.MEDIA_INFO_BUFFERING_START -> updateNotification(title, "缓冲中...")
-                            MediaPlayer.MEDIA_INFO_BUFFERING_END -> if (this@AudioPlayerService.isPlaying) {
-                                updateNotification(title, "正在播放")
-                            }
+                        setOnCompletionListener {
+                            handlePlaybackCompletion()
                         }
-                        false
+
+                        setOnErrorListener { _, what, extra ->
+                            Log.e(TAG, "MediaPlayer错误(流式): what=$what, extra=$extra")
+                            this@AudioPlayerService.isPlaying = false
+                            saveProgressForCurrentAudio(getCurrentPositionMs())
+                            stopProgressUpdates()
+                            updatePlaybackState(playing = false)
+                            updateNotification(title, "播放出错")
+                            stopSelf()
+                            true
+                        }
+
+                        setOnInfoListener { _, what, _ ->
+                            when (what) {
+                                MediaPlayer.MEDIA_INFO_BUFFERING_START -> updateNotification(title, "缓冲中...")
+                                MediaPlayer.MEDIA_INFO_BUFFERING_END -> if (this@AudioPlayerService.isPlaying) {
+                                    updateNotification(title, "正在播放")
+                                }
+                            }
+                            false
+                        }
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "流式播放音频失败", e)
-                updateNotification(title, "播放失败")
-                stopSelf()
+                Log.e(TAG, "播放音频失败", e)
+                withContext(Dispatchers.Main) {
+                    updateNotification(title, "播放失败")
+                    stopSelf()
+                }
             }
         }
     }
@@ -1154,6 +1189,9 @@ class AudioPlayerService : Service() {
             builder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, it)
         }
         currentAudioUrl?.let {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, it)
+        }
+        currentLocalPath?.let {
             builder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, it)
         }
         

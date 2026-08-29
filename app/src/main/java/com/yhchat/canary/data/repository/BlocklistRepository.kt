@@ -60,11 +60,27 @@ class BlocklistRepository(private val context: Context) {
     }
     
     /**
+     * 获取所有被屏蔽用户的 ID 集合（若黑名单未启用则返回空集合）
+     */
+    suspend fun getBlockedUserIdsSet(): Set<String> {
+        if (!isBlocklistEnabled()) return emptySet()
+        return try {
+            blockedUserDao.getAllBlockedUsersSync().map { it.userId }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
+    }
+    
+    /**
      * 检查用户是否被屏蔽
      */
     suspend fun isUserBlocked(userId: String): Boolean {
-        if (!isBlocklistEnabled()) return false
-        return blockedUserDao.isUserBlocked(userId)
+        if (!isBlocklistEnabled() || userId.isBlank()) return false
+        return try {
+            blockedUserDao.isUserBlocked(userId)
+        } catch (e: Exception) {
+            false
+        }
     }
     
     /**

@@ -25,6 +25,7 @@ data class AudioPlaylistItem(
     val title: String,            // 显示标题
     val url: String,              // 网络 URL 或本地 content:// URI
     val source: String,           // "CHAT" | "LOCAL" | "ONLINE"
+    val durationMs: Long = 0L,    // 音频时长（毫秒）
     val addedAt: Long = System.currentTimeMillis(),
     val sortOrder: Int = 0        // 在列表内的排序
 )

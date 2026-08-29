@@ -10,6 +10,9 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -56,7 +60,7 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 工具函数
+// 工具与分类定义
 // ─────────────────────────────────────────────────────────────────────────────
 
 private fun formatTime(ms: Long): String {
@@ -65,6 +69,26 @@ private fun formatTime(ms: Long): String {
     val seconds = totalSeconds % 60
     return String.format("%d:%02d", minutes, seconds)
 }
+
+enum class AudioCategory(val label: String, val badgeBg: Color, val badgeText: Color) {
+    YUNHU("云湖音频", Color(0xFFE0F2F1), Color(0xFF00796B)),
+    LOCAL("本地音频", Color(0xFFEDE7F6), Color(0xFF512DA8)),
+    NETWORK("网络音频", Color(0xFFFFEBEE), Color(0xFFC62828))
+}
+
+fun resolveAudioCategory(url: String, source: String, title: String): AudioCategory {
+    return when {
+        source.startsWith("NCM") || source == "ONLINE" || source == "NETWORK" -> AudioCategory.NETWORK
+        url.startsWith("content://") || url.startsWith("file://") || source == "LOCAL" -> AudioCategory.LOCAL
+        source == "CHAT" || url.contains("jwznb.com") || url.contains("yhchat") || title.contains("语音") -> AudioCategory.YUNHU
+        url.contains("music.163.com") || url.contains("126.net") -> AudioCategory.NETWORK
+        else -> AudioCategory.NETWORK
+    }
+}
+
+private data class TabItem(val label: String, val icon: ImageVector)
+private data class LocalAudioItem(val title: String, val uri: String, val durationMs: Long = 0L)
+private data class AddToPlaylistTarget(val url: String, val title: String, val source: String, val durationMs: Long = 0L)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 获取或创建"当前播放"自动队列
@@ -83,11 +107,23 @@ suspend fun getOrCreateAutoQueue(context: Context): AudioPlaylist {
     }
 }
 
-/** 将一首音频追加到"当前播放"队列（URL 相同则跳过） */
-suspend fun appendToAutoQueue(context: Context, title: String, url: String, source: String = "CHAT") {
+/** 将一首音频追加到"当前播放"队列（URL 相同则更新时长并跳过） */
+suspend fun appendToAutoQueue(
+    context: Context,
+    title: String,
+    url: String,
+    source: String = "CHAT",
+    durationMs: Long = 0L
+) {
     val dao = AppDatabase.getDatabase(context).audioPlaylistDao()
     val playlist = getOrCreateAutoQueue(context)
-    if (dao.findItemByUrl(playlist.id, url) != null) return // 已存在则跳过
+    val existing = dao.findItemByUrl(playlist.id, url)
+    if (existing != null) {
+        if (durationMs > 0L && existing.durationMs == 0L) {
+            dao.updateItem(existing.copy(durationMs = durationMs))
+        }
+        return
+    }
     val maxOrder = dao.getMaxSortOrder(playlist.id) ?: -1
     dao.insertItem(
         AudioPlaylistItem(
@@ -96,6 +132,7 @@ suspend fun appendToAutoQueue(context: Context, title: String, url: String, sour
             title = title,
             url = url,
             source = source,
+            durationMs = durationMs,
             sortOrder = maxOrder + 1
         )
     )
@@ -115,6 +152,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
     var optimisticIsPlaying by remember { mutableStateOf(false) }
 
     var title by remember { mutableStateOf("") }
+    var playingMediaUri by remember { mutableStateOf<String?>(null) }
     var coverUrl by remember { mutableStateOf<String?>(null) }
     var progressMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
@@ -138,6 +176,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                 realIsPlaying = state?.state == PlaybackStateCompat.STATE_PLAYING
                 optimisticIsPlaying = realIsPlaying
                 title = meta?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: ""
+                playingMediaUri = meta?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
                 coverUrl = meta?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
                     ?: meta?.getString(MediaMetadataCompat.METADATA_KEY_ART_URI)
                 progressMs = state?.position ?: 0L
@@ -159,6 +198,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                             title = newTitle
                             hasEverPlayed = true
                         }
+                        playingMediaUri = meta?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
                         coverUrl = meta?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
                             ?: meta?.getString(MediaMetadataCompat.METADATA_KEY_ART_URI)
                         durationMs = meta?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: durationMs
@@ -170,6 +210,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                 realIsPlaying = false
                 optimisticIsPlaying = false
                 hasEverPlayed = false
+                playingMediaUri = null
             }
         }
         context.bindService(
@@ -180,18 +221,16 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
         onDispose { runCatching { context.unbindService(connection) } }
     }
 
-    // 轮询播放进度
+    // 平滑轮询播放进度（50ms 连续插值）
     LaunchedEffect(mediaController, realIsPlaying) {
         while (isActive && realIsPlaying && mediaController != null) {
             val state = mediaController?.playbackState
-            if (state != null) {
+            if (state != null && state.state == PlaybackStateCompat.STATE_PLAYING) {
                 val timeDelta = android.os.SystemClock.elapsedRealtime() - state.lastPositionUpdateTime
-                val cur = if (state.state == PlaybackStateCompat.STATE_PLAYING)
-                    (state.position + (timeDelta * state.playbackSpeed)).toLong()
-                else state.position
-                progressMs = cur.coerceAtLeast(0L)
+                val cur = (state.position + (timeDelta * state.playbackSpeed)).toLong()
+                progressMs = cur.coerceIn(0L, durationMs.coerceAtLeast(1L))
             }
-            delay(500)
+            delay(50)
         }
     }
 
@@ -239,7 +278,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                         optimisticIsPlaying = newState
                         debounceJob?.cancel()
                         debounceJob = coroutineScope.launch {
-                            delay(300)
+                            delay(200)
                             if (newState) mediaController?.transportControls?.play()
                             else mediaController?.transportControls?.pause()
                         }
@@ -280,6 +319,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                     onClick = {
                         AudioPlayerService.stopPlayAudio(context)
                         title = ""
+                        playingMediaUri = null
                         coverUrl = null
                         progressMs = 0L
                         durationMs = 0L
@@ -302,6 +342,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
     if (showBottomSheet) {
         AudioPlayerBottomSheet(
             title = title,
+            playingMediaUri = playingMediaUri,
             coverUrl = coverUrl,
             progressMs = progressMs,
             durationMs = durationMs,
@@ -313,7 +354,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
                 optimisticIsPlaying = newState
                 debounceJob?.cancel()
                 debounceJob = coroutineScope.launch {
-                    delay(300)
+                    delay(200)
                     if (newState) mediaController?.transportControls?.play()
                     else mediaController?.transportControls?.pause()
                 }
@@ -327,6 +368,7 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
             onClosePlayer = {
                 AudioPlayerService.stopPlayAudio(context)
                 title = ""
+                playingMediaUri = null
                 coverUrl = null
                 progressMs = 0L
                 durationMs = 0L
@@ -339,13 +381,14 @@ fun MiniAudioPlayerBar(modifier: Modifier = Modifier) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BottomSheet：分层结构（上层 Tab + 搜索，底层可滑动列表，前景浮动播放器）
+// BottomSheet：分层结构（现代胶囊 Tab + 搜索，底层可滑动列表，前景浮动播放器）
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun AudioPlayerBottomSheet(
     title: String,
+    playingMediaUri: String?,
     coverUrl: String?,
     progressMs: Long,
     durationMs: Long,
@@ -373,10 +416,10 @@ private fun AudioPlayerBottomSheet(
     var selectedPlaylistForView by remember { mutableStateOf<AudioPlaylist?>(null) }
 
     // 本地已保存录音列表
-    var localAudios by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) } // title to uri
+    var localAudios by remember { mutableStateOf<List<LocalAudioItem>>(emptyList()) }
 
-    // 本地/队列搜索结果
-    var searchResults by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    // 搜索结果
+    var searchResults by remember { mutableStateOf<List<AudioPlaylistItem>>(emptyList()) }
 
     // 网易云音乐搜索状态
     var ncmSearchResults by remember { mutableStateOf<List<NcmSong>>(emptyList()) }
@@ -385,15 +428,16 @@ private fun AudioPlayerBottomSheet(
 
     // 对话框状态
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
-    var showAddToPlaylistDialog by remember { mutableStateOf<Pair<String, String>?>(null) } // url to title
+    var showAddToPlaylistDialog by remember { mutableStateOf<AddToPlaylistTarget?>(null) }
     var newPlaylistName by remember { mutableStateOf("") }
     var showRenameDialog by remember { mutableStateOf<AudioPlaylist?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
-    // 加载本地录音
+    // 加载本地录音（读取时长）
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val results = mutableListOf<Pair<String, String>>()
+        withContext(Dispatchers.IO) {
+            val results = mutableListOf<LocalAudioItem>()
             try {
                 val resolver = context.contentResolver
                 val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
@@ -402,7 +446,8 @@ private fun AudioPlayerBottomSheet(
 
                 val projection = arrayOf(
                     MediaStore.MediaColumns._ID,
-                    MediaStore.MediaColumns.DISPLAY_NAME
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.Audio.Media.DURATION
                 )
                 val selection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
                     "${MediaStore.MediaColumns.RELATIVE_PATH} = ?" else null
@@ -413,15 +458,41 @@ private fun AudioPlayerBottomSheet(
                     ?.use { cursor ->
                         val idIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                         val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val durIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
                         while (cursor.moveToNext()) {
                             val id = cursor.getLong(idIdx)
                             val name = cursor.getString(nameIdx) ?: continue
+                            val dur = if (durIdx >= 0) cursor.getLong(durIdx) else 0L
                             val contentUri = android.content.ContentUris.withAppendedId(uri, id).toString()
-                            results.add(name.substringBeforeLast('.', name) to contentUri)
+                            results.add(LocalAudioItem(name.substringBeforeLast('.', name), contentUri, dur))
                         }
                     }
             } catch (_: Exception) {}
             localAudios = results
+        }
+    }
+
+    // 播放指定 Item 并自动刷新可能过期的网络 URL
+    val playPlaylistItem: (AudioPlaylistItem) -> Unit = { item ->
+        coroutineScope.launch {
+            val targetUrl = if (item.source.startsWith("NCM")) {
+                val songId = item.source.removePrefix("NCM:").toLongOrNull()
+                if (songId != null) {
+                    val fresh = NcmApiClient.getSongPlayUrl(songId).getOrNull()
+                    if (!fresh.isNullOrBlank()) {
+                        if (fresh != item.url) {
+                            dao.updateItem(item.copy(url = fresh))
+                        }
+                        fresh
+                    } else item.url
+                } else item.url
+            } else item.url
+
+            if (targetUrl.startsWith("content://") || targetUrl.startsWith("file://")) {
+                AudioPlayerService.startPlaySavedAudio(context, targetUrl, item.title)
+            } else {
+                onPlayUrl(targetUrl, item.title)
+            }
         }
     }
 
@@ -446,21 +517,19 @@ private fun AudioPlayerBottomSheet(
         val q = searchQuery.trim()
         when (selectedTab) {
             0 -> {
-                searchResults = currentPlaylistItems
-                    .filter { it.title.lowercase().contains(q.lowercase()) }
-                    .map { it.title to it.url }
+                searchResults = currentPlaylistItems.filter { it.title.lowercase().contains(q.lowercase()) }
             }
             1 -> {
                 isNcmSearching = true
-                delay(350) // 防抖
-                val res = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                delay(300) // 防抖
+                val res = withContext(Dispatchers.IO) {
                     NcmApiClient.searchSongs(q).getOrDefault(emptyList())
                 }
                 ncmSearchResults = res
                 isNcmSearching = false
             }
             2 -> {
-                searchResults = localAudios.filter { it.first.lowercase().contains(q.lowercase()) }
+                // 本地录音搜索
             }
             else -> {
                 searchResults = emptyList()
@@ -468,8 +537,12 @@ private fun AudioPlayerBottomSheet(
         }
     }
 
-    // 切歌函数（支持顺序、单曲循环、列表循环、随机播放）
-    val currentIndex = currentPlaylistItems.indexOfFirst { it.title == title }
+    // 切歌函数（严格按 URL 判定匹配当前索引，避免通用“语音消息”标题撞车）
+    val currentIndex = currentPlaylistItems.indexOfFirst {
+        (playingMediaUri != null && it.url == playingMediaUri) ||
+        (playingMediaUri == null && it.title == title && title.isNotEmpty() && title != "语音消息" && !title.endsWith("的语音"))
+    }
+
     fun playNext() {
         if (currentPlaylistItems.isEmpty()) return
         val nextIdx = when (playMode) {
@@ -488,7 +561,7 @@ private fun AudioPlayerBottomSheet(
             AudioPlayMode.SEQUENCE -> if (currentIndex in 0 until currentPlaylistItems.size - 1) currentIndex + 1 else 0
         }
         val nextItem = currentPlaylistItems[nextIdx]
-        onPlayUrl(nextItem.url, nextItem.title)
+        playPlaylistItem(nextItem)
     }
 
     fun playPrev() {
@@ -509,10 +582,11 @@ private fun AudioPlayerBottomSheet(
             AudioPlayMode.SEQUENCE -> if (currentIndex > 0) currentIndex - 1 else currentPlaylistItems.size - 1
         }
         val prevItem = currentPlaylistItems[prevIdx]
-        onPlayUrl(prevItem.url, prevItem.title)
+        playPlaylistItem(prevItem)
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    // 真正全屏展开展示
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var sheetHeightPx by remember { mutableIntStateOf(0) }
     var cardHeightPx by remember { mutableIntStateOf(0) }
     var minSheetOffset by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -526,33 +600,67 @@ private fun AudioPlayerBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.92f)
+                .fillMaxHeight(0.96f)
                 .onGloballyPositioned { coordinates ->
                     sheetHeightPx = coordinates.size.height
                 }
         ) {
-            // ── 顶部：Tab 栏 ──────────────────────────────────────────────
-            val tabs = listOf("当前播放", "网易云", "本地录音", "我的列表")
-            SecondaryTabRow(
-                selectedTabIndex = selectedTab,
+            // ── 顶部：现代胶囊风格 Tab 选择器 ─────────────────────────────
+            val tabs = listOf(
+                TabItem("当前播放", Icons.Default.QueueMusic),
+                TabItem("网络音乐", Icons.Default.CloudQueue),
+                TabItem("本地音频", Icons.Default.FolderOpen),
+                TabItem("我的歌单", Icons.Default.LibraryMusic)
+            )
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                containerColor = Color.Transparent,
-                divider = {}
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
             ) {
-                tabs.forEachIndexed { index, label ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index; searchQuery = "" },
-                        text = {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                            )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        val isSelected = selectedTab == index
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            tonalElevation = if (isSelected) 2.dp else 0.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { selectedTab = index; searchQuery = "" }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = tab.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
                         }
-                    )
+                    }
                 }
             }
 
@@ -563,7 +671,11 @@ private fun AudioPlayerBottomSheet(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = if (selectedTab == 1) "搜索网易云音乐 (歌曲/歌手)..." else "搜索音频名称...",
+                            text = when (selectedTab) {
+                                1 -> "搜索网易云音乐 (歌曲/歌手)..."
+                                2 -> "搜索本地录音音频..."
+                                else -> "搜索列表内音频..."
+                            },
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -591,7 +703,7 @@ private fun AudioPlayerBottomSheet(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 14.dp, vertical = 4.dp)
                 )
             } else {
                 Spacer(Modifier.height(4.dp))
@@ -603,33 +715,75 @@ private fun AudioPlayerBottomSheet(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                // 【底层 / 背景】：可自由滑动的音频列表（contentPadding 预留底部播放器高度）
                 when (selectedTab) {
                     // Tab 0: 当前播放队列
                     0 -> {
-                        val items = if (searchQuery.isNotEmpty()) searchResults
-                        else currentPlaylistItems.map { it.title to it.url }
+                        val displayItems = if (searchQuery.isNotEmpty()) searchResults else currentPlaylistItems
 
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp, start = 14.dp, end = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // 列表头操作栏：歌曲数量 + 清空列表按钮
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "${selectedPlaylistForView?.name ?: "当前播放"} · 共 ${displayItems.size} 首",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (displayItems.isNotEmpty()) {
+                                        TextButton(
+                                            onClick = { showClearConfirmDialog = true },
+                                            colors = ButtonDefaults.textButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("清空列表", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+
                             items(
-                                items = items,
-                                key = { it.second }
-                            ) { (itemTitle, url) ->
+                                items = displayItems,
+                                key = { it.id }
+                            ) { item ->
+                                val category = resolveAudioCategory(item.url, item.source, item.title)
+                                val isCurrentlyPlaying = (playingMediaUri != null && item.url == playingMediaUri) ||
+                                        (playingMediaUri == null && item.title == title && title.isNotEmpty() && title != "语音消息" && !title.endsWith("的语音"))
+
                                 PlaylistItemCard(
-                                    title = itemTitle,
-                                    subtitle = if (url.startsWith("content://") || url.startsWith("file://")) "本地音频" else "网络音频",
-                                    isCurrentlyPlaying = itemTitle == title,
-                                    onClick = { onPlayUrl(url, itemTitle) },
-                                    onLongClick = { showAddToPlaylistDialog = url to itemTitle }
+                                    title = item.title,
+                                    category = category,
+                                    durationMs = item.durationMs,
+                                    isCurrentlyPlaying = isCurrentlyPlaying,
+                                    onClick = { playPlaylistItem(item) },
+                                    onLongClick = {
+                                        showAddToPlaylistDialog = AddToPlaylistTarget(item.url, item.title, item.source, item.durationMs)
+                                    },
+                                    onDelete = {
+                                        coroutineScope.launch {
+                                            dao.deleteItem(item.id)
+                                            selectedPlaylistForView?.let { pl ->
+                                                currentPlaylistItems = dao.getItemsForPlaylistSync(pl.id)
+                                            }
+                                        }
+                                    }
                                 )
                             }
-                            if (items.isEmpty()) {
+                            if (displayItems.isEmpty()) {
                                 item {
-                                    EmptyStateView(text = if (searchQuery.isNotEmpty()) "未找到匹配音频" else "暂无播放记录")
+                                    EmptyStateView(text = if (searchQuery.isNotEmpty()) "未找到匹配音频" else "暂无音频记录")
                                 }
                             }
                         }
@@ -645,7 +799,7 @@ private fun AudioPlayerBottomSheet(
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(top = 40.dp, bottom = 220.dp, start = 24.dp, end = 24.dp),
+                                    .padding(top = 40.dp, bottom = 200.dp, start = 24.dp, end = 24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
@@ -662,7 +816,7 @@ private fun AudioPlayerBottomSheet(
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = "在上方搜索框输入歌曲名或歌手名，即可在线解析并播放高品质网易云音乐",
+                                    text = "在上方搜索框输入歌曲或歌手，在线解析高品质网络音频，随点随播",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -671,7 +825,7 @@ private fun AudioPlayerBottomSheet(
                         } else {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp, start = 14.dp, end = 14.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(items = ncmSearchResults, key = { it.id }) { ncmSong ->
@@ -688,7 +842,7 @@ private fun AudioPlayerBottomSheet(
                                                 ncmPlayingId = null
                                                 if (!playUrl.isNullOrBlank()) {
                                                     val songTitle = "${ncmSong.name} - ${ncmSong.artist}"
-                                                    appendToAutoQueue(context, songTitle, playUrl, "NCM")
+                                                    appendToAutoQueue(context, songTitle, playUrl, "NCM:${ncmSong.id}", ncmSong.durationMs)
                                                     onPlayUrl(playUrl, songTitle)
                                                 } else {
                                                     Toast.makeText(context, "解析网易云音频失败", Toast.LENGTH_SHORT).show()
@@ -698,7 +852,12 @@ private fun AudioPlayerBottomSheet(
                                         onAddToPlaylist = {
                                             coroutineScope.launch {
                                                 val playUrl = NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull() ?: ""
-                                                showAddToPlaylistDialog = playUrl to "${ncmSong.name} - ${ncmSong.artist}"
+                                                showAddToPlaylistDialog = AddToPlaylistTarget(
+                                                    url = playUrl,
+                                                    title = "${ncmSong.name} - ${ncmSong.artist}",
+                                                    source = "NCM:${ncmSong.id}",
+                                                    durationMs = ncmSong.durationMs
+                                                )
                                             }
                                         }
                                     )
@@ -714,22 +873,37 @@ private fun AudioPlayerBottomSheet(
 
                     // Tab 2: 本地录音
                     2 -> {
-                        val items = if (searchQuery.isNotEmpty()) searchResults else localAudios
+                        val items = if (searchQuery.isNotEmpty()) {
+                            localAudios.filter { it.title.lowercase().contains(searchQuery.lowercase()) }
+                        } else localAudios
+
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp, start = 14.dp, end = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(items = items, key = { it.second }) { (itemTitle, uri) ->
+                            items(items = items, key = { it.uri }) { localItem ->
+                                val isCurrentlyPlaying = playingMediaUri == localItem.uri
                                 PlaylistItemCard(
-                                    title = itemTitle,
-                                    subtitle = "本地录音",
-                                    isCurrentlyPlaying = itemTitle == title,
+                                    title = localItem.title,
+                                    category = AudioCategory.LOCAL,
+                                    durationMs = localItem.durationMs,
+                                    isCurrentlyPlaying = isCurrentlyPlaying,
                                     onClick = {
-                                        coroutineScope.launch { appendToAutoQueue(context, itemTitle, uri, "LOCAL") }
-                                        AudioPlayerService.startPlaySavedAudio(context, uri, itemTitle)
+                                        coroutineScope.launch {
+                                            appendToAutoQueue(context, localItem.title, localItem.uri, "LOCAL", localItem.durationMs)
+                                        }
+                                        AudioPlayerService.startPlaySavedAudio(context, localItem.uri, localItem.title)
                                     },
-                                    onLongClick = { showAddToPlaylistDialog = uri to itemTitle }
+                                    onLongClick = {
+                                        showAddToPlaylistDialog = AddToPlaylistTarget(
+                                            url = localItem.uri,
+                                            title = localItem.title,
+                                            source = "LOCAL",
+                                            durationMs = localItem.durationMs
+                                        )
+                                    },
+                                    onDelete = null
                                 )
                             }
                             if (items.isEmpty()) {
@@ -745,7 +919,7 @@ private fun AudioPlayerBottomSheet(
                         val userPlaylists = allPlaylists.filter { !it.isAutoQueue }
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp, start = 16.dp, end = 16.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp, start = 14.dp, end = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             item {
@@ -775,16 +949,25 @@ private fun AudioPlayerBottomSheet(
                                         showRenameDialog = playlist
                                     },
                                     onDelete = {
-                                        coroutineScope.launch { dao.deletePlaylist(playlist.id) }
+                                        coroutineScope.launch {
+                                            dao.deletePlaylist(playlist.id)
+                                            if (selectedPlaylistForView?.id == playlist.id) {
+                                                selectedPlaylistForView = null
+                                            }
+                                        }
                                     }
                                 )
+                            }
+                            if (userPlaylists.isEmpty()) {
+                                item {
+                                    EmptyStateView(text = "暂无自定义歌单，点击上方按钮新建")
+                                }
                             }
                         }
                     }
                 }
 
                 // 【顶层 / 前景】：悬浮在列表最下方的播放器控制面板（浮动卡片）
-                // 滑动 BottomSheet 时卡片保持吸附在底部，直到拖拽手柄接触卡片时随之一同收回
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -803,8 +986,8 @@ private fun AudioPlayerBottomSheet(
                             val shift = delta.coerceIn(0f, maxShift)
                             translationY = -shift
                         }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    shape = RoundedCornerShape(24.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(22.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     tonalElevation = 6.dp,
                     shadowElevation = 8.dp
@@ -812,10 +995,10 @@ private fun AudioPlayerBottomSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // 顶部行：音频唱片/封面图标 + 标题 + 关闭按钮
+                        // 顶部行：音频封面 + 标题 + 停止按钮
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -823,7 +1006,7 @@ private fun AudioPlayerBottomSheet(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(38.dp)
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     if (!coverUrl.isNullOrBlank()) {
@@ -840,13 +1023,13 @@ private fun AudioPlayerBottomSheet(
                                             imageVector = if (isPlaying) Icons.Default.GraphicEq else Icons.Default.MusicNote,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
                             }
 
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(10.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -865,23 +1048,30 @@ private fun AudioPlayerBottomSheet(
 
                             IconButton(
                                 onClick = onClosePlayer,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(30.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = "停止播放",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(8.dp))
+                        // 平滑平移动画 Slider
+                        val targetFraction = if (durationMs > 0 && !isDragging) {
+                            (progressMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                        } else if (isDragging) dragValue else 0f
 
-                        // 进度条 Slider
+                        val smoothProgress by animateFloatAsState(
+                            targetValue = targetFraction,
+                            animationSpec = tween(durationMillis = 60, easing = LinearEasing),
+                            label = "SmoothPlayerProgress"
+                        )
+
                         Slider(
-                            value = if (durationMs > 0 && !isDragging)
-                                (progressMs.toFloat() / durationMs).coerceIn(0f, 1f)
-                            else if (isDragging) dragValue else 0f,
+                            value = smoothProgress,
                             onValueChange = { v ->
                                 isDragging = true
                                 dragValue = v
@@ -891,7 +1081,9 @@ private fun AudioPlayerBottomSheet(
                                 mediaController?.transportControls?.seekTo((dragValue * durationMs).toLong())
                                 isDragging = false
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(32.dp)
                         )
 
                         // 进度时间戳
@@ -913,15 +1105,13 @@ private fun AudioPlayerBottomSheet(
                             )
                         }
 
-                        Spacer(Modifier.height(4.dp))
-
-                        // 控制按钮行（播放模式切换、上一首、播放/暂停、下一首、快进10秒）
+                        // 控制按钮行
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 播放模式切换按钮（顺序播放 -> 列表循环 -> 单曲循环 -> 随机播放）
+                            // 播放模式切换
                             IconButton(
                                 onClick = {
                                     val next = playMode.next()
@@ -929,7 +1119,7 @@ private fun AudioPlayerBottomSheet(
                                     AudioPlayerService.setPlayMode(context, next)
                                     Toast.makeText(context, next.title, Toast.LENGTH_SHORT).show()
                                 },
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
                                     imageVector = when (playMode) {
@@ -941,24 +1131,24 @@ private fun AudioPlayerBottomSheet(
                                     contentDescription = playMode.title,
                                     tint = if (playMode != AudioPlayMode.SEQUENCE) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
 
                             IconButton(
                                 onClick = { playPrev() },
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
                                     Icons.Default.SkipPrevious,
                                     contentDescription = "上一首",
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
 
                             FilledIconButton(
                                 onClick = onTogglePlayPause,
-                                modifier = Modifier.size(54.dp),
+                                modifier = Modifier.size(48.dp),
                                 colors = IconButtonDefaults.filledIconButtonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -967,18 +1157,18 @@ private fun AudioPlayerBottomSheet(
                                 Icon(
                                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (isPlaying) "暂停" else "播放",
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
 
                             IconButton(
                                 onClick = { playNext() },
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
                                     Icons.Default.SkipNext,
                                     contentDescription = "下一首",
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
 
@@ -988,12 +1178,12 @@ private fun AudioPlayerBottomSheet(
                                     mediaController?.transportControls?.seekTo(target)
                                     onProgressChange(target)
                                 },
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
                                     Icons.Default.FastForward,
                                     contentDescription = "快进10秒",
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
@@ -1001,6 +1191,34 @@ private fun AudioPlayerBottomSheet(
                 }
             }
         }
+    }
+
+    // ── 对话框：清空列表确认 ─────────────────────────────────────────────
+    if (showClearConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmDialog = false },
+            title = { Text("清空播放列表") },
+            text = { Text("确定要清空“${selectedPlaylistForView?.name ?: "当前播放"}”中的所有音频吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedPlaylistForView?.let { pl ->
+                            coroutineScope.launch {
+                                dao.clearPlaylist(pl.id)
+                                currentPlaylistItems = emptyList()
+                            }
+                        }
+                        showClearConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("确认清空")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmDialog = false }) { Text("取消") }
+            }
+        )
     }
 
     // ── 对话框：新建播放列表 ─────────────────────────────────────────────
@@ -1068,10 +1286,10 @@ private fun AudioPlayerBottomSheet(
     }
 
     // ── 对话框：加入指定播放列表 ─────────────────────────────────────────
-    showAddToPlaylistDialog?.let { (url, itemTitle) ->
+    showAddToPlaylistDialog?.let { target ->
         AlertDialog(
             onDismissRequest = { showAddToPlaylistDialog = null },
-            title = { Text("加入播放列表") },
+            title = { Text("加入歌单") },
             text = {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(allPlaylists, key = { it.id }) { playlist ->
@@ -1085,12 +1303,14 @@ private fun AudioPlayerBottomSheet(
                                             AudioPlaylistItem(
                                                 id = UUID.randomUUID().toString(),
                                                 playlistId = playlist.id,
-                                                title = itemTitle,
-                                                url = url,
-                                                source = "CHAT",
+                                                title = target.title,
+                                                url = target.url,
+                                                source = target.source,
+                                                durationMs = target.durationMs,
                                                 sortOrder = maxOrder + 1
                                             )
                                         )
+                                        Toast.makeText(context, "已添加到 ${playlist.name}", Toast.LENGTH_SHORT).show()
                                     }
                                     showAddToPlaylistDialog = null
                                 }
@@ -1134,14 +1354,16 @@ private fun AudioPlayerBottomSheet(
 @Composable
 private fun PlaylistItemCard(
     title: String,
-    subtitle: String,
+    category: AudioCategory,
+    durationMs: Long = 0L,
     isCurrentlyPlaying: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
         else MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = if (isCurrentlyPlaying) 4.dp else 1.dp,
         modifier = Modifier
@@ -1152,14 +1374,14 @@ private fun PlaylistItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 shape = CircleShape,
                 color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(34.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -1167,12 +1389,12 @@ private fun PlaylistItemCard(
                         contentDescription = null,
                         tint = if (isCurrentlyPlaying) MaterialTheme.colorScheme.onPrimary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1185,23 +1407,53 @@ private fun PlaylistItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 分类 Chip Badge (云湖音频 / 本地音频 / 网络音频)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = category.badgeBg,
+                        modifier = Modifier.padding(end = 6.dp)
+                    ) {
+                        Text(
+                            text = category.label,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                            color = category.badgeText,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+
+                    if (durationMs > 0L) {
+                        Text(
+                            text = formatTime(durationMs),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+
+                    if (isCurrentlyPlaying) {
+                        Text(
+                            text = "· 正在播放",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
-            if (isCurrentlyPlaying) {
-                Spacer(Modifier.width(8.dp))
-                SuggestionChip(
-                    onClick = onClick,
-                    label = { Text("播放中", fontSize = 10.sp) },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        labelColor = MaterialTheme.colorScheme.primary
-                    ),
-                    border = null
-                )
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "从列表移除",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
@@ -1259,7 +1511,7 @@ private fun PlaylistFolderCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "点击查看列表内容",
+                    text = "点击查看歌单内容",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1280,7 +1532,7 @@ private fun PlaylistFolderCard(
                         leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                        text = { Text("删除歌单", color = MaterialTheme.colorScheme.error) },
                         onClick = { showMenu = false; onDelete() },
                         leadingIcon = {
                             Icon(
@@ -1385,13 +1637,25 @@ private fun NcmSongItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = song.displaySubtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = song.displaySubtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (song.durationMs > 0L) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = formatTime(song.durationMs),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
             }
 
             if (isLoading) {
@@ -1424,5 +1688,6 @@ private fun NcmSongItemCard(
         }
     }
 }
+
 
 

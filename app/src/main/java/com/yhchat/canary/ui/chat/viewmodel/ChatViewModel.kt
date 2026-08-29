@@ -591,6 +591,14 @@ class ChatViewModel @Inject constructor(
      * 处理新消息
      */
     private fun handleNewMessage(message: ChatMessage) {
+        val isBlocked = kotlin.runCatching {
+            blocklistRepository.isUserBlocked(message.sender.chatId)
+        }.getOrElse { false }
+        if (isBlocked) {
+            Log.d(tag, "Message from blocked user ${message.sender.chatId}, ignored in real-time")
+            return
+        }
+
         val normalizedMessage = normalizeMessageOwnership(message)
         val targetChatId = resolveMessageChatId(normalizedMessage)
 
@@ -2590,10 +2598,17 @@ class ChatViewModel @Inject constructor(
                     onSuccess = { newMessages ->
                         Log.d(tag, "Refreshed ${newMessages.size} latest messages")
                         
-                        if (newMessages.isNotEmpty()) {
+                        val filteredMessages = newMessages.filter { message ->
+                            val isBlocked = kotlin.runCatching {
+                                blocklistRepository.isUserBlocked(message.sender.chatId)
+                            }.getOrElse { false }
+                            !isBlocked
+                        }
+                        
+                        if (filteredMessages.isNotEmpty()) {
                             // 合并新消息到现有消息列表
                             val existingMsgIds = _messages.map { it.msgId }.toSet()
-                            val uniqueNewMessages = newMessages.filter { it.msgId !in existingMsgIds }
+                            val uniqueNewMessages = filteredMessages.filter { it.msgId !in existingMsgIds }
                             
                             if (uniqueNewMessages.isNotEmpty()) {
                                 // 添加不重复的新消息

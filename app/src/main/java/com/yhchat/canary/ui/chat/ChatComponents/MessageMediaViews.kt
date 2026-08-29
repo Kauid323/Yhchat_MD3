@@ -220,16 +220,16 @@ fun AudioMessageView(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .clickable {
-                val displayTitle = "$senderName 的语音"
+                val displayTitle = if (senderName.isNotBlank()) "$senderName 的语音" else "语音消息"
+                val durMs = if (duration > 600) duration else duration * 1000L
                 coroutineScope.launch {
-                    appendToAutoQueue(context, displayTitle, audioUrl, "CHAT")
+                    appendToAutoQueue(context, displayTitle, audioUrl, "CHAT", durMs)
                 }
                 AudioPlayerService.startPlayAudio(
                     context = context,
                     audioUrl = audioUrl,
                     title = displayTitle
                 )
-                isCurrentlyPlaying = !isCurrentlyPlaying
             },
         color = textColor.copy(alpha = 0.1f)
     ) {

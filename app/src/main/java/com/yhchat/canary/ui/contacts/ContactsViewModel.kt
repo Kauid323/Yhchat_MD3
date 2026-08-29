@@ -1,11 +1,13 @@
 package com.yhchat.canary.ui.contacts
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yhchat.canary.data.repository.FriendRepository
 import com.yhchat.canary.data.repository.TokenRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,12 +111,14 @@ data class ContactsUiState(
 
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val friendRepository: FriendRepository,
     private val tokenRepository: TokenRepository,
     private val botRepository: com.yhchat.canary.data.repository.BotRepository
 ) : ViewModel() {
     
     private val tag = "ContactsViewModel"
+    private val blocklistRepository by lazy { com.yhchat.canary.data.repository.BlocklistRepository(context) }
     
     private val _uiState = MutableStateFlow(ContactsUiState())
     val uiState: StateFlow<ContactsUiState> = _uiState.asStateFlow()
@@ -196,11 +200,14 @@ class ContactsViewModel @Inject constructor(
                             }
                         }
                         
-                        Log.d(tag, "好友数量: ${friends.size}, 群聊数量: ${groups.size}, 机器人数量: ${bots.size}")
+                        val blockedSet = blocklistRepository.getBlockedUserIdsSet()
+                        val filteredFriends = if (blockedSet.isEmpty()) friends else friends.filter { it.chatId !in blockedSet }
+                        
+                        Log.d(tag, "好友数量: ${filteredFriends.size}, 群聊数量: ${groups.size}, 机器人数量: ${bots.size}")
                         
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            friends = friends,
+                            friends = filteredFriends,
                             groups = groups,
                             bots = bots
                         )
@@ -245,6 +252,7 @@ class ContactsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(friendRequestsLoading = true)
             friendRepository.getFriendRequestList().fold(
                 onSuccess = { resp ->
+                    val blockedSet = blocklistRepository.getBlockedUserIdsSet()
                     val list = resp.requestsList.map { r ->
                         FriendRequestItem(
                             requestId = r.requestId,
@@ -268,6 +276,9 @@ class ContactsViewModel @Inject constructor(
                             processorName = r.processorName,
                             note = r.note
                         )
+                    }.filter {
+                        if (blockedSet.isEmpty()) true
+                        else it.inviterId !in blockedSet && it.receiverId !in blockedSet
                     }
                     _uiState.value = _uiState.value.copy(
                         friendRequestsLoading = false,

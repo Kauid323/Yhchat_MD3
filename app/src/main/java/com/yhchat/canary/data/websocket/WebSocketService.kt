@@ -98,6 +98,9 @@ class WebSocketService @Inject constructor(
     )
     val draftUpdates: SharedFlow<DraftUpdate> = _draftUpdates.asSharedFlow()
     
+    // 黑名单仓库
+    private val blocklistRepository by lazy { com.yhchat.canary.data.repository.BlocklistRepository(context) }
+    
     // 通知消息历史 - 用于消息堆叠显示（chatId -> 消息列表）
     private val notificationMessageHistory = mutableMapOf<String, MutableList<NotificationMessage>>()
     
@@ -456,6 +459,12 @@ class WebSocketService @Inject constructor(
                         Log.d(tag, "  - Content: ${chatMessage.content.text?.take(50) ?: "[非文本消息]"}")
                         
                         scope.launch {
+                            val senderId = chatMessage.sender.chatId
+                            if (blocklistRepository.isUserBlocked(senderId)) {
+                                Log.d(tag, "Blocked user $senderId message ignored: ${chatMessage.msgId}")
+                                return@launch
+                            }
+                            
                             // 发送消息事件供UI更新
                             _messageEvents.emit(MessageEvent.NewMessage(chatMessage))
                             
@@ -489,6 +498,12 @@ class WebSocketService @Inject constructor(
                         )
                         
                         scope.launch {
+                            val senderId = chatMessage.sender.chatId
+                            if (blocklistRepository.isUserBlocked(senderId)) {
+                                Log.d(tag, "Blocked user $senderId edit message ignored: ${chatMessage.msgId}")
+                                return@launch
+                            }
+                            
                             _messageEvents.emit(MessageEvent.MessageEdited(chatMessage))
                             _conversationUpdates.emit(ConversationUpdate.MessageEdited(chatMessage))
                         }
@@ -767,6 +782,12 @@ class WebSocketService @Inject constructor(
                 message.sender.chatType
             } else {
                 message.chatType ?: message.sender.chatType
+            }
+
+            // 黑名单过滤：被屏蔽用户的消息不弹出通知
+            if (blocklistRepository.isUserBlocked(message.sender.chatId) || (isPrivateChat && blocklistRepository.isUserBlocked(targetChatId))) {
+                Log.d(tag, "Sender $targetChatId is in blocklist, skip notification")
+                return
             }
 
             // 免打扰：不弹出该会话的系统通知
