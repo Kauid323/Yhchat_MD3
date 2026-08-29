@@ -173,17 +173,14 @@ object NcmAudioMatcher {
                 ShortArray(pcmShorts.size) { pcmShorts[it] }
             }
 
-            // 重采样至 8000Hz Float PCM [-1.0, 1.0]
-            val availableSamples = Math.min(targetTotalSamples, (monoShorts.size * TARGET_SAMPLE_RATE.toDouble() / sampleRate).toInt())
-            val resampled = FloatArray(availableSamples.coerceAtLeast(1))
-            val step = sampleRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
-            for (i in resampled.indices) {
-                val srcIdx = (i * step).toInt()
-                if (srcIdx < monoShorts.size) {
-                    resampled[i] = monoShorts[srcIdx] / 32768f
-                } else {
-                    break
-                }
+            // 高保真线性插值重采样至 8000Hz Float PCM [-1.0, 1.0]
+            val targetCount = Math.min(targetTotalSamples, kotlin.math.floor(monoShorts.size.toDouble() * TARGET_SAMPLE_RATE / sampleRate).toInt())
+            val resampled = FloatArray(targetCount.coerceAtLeast(1)) { index ->
+                val sourcePosition = index.toDouble() * sampleRate / TARGET_SAMPLE_RATE
+                val left = kotlin.math.floor(sourcePosition).toInt().coerceIn(0, monoShorts.size - 1)
+                val right = (left + 1).coerceAtMost(monoShorts.size - 1)
+                val fraction = (sourcePosition - left).toFloat()
+                ((monoShorts[left] * (1f - fraction) + monoShorts[right] * fraction) / 32767f).coerceIn(-1f, 1f)
             }
 
             resampled
@@ -198,22 +195,22 @@ object NcmAudioMatcher {
     }
 
     /**
-     * 纯 Kotlin 实现音频指纹特征计算与二进制打包
-     * 将 8000Hz PCM 采样数据通过 STFT 快速傅里叶变换提取各频段峰值地标（Landmark Peak Hash），
-     * 生成标准 Base64 音频指纹
+     * 纯 Kotlin 原生实现 Shazam_v2 声学特征指纹生成
+     * 流程：STFT 频谱变换 -> 对数频段峰值提取 (Peak Picking) -> 地标星座哈希配对 (Landmark Pairing) -> Little-Endian 序列化 -> ZLIB 压缩 -> Base64
      */
     private fun computePureKotlinFingerprint(samples: FloatArray): String? {
         try {
-            if (samples.size < TARGET_SAMPLE_RATE * 3) return null
+            if (samples.size < TARGET_SAMPLE_RATE * 2) return null
 
             val windowSize = 256
             val hopSize = 128
             val numFrames = (samples.size - windowSize) / hopSize
             if (numFrames <= 0) return null
 
-            // 频段范围（低频、中低频、中高频、高频）
-            val freqBands = intArrayOf(10, 20, 40, 80, 128)
-            val landmarks = mutableListOf<Triple<Int, Int, Float>>() // frameIndex, bandIndex, peakMagnitude
+            // 频段划分 (8000Hz 采样率下: 0~4000Hz 对应 0~128 bin，每个 bin 约 31.25Hz)
+            // 频段覆盖：低频 250~500Hz (8~16), 中低频 500~1000Hz (16~32), 中高频 1000~2000Hz (32~64), 高频 2000~3500Hz (64~112)
+            val freqBands = intArrayOf(8, 16, 32, 64, 112)
+            val framePeaks = mutableListOf<Pair<Int, Int>>() // List of (frameIndex, peakBin)
 
             val real = FloatArray(windowSize)
             val imag = FloatArray(windowSize)
@@ -230,7 +227,7 @@ object NcmAudioMatcher {
                 // 纯 Kotlin 原生 FFT 计算
                 fftRadix2(real, imag)
 
-                // 提取各频段最大幅值特征
+                // 在各频段提取最大能量峰值点
                 for (b in 0 until freqBands.size - 1) {
                     var maxMag = 0f
                     var maxBin = freqBands[b]
@@ -241,26 +238,47 @@ object NcmAudioMatcher {
                             maxBin = bin
                         }
                     }
-                    if (maxMag > 0.01f) {
-                        landmarks.add(Triple(frame, maxBin, maxMag))
+                    if (maxMag > 0.02f) {
+                        framePeaks.add(Pair(frame, maxBin))
                     }
+                }
+            }
+
+            if (framePeaks.isEmpty()) return null
+
+            // Shazam 地标星座哈希配对 (Combinatorial Hashing)
+            // 对每个锚点 (t1, f1)，向后查找目标区内的峰值点 (t2, f2)，生成组合哈希值
+            val landmarks = mutableListOf<Pair<Int, Int>>() // Pair<t1, hash32>
+            val maxTargetOffset = 8 // 目标区向后 8 个 frame (约 128ms)
+            
+            for (i in framePeaks.indices) {
+                val (t1, f1) = framePeaks[i]
+                var count = 0
+                for (j in i + 1 until framePeaks.size) {
+                    val (t2, f2) = framePeaks[j]
+                    val dt = t2 - t1
+                    if (dt <= 0) continue
+                    if (dt > maxTargetOffset) break
+
+                    // 构造标准 32-bit 地标特征哈希: (f1: 8bit, f2: 8bit, dt: 8bit)
+                    val hash = ((f1 and 0xFF) shl 16) or ((f2 and 0xFF) shl 8) or (dt and 0xFF)
+                    landmarks.add(Pair(t1, hash))
+                    count++
+                    if (count >= 3) break // 每个锚点最多配对 3 个目标点，保持高判别度与紧凑性
                 }
             }
 
             if (landmarks.isEmpty()) return null
 
-            // 选取能量最强的特征地标，并按时间顺序排序
-            val selectedLandmarks = landmarks.sortedByDescending { it.third }.take(350).sortedBy { it.first }
+            // 限制最多 400 个显著特征地标
+            val selectedLandmarks = if (landmarks.size > 400) landmarks.take(400) else landmarks
 
-            // 按照特征点序列序列化为紧凑 Little-Endian 二进制指纹
+            // 按照 Shazam 标准格式序列化为 Little-Endian 二进制指纹
             val buffer = ByteBuffer.allocate(4 + selectedLandmarks.size * 6).order(ByteOrder.LITTLE_ENDIAN)
             buffer.putInt(selectedLandmarks.size)
-            for ((frame, bin, mag) in selectedLandmarks) {
-                buffer.putShort(frame.toShort())
-                buffer.put(bin.toByte())
-                val quantizedMag = (mag * 255f).toInt().coerceIn(0, 255).toByte()
-                buffer.put(quantizedMag)
-                buffer.putShort(((frame * 31 + bin * 17) and 0xFFFF).toShort())
+            for ((t1, hash) in selectedLandmarks) {
+                buffer.putShort(t1.toShort())
+                buffer.putInt(hash)
             }
 
             // 网易云 Shazam 识曲标准：对二进制指纹进行 ZLIB (Deflate) 压缩
