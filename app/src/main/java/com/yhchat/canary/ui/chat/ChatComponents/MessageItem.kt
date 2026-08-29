@@ -212,7 +212,7 @@ fun MessageItem(
         {
             val audioUrl = message.content.audioUrl!!
             val senderName = message.sender.name
-            val dur = message.content.duration ?: 0L
+            val dur = message.content.audioTime ?: 0L
             val durMs = if (dur > 600L) dur else dur * 1000L
             val displayTitle = if (senderName.isNotBlank()) "$senderName 的语音" else "语音消息"
             coroutineScope.launch {

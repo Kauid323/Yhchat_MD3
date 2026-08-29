@@ -31,6 +31,7 @@ import com.yhchat.canary.MainActivity
 import com.yhchat.canary.R
 import com.yhchat.canary.data.local.AppDatabase
 import com.yhchat.canary.data.local.AudioPlayMode
+import com.yhchat.canary.ncm.NcmApiClient
 import com.yhchat.canary.ncm.NcmAudioMatcher
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient

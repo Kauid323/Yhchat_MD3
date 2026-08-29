@@ -590,7 +590,7 @@ class ChatViewModel @Inject constructor(
     /**
      * 处理新消息
      */
-    private fun handleNewMessage(message: ChatMessage) {
+    private suspend fun handleNewMessage(message: ChatMessage) {
         val isBlocked = kotlin.runCatching {
             blocklistRepository.isUserBlocked(message.sender.chatId)
         }.getOrElse { false }
