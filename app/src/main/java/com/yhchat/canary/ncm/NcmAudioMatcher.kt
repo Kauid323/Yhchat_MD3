@@ -28,7 +28,7 @@ object NcmAudioMatcher {
 
     private const val TAG = "NcmAudioMatcher"
     private const val TARGET_SAMPLE_RATE = 8000
-    private const val SAMPLE_DURATION_SEC = 10 // 听歌识曲标准特征截取 10 秒
+    private const val SAMPLE_DURATION_SEC = 3 // 听歌识曲标准特征截取 3 秒（与网易云官方识别算法规范一致）
 
     /**
      * 听歌识曲主函数
@@ -55,7 +55,7 @@ object NcmAudioMatcher {
             }
 
             // 2. 纯 Kotlin 计算声学指纹
-            val durationSec = (pcmFloats.size / TARGET_SAMPLE_RATE).coerceIn(3, 15)
+            val durationSec = (pcmFloats.size / TARGET_SAMPLE_RATE).coerceIn(1, 15)
             val rawFingerprint = computePureKotlinFingerprint(pcmFloats)
             if (rawFingerprint.isNullOrBlank()) {
                 Log.w(TAG, "计算音频特征指纹失败: ${audioFile.name}")
@@ -249,10 +249,13 @@ object NcmAudioMatcher {
 
             if (landmarks.isEmpty()) return null
 
+            // 选取能量最强的 Top 150 个特征地标，并按时间顺序排序，确保指纹精简且识别率最高
+            val selectedLandmarks = landmarks.sortedByDescending { it.third }.take(150).sortedBy { it.first }
+
             // 按照特征点序列序列化为紧凑 Little-Endian 二进制指纹
-            val buffer = ByteBuffer.allocate(4 + landmarks.size * 6).order(ByteOrder.LITTLE_ENDIAN)
-            buffer.putInt(landmarks.size)
-            for ((frame, bin, mag) in landmarks) {
+            val buffer = ByteBuffer.allocate(4 + selectedLandmarks.size * 6).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.putInt(selectedLandmarks.size)
+            for ((frame, bin, mag) in selectedLandmarks) {
                 buffer.putShort(frame.toShort())
                 buffer.put(bin.toByte())
                 val quantizedMag = (mag * 255f).toInt().coerceIn(0, 255).toByte()
