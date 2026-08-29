@@ -818,79 +818,19 @@ class MessageRepository @Inject constructor(
     }
     
     /**
-     * 通过消息ID从API获取消息详情
-     * 
-     * 使用 list-message-by-mid-seq 接口：
-     * - 获取到的消息 **包含** 请求的消息ID的消息内容
-     * - 实际获取到的消息数量是 请求消息数量+1
-     * - proto结构与 list-message 共用
-     * - 参考Python示例：直接取返回列表的最后一条消息
+     * 通过消息ID从API获取单条消息详情（使用 list-message-by-mid-seq）
      */
     suspend fun getMessageByIdFromApi(messageId: String, chatId: String, chatType: Int): ChatMessage? {
-        return try {
-            val tokenFlow = tokenRepository.getToken()
-            val token = tokenFlow.first()?.token
-            if (token.isNullOrEmpty()) {
-                Log.e(tag, "Token is null or empty")
-                return null
-            }
-
-            // 构建protobuf请求
-            val request = list_message_by_mid_seq_send.newBuilder()
-                .setChatId(chatId)
-                .setChatType(chatType.toLong())
-                .setMsgId(messageId)
-                .setMsgCount(1)
-                .setMsgSeq(-1)
-                .setUnknown(0)
-                .build()
-            
-            val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
-
-            Log.d(tag, "Getting message by id from API: $messageId in chat: $chatId")
-            
-            val response = apiService.listMessageByMidSeq(token, requestBody)
-            
-            if (response.isSuccessful) {
-                response.body()?.let { responseBody ->
-                    val bytes = responseBody.bytes()
-                    val messageResponse = list_message_by_mid_seq.parseFrom(bytes)
-                    
-                    Log.d(tag, "API response status code: ${messageResponse.status.code}, msg count: ${messageResponse.msgList.size}, total: ${messageResponse.total}")
-                    
-                    if (messageResponse.status.code == 1) {
-                        if (messageResponse.msgList.isEmpty()) {
-                            Log.w(tag, "Message list is empty for messageId: $messageId")
-                            return@let null
-                        }
-                        
-                        // 根据API文档和Python示例，直接取最后一条消息（包含请求的消息ID的消息）
-                        val protoMsg = messageResponse.msgList.last()
-                        val targetMessage = convertProtoToMessage(protoMsg, chatId, chatType)
-                        
-                        Log.d(tag, "Successfully got message from API: requested=$messageId, returned=${targetMessage.msgId}, contentType=${targetMessage.contentType}")
-                        targetMessage
-                    } else {
-                        Log.e(tag, "API error: ${messageResponse.status.msg}")
-                        null
-                    }
-                }
-            } else {
-                Log.e(tag, "HTTP error: ${response.code()}")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Error getting message by id from API: $messageId", e)
-            null
-        }
+        val messages = getMessagesByMsgId(chatId, chatType, messageId, msgCount = 1).getOrNull()
+        return messages?.find { it.msgId == messageId } ?: messages?.lastOrNull()
     }
     
     /**
-     * 通过msgId获取消息及其前后文（使用list-message-by-mid-seq API）
+     * 通过msgId获取消息及其前后文（使用 list-message-by-mid-seq API）
      * @param chatId 会话ID
      * @param chatType 会话类型
      * @param msgId 目标消息ID
-     * @param msgCount 获取的消息数量（会返回msgCount+1条）
+     * @param msgCount 获取的消息数量（包含目标消息在内，实际返回 msgCount + 1 条）
      * @param msgSeq 消息序列号（默认0）
      * @return 包含目标消息及其前后文的消息列表
      */
@@ -901,26 +841,6 @@ class MessageRepository @Inject constructor(
         msgCount: Int = 30,
         msgSeq: Long = 0L
     ): Result<List<ChatMessage>> {
-        return getMessagesByMsgIdWithRetry(chatId, chatType, msgId, msgCount, msgSeq)
-    }
-    
-    /**
-     * 循环请求消息直到找到目标消息
-     * @param targetMsgId 目标消息ID
-     * @param currentMsgId 当前请求的消息ID（起点）
-     * @param maxRetries 最大重试次数
-     */
-    private suspend fun getMessagesByMsgIdWithRetry(
-        chatId: String,
-        chatType: Int,
-        targetMsgId: String,
-        msgCount: Int = 30,
-        msgSeq: Long = 0L,
-        currentMsgId: String = targetMsgId,
-        maxRetries: Int = 10,
-        currentRetry: Int = 0,
-        allMessages: MutableList<ChatMessage> = mutableListOf()
-    ): Result<List<ChatMessage>> {
         return try {
             val tokenFlow = tokenRepository.getToken()
             val token = tokenFlow.first()?.token
@@ -929,132 +849,47 @@ class MessageRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
 
-            Log.d(tag, "📡 使用 list-message-by-mid-seq 获取消息: chatId=$chatId, currentMsgId=$currentMsgId, targetMsgId=$targetMsgId, msgCount=$msgCount, retry=$currentRetry/$maxRetries")
-            Log.d(tag, "🔍 根据API文档，返回的消息中必须包含指定的消息ID: $currentMsgId")
+            Log.d(tag, "📡 调用 list-message-by-mid-seq: chatId=$chatId, chatType=$chatType, msgId=$msgId, msgCount=$msgCount, msgSeq=$msgSeq")
             
-            // 构建protobuf请求
             val request = list_message_by_mid_seq_send.newBuilder()
                 .setChatId(chatId)
                 .setChatType(chatType.toLong())
-                .setMsgId(currentMsgId)
+                .setMsgId(msgId)
                 .setMsgCount(msgCount.toLong())
                 .setMsgSeq(msgSeq)
                 .setUnknown(0)
                 .build()
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
-            
-            Log.d(tag, "📡 发送请求到服务器...")
             val response = apiService.listMessageByMidSeq(token, requestBody)
             
-            Log.d(tag, "📥 收到响应: HTTP ${response.code()}")
-            
             if (response.isSuccessful) {
-                response.body()?.let { responseBody ->
-                    try {
-                        val bytes = responseBody.bytes()
-                        Log.d(tag, "📦 响应体大小: ${bytes.size} bytes")
-                        
-                        val messageResponse = list_message_by_mid_seq.parseFrom(bytes)
-                        
-                        Log.d(tag, "✅ API返回: code=${messageResponse.status.code}, 消息数=${messageResponse.msgList.size}, total=${messageResponse.total}")
-                        Log.d(tag, "📊 状态信息: number=${messageResponse.status.number}, msg='${messageResponse.status.msg}'")
-                        
-                        if (messageResponse.status.code == 1) {
-                            val messages = messageResponse.msgList.map { protoMsg ->
-                                convertProtoToMessage(protoMsg, chatId, chatType)
-                            }
-                            
-                            Log.d(tag, "🔄 转换完成，得到 ${messages.size} 条消息")
-                            
-                            // 详细检查：API应该必须包含指定的消息ID
-                            Log.d(tag, "🔍 API文档说明：list-message-by-mid-seq 应该包含指定的消息ID")
-                            Log.d(tag, "🎯 请求的消息ID: $currentMsgId")
-                            Log.d(tag, "📋 实际返回的消息ID: ${messages.map { it.msgId }}")
-                            
-                            val requestedMessage = messages.find { it.msgId == currentMsgId }
-                            if (requestedMessage != null) {
-                                Log.d(tag, "✅ 确认API返回了请求的消息ID: $currentMsgId")
-                            } else {
-                                Log.e(tag, "❌ 严重问题：API没有返回请求的消息ID: $currentMsgId")
-                                Log.e(tag, "❌ 这违反了API文档的说明！可能的原因：")
-                                Log.e(tag, "   1. 消息ID不存在或已被删除")
-                                Log.e(tag, "   2. API参数错误")
-                                Log.e(tag, "   3. 消息转换过程有问题")
-                            }
-                            
-                            // 将新消息添加到总列表中（去重）
-                            val existingIds = allMessages.map { it.msgId }.toSet()
-                            val newMessages = messages.filter { it.msgId !in existingIds }
-                            allMessages.addAll(newMessages)
-                            Log.d(tag, "➕ 添加 ${newMessages.size} 条新消息，总计 ${allMessages.size} 条")
-                            
-                            // 关键判断：如果API没有返回请求的消息ID，说明消息不存在
-                            if (requestedMessage == null && currentMsgId == targetMsgId) {
-                                Log.e(tag, "❌ 目标消息 $targetMsgId 不存在或已被删除，停止搜索")
-                                Result.failure(Exception("目标消息不存在或已被删除"))
-                            } else {
-                                // 验证目标消息是否在结果中
-                                val targetMessage = allMessages.find { it.msgId == targetMsgId }
-                                if (targetMessage != null) {
-                                    Log.d(tag, "🎯 找到目标消息 msgId: $targetMsgId (content: ${targetMessage.content.text?.take(20)})")
-                                    // 找到目标消息，返回所有收集的消息
-                                    Result.success(allMessages.toList())
-                                } else {
-                                    Log.w(tag, "⚠️ 目标消息 $targetMsgId 不在当前结果中")
-                                    
-                                    // 检查是否达到最大重试次数
-                                    if (currentRetry >= maxRetries) {
-                                        Log.e(tag, "❌ 达到最大重试次数 $maxRetries，停止搜索")
-                                        Log.d(tag, "🔍 已收集的消息ID列表: ${allMessages.map { it.msgId }}")
-                                        Result.failure(Exception("达到最大搜索次数，未找到目标消息"))
-                                    } else if (messages.isEmpty()) {
-                                        Log.e(tag, "❌ 没有更多消息可加载")
-                                        Result.failure(Exception("没有更多消息，未找到目标消息"))
-                                    } else {
-                                        // 使用返回的最后一个消息ID作为新的起点继续请求
-                                        val lastMessage = messages.lastOrNull()
-                                        if (lastMessage != null) {
-                                            Log.d(tag, "🔄 使用最后一个消息ID继续搜索: ${lastMessage.msgId}")
-                                            // 递归调用继续搜索
-                                            getMessagesByMsgIdWithRetry(
-                                                chatId = chatId,
-                                                chatType = chatType,
-                                                targetMsgId = targetMsgId,
-                                                msgCount = msgCount,
-                                                msgSeq = msgSeq,
-                                                currentMsgId = lastMessage.msgId,
-                                                maxRetries = maxRetries,
-                                                currentRetry = currentRetry + 1,
-                                                allMessages = allMessages
-                                            )
-                                        } else {
-                                            Log.e(tag, "❌ 无法获取最后一个消息ID")
-                                            Result.failure(Exception("无法继续搜索"))
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Log.e(tag, "❌ API错误: code=${messageResponse.status.code}, msg=${messageResponse.status.msg}")
-                            Result.failure(Exception("API错误: ${messageResponse.status.msg}"))
+                val responseBody = response.body()
+                if (responseBody != null) {
+                    val bytes = responseBody.bytes()
+                    val messageResponse = list_message_by_mid_seq.parseFrom(bytes)
+                    Log.d(tag, "✅ list-message-by-mid-seq 返回: code=${messageResponse.status.code}, 消息数=${messageResponse.msgList.size}, total=${messageResponse.total}")
+                    
+                    if (messageResponse.status.code == 1) {
+                        val messages = messageResponse.msgList.map { protoMsg ->
+                            convertProtoToMessage(protoMsg, chatId, chatType)
                         }
-                    } catch (e: Exception) {
-                        Log.e(tag, "❌ 解析响应失败", e)
-                        Result.failure(Exception("解析响应失败: ${e.message}"))
+                        // 缓存到本地数据库
+                        cacheRepository.cacheMessages(messages)
+                        Result.success(messages)
+                    } else {
+                        Log.e(tag, "❌ list-message-by-mid-seq 错误: ${messageResponse.status.msg}")
+                        Result.failure(Exception(messageResponse.status.msg.ifBlank { "获取消息失败" }))
                     }
-                } ?: run {
-                    Log.e(tag, "❌ 响应体为空")
+                } else {
                     Result.failure(Exception("响应体为空"))
                 }
             } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(tag, "❌ HTTP错误: ${response.code()}")
-                Log.e(tag, "❌ 错误详情: $errorBody")
-                Result.failure(Exception("网络请求失败: ${response.code()} - $errorBody"))
+                Log.e(tag, "❌ list-message-by-mid-seq HTTP错误: ${response.code()}")
+                Result.failure(Exception("HTTP ${response.code()}"))
             }
         } catch (e: Exception) {
-            Log.e(tag, "❌ 获取消息异常", e)
+            Log.e(tag, "❌ list-message-by-mid-seq 请求异常: $msgId", e)
             Result.failure(e)
         }
     }
@@ -1256,7 +1091,6 @@ class MessageRepository @Inject constructor(
                         Log.d(tag, "Successfully got ${records.size} edit records")
                         Result.success(records)
                     } else {
-                        val msg = body["msg"] as? String ?: "获取编辑历史失败"
                         Log.e(tag, "API error: $msg")
                         Result.failure(Exception(msg))
                     }

@@ -1,4 +1,4 @@
-﻿package com.yhchat.canary.data.api
+package com.yhchat.canary.data.api
 
 import com.google.gson.annotations.SerializedName
 import com.yhchat.canary.data.model.AddExpressionRequest
@@ -262,7 +262,7 @@ interface ApiService {
     /**
      * 按消息ID列出消息（包含消息id指定的消息）- 使用protobuf
      */
-    @POST("v1/msg/list-message")
+    @POST("v1/msg/list-message-by-mid-seq")
     suspend fun listMessageByMidSeq(
         @Header("token") token: String,
         @Body request: okhttp3.RequestBody

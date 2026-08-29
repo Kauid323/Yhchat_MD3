@@ -55,7 +55,8 @@ data class ChatUiState(
     val botLlmParamValues: Map<String, List<BotLlmParamValue>> = emptyMap(),
     val chatBackgroundUrl: String? = null,  // 聊天背景图片URL
     val menuButtons: List<com.yhchat.canary.data.model.MenuButton> = emptyList(),  // 群聊菜单按钮
-    val uploadProgress: Float? = null // 上传进度 (0.0 - 1.0)
+    val uploadProgress: Float? = null, // 上传进度 (0.0 - 1.0)
+    val scrollToMsgId: String? = null
 )
 
 @HiltViewModel
@@ -317,9 +318,6 @@ class ChatViewModel @Inject constructor(
                     }
 
                     val cachedByBot = loadCachedBotLlmParams(chatId, chatType)
-                        .groupBy { it.botId }
-
-
                     val merged = list.associate { item ->
                         val parsed = parseBotLlmParamValues(item.botId, item.paramJson)
                         val cachedById = cachedByBot[item.botId].orEmpty().associateBy { it.id }
@@ -1459,22 +1457,6 @@ class ChatViewModel @Inject constructor(
 
                         // 更新最旧消息的序列号和ID
                         if (newMessages.isNotEmpty()) {
-                            oldestMsgSeq = newMessages.minOfOrNull { it.msgSeq ?: 0L } ?: 0L
-                            val oldestMessage = newMessages.minByOrNull { it.sendTime }
-                            if (oldestMessage != null) {
-                                oldestMsgId = oldestMessage.msgId
-                            }
-                        }
-
-                        hasMoreMessages = newMessages.size >= 40
-
-                        _uiState.value = _uiState.value.copy(isLoading = false, error = null)
-                    },
-                    onFailure = { exception ->
-                        Log.e(tag, "Failed to load messages from position", exception)
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = "加载消息失败: ${exception.message}"
                         )
                         // 失败则加载最新消息
                         loadMessages()
@@ -1513,6 +1495,7 @@ class ChatViewModel @Inject constructor(
                 
                 if (existingMessage != null) {
                     Log.d(tag, "✅ 消息已在列表中，msgId: $quoteMsgId，发送时间: ${existingMessage.sendTime}")
+                    _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
                     return@launch
                 }
                 
@@ -1531,8 +1514,11 @@ class ChatViewModel @Inject constructor(
                         val sortedMessages = _messages.sortedBy { it.sendTime }
                         _messages.clear()
                         _messages.addAll(sortedMessages)
+                        handleAutoCollapseForMessages(listOf(cachedMessage))
                         Log.d(tag, "🎉 目标消息已成功添加到列表")
                     }
+                    _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
+                    return@launch
                 } else {
                     Log.w(tag, "⚠️ 本地缓存中未找到消息，尝试使用 list-message-by-mid-seq")
                     
@@ -1545,7 +1531,7 @@ class ChatViewModel @Inject constructor(
                         chatId = currentChatId,
                         chatType = currentChatType,
                         msgId = quoteMsgId,
-                        msgCount = 30,  // 请求30条消息（实际会返回31条，包含目标消息）
+                        msgCount = 30,
                         msgSeq = 0L
                     )
                     
@@ -1584,6 +1570,7 @@ class ChatViewModel @Inject constructor(
                                 val sortedMessages = _messages.sortedBy { it.sendTime }
                                 _messages.clear()
                                 _messages.addAll(sortedMessages)
+                                handleAutoCollapseForMessages(newMsgs)
                                 Log.d(tag, "✅ 成功添加并排序，当前共 ${_messages.size} 条消息")
                                 
                                 // 确认目标消息是否在最终列表中
@@ -1596,6 +1583,7 @@ class ChatViewModel @Inject constructor(
                             } else {
                                 Log.d(tag, "ℹ️ 没有新消息需要添加（可能都已存在）")
                             }
+                            _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
                         },
                         onFailure = { exception ->
                             Log.e(tag, "❌ 通过 msgId 加载消息失败: $quoteMsgId", exception)
@@ -1610,6 +1598,9 @@ class ChatViewModel @Inject constructor(
         }
     }
     
+    fun clearScrollToMsgId() {
+        _uiState.value = _uiState.value.copy(scrollToMsgId = null)
+    }
     /**
      * 加载消息列表
      */

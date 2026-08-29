@@ -287,6 +287,22 @@ fun ChatScreen(
         }
     }
     
+    // 监听定向滚动/搜索跳转事件
+    LaunchedEffect(uiState.scrollToMsgId, messages) {
+        val targetId = uiState.scrollToMsgId
+        if (!targetId.isNullOrEmpty() && messages.isNotEmpty()) {
+            val targetIndex = reversedMessages.indexOfFirst { it.msgId == targetId }
+            if (targetIndex != -1) {
+                android.util.Log.d("ChatScreen", "🎯 找到跳转目标消息，索引: $targetIndex, msgId: $targetId")
+                highlightedMessageId = targetId
+                listState.animateScrollToItem(targetIndex)
+                viewModel.clearScrollToMsgId()
+                kotlinx.coroutines.delay(3000)
+                highlightedMessageId = null
+            }
+        }
+    }
+    
     // 如果是机器人聊天，加载机器人信息和看板
     LaunchedEffect(chatId, chatType) {
         if (chatType == 3) {
@@ -1005,59 +1021,11 @@ fun ChatScreen(
                                 }
                             },
                             onQuoteMessageClick = { quoteMsgId ->
-                                // 点击引用消息，通过msgId精确定位到该消息
-                                android.util.Log.d("ChatScreen", "📍 点击引用消息，准备跳转到 msgId: $quoteMsgId")
-                                
-                                coroutineScope.launch {
-                                    // 步骤1: 在当前已加载的消息列表中通过msgId查找引用消息
-                                    android.util.Log.d("ChatScreen", "🔍 在已加载的 ${messages.size} 条消息中查找 msgId: $quoteMsgId")
-                                    val targetIndex = reversedMessages.indexOfFirst { it.msgId == quoteMsgId }
-                                    
-                                    if (targetIndex != -1) {
-                                        // 在当前列表中找到了引用消息
-                                        android.util.Log.d("ChatScreen", "✅ 在已加载消息中找到引用消息，索引: $targetIndex, msgId: $quoteMsgId")
-                                        
-                                        // 滚动到目标消息并高亮显示
-                                        highlightedMessageId = quoteMsgId
-                                        listState.animateScrollToItem(targetIndex)
-                                        
-                                        // 3秒后取消高亮
-                                        delay(3000)
-                                        highlightedMessageId = null
-                                        android.util.Log.d("ChatScreen", "🎯 已跳转到引用消息: $quoteMsgId")
-                                    } else {
-                                        // 步骤2: 当前列表中没有找到，需要从服务器加载
-                                        android.util.Log.w("ChatScreen", "⚠️ 在已加载消息中未找到 msgId: $quoteMsgId，尝试从服务器加载")
-                                        Toast.makeText(context, "正在查找引用消息...", Toast.LENGTH_SHORT).show()
-                                        
-                                        // 通过API加载包含该msgId的消息
-                                        viewModel.loadMessageByIdAndScroll(quoteMsgId)
-                                        
-                                        // 等待消息加载完成
-                                        delay(1500)
-                                        
-                                        // 再次在更新后的列表中通过msgId查找
-                                        android.util.Log.d("ChatScreen", "🔄 重新在更新后的 ${messages.size} 条消息中查找 msgId: $quoteMsgId")
-                                        val newReversedMessages = messages.reversed()
-                                        val newTargetIndex = newReversedMessages.indexOfFirst { it.msgId == quoteMsgId }
-                                        
-                                        if (newTargetIndex != -1) {
-                                            android.util.Log.d("ChatScreen", "✅ 加载后找到引用消息，索引: $newTargetIndex, msgId: $quoteMsgId")
-                                            
-                                            // 滚动到目标消息并高亮显示
-                                            highlightedMessageId = quoteMsgId
-                                            listState.animateScrollToItem(newTargetIndex)
-                                            
-                                            // 3秒后取消高亮
-                                            delay(3000)
-                                            highlightedMessageId = null
-                                            android.util.Log.d("ChatScreen", "🎯 已跳转到引用消息: $quoteMsgId")
-                                        } else {
-                                            android.util.Log.e("ChatScreen", "❌ 加载后仍未找到引用消息 msgId: $quoteMsgId")
-                                            Toast.makeText(context, "未找到引用的消息", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
+                                val existing = messages.any { it.msgId == quoteMsgId }
+                                if (!existing) {
+                                    Toast.makeText(context, "正在查找引用消息...", Toast.LENGTH_SHORT).show()
                                 }
+                                viewModel.loadMessageByIdAndScroll(quoteMsgId)
                             },
                             memberPermission = memberPermission,
                             groupOwnerId = groupOwnerId,
