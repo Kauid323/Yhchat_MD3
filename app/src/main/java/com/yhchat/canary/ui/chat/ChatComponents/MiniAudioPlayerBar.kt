@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.local.AppDatabase
@@ -45,9 +46,11 @@ import com.yhchat.canary.data.local.AudioPlaylistItem
 import com.yhchat.canary.ncm.NcmApiClient
 import com.yhchat.canary.ncm.NcmSong
 import com.yhchat.canary.service.AudioPlayerService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -671,9 +674,7 @@ private fun AudioPlayerBottomSheet(
                                         onClick = {
                                             coroutineScope.launch {
                                                 ncmPlayingId = ncmSong.id
-                                                val playUrl = withContext(Dispatchers.IO) {
-                                                    NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull()
-                                                }
+                                                val playUrl = NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull()
                                                 ncmPlayingId = null
                                                 if (!playUrl.isNullOrBlank()) {
                                                     val songTitle = "${ncmSong.name} - ${ncmSong.artist}"
@@ -686,9 +687,7 @@ private fun AudioPlayerBottomSheet(
                                         },
                                         onAddToPlaylist = {
                                             coroutineScope.launch {
-                                                val playUrl = withContext(Dispatchers.IO) {
-                                                    NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull()
-                                                } ?: ""
+                                                val playUrl = NcmApiClient.getSongPlayUrl(ncmSong.id).getOrNull() ?: ""
                                                 showAddToPlaylistDialog = playUrl to "${ncmSong.name} - ${ncmSong.artist}"
                                             }
                                         }

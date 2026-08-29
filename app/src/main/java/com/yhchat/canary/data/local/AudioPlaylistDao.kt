@@ -34,6 +34,9 @@ interface AudioPlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItem(item: AudioPlaylistItem)
 
+    @Update
+    suspend fun updateItem(item: AudioPlaylistItem)
+
     @Query("DELETE FROM audio_playlist_items WHERE id = :itemId")
     suspend fun deleteItem(itemId: String)
 
