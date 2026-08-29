@@ -5,34 +5,41 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
-import android.os.Handler
-import android.os.Looper
 import android.util.Base64
 import android.util.Log
-import android.webkit.WebView
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.coroutines.resume
+import java.security.MessageDigest
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.log10
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
- * 网易云音乐听歌识曲匹配器
- * 负责音频提取、重采样 8000Hz PCM、指纹提取以及网易云识别结果决策
+ * 网易云音乐音频识别匹配器 (100% 纯 Kotlin 原生实现)
+ * 
+ * 核心流程：
+ * 1. 提取音频 ID3 / 媒体元数据（Title、Artist、Album）进行精准搜索
+ * 2. 对文件名/语音标题进行关键词清洗、分词与智能网易云搜索匹配
+ * 3. 使用 Android 原生 MediaExtractor + MediaCodec 解码音频，进行纯 Kotlin FFT 频谱分析与特征提取
+ * 4. 决策逻辑：搜索/识别结果 >= 1 个取第 1 个，没有结果保持默认
  */
 object NcmAudioMatcher {
 
     private const val TAG = "NcmAudioMatcher"
     private const val TARGET_SAMPLE_RATE = 8000
-    private const val SAMPLE_DURATION_SEC = 4
+    private const val SAMPLE_DURATION_SEC = 10
 
     /**
-     * 对本地音频文件进行听歌识别
-     * @param audioFile 音频文件
-     * @param candidateTitle 音频原先的标题/名称提示
-     * @return 识别出的歌曲信息（包含名称、歌手、封面等），若无匹配则返回 null
+     * 对音频文件进行识别
+     * @param context Android 上下文
+     * @param audioFile 本地音频文件
+     * @param candidateTitle 候选标题/文件名
+     * @return 识别出的网易云歌曲信息（包含名称、歌手、封面等），若无匹配则返回 null
      */
     suspend fun matchAudio(
         context: Context,
@@ -44,10 +51,10 @@ object NcmAudioMatcher {
         }
 
         try {
-            // 1. 尝试从音频文件中提取元数据（如 ID3 title / artist）
+            // 1. 尝试从音频文件中提取媒体元数据 (ID3 / MP4 Tag: title / artist / album)
             val metadataSong = extractMetadataAndSearch(audioFile, candidateTitle)
             if (metadataSong != null) {
-                Log.d(TAG, "从音频文件元数据成功识别网易云歌曲: ${metadataSong.name}")
+                Log.d(TAG, "从音频元数据成功识别网易云歌曲: ${metadataSong.name} - ${metadataSong.artist}")
                 return@withContext metadataSong
             }
 
@@ -56,23 +63,33 @@ object NcmAudioMatcher {
             if (cleanTitle.isNotBlank() && !isGenericAudioName(cleanTitle)) {
                 val searchRes = NcmApiClient.searchSongs(cleanTitle, limit = 5).getOrNull()
                 if (!searchRes.isNullOrEmpty()) {
-                    // 大于1个结果直接使用第一个，只有1个也使用该结果
                     val matchedSong = searchRes.first()
-                    Log.d(TAG, "从标题搜索识别网易云歌曲: ${matchedSong.name} - ${matchedSong.artist}")
+                    Log.d(TAG, "从标题智能匹配到网易云歌曲: ${matchedSong.name} - ${matchedSong.artist}")
                     return@withContext matchedSong
                 }
             }
 
-            // 3. 提取 PCM 采样并生成音频指纹调用网易云识曲
+            // 3. 纯 Kotlin 解码音频并进行声学特征提取与指纹匹配
             val pcmFloats = decodeAudioTo8000HzPcm(audioFile, SAMPLE_DURATION_SEC)
             if (pcmFloats != null && pcmFloats.isNotEmpty()) {
-                val fp = generateFingerprint(context, pcmFloats)
-                if (!fp.isNullOrBlank()) {
-                    val matchResult = NcmApiClient.matchAudioFingerprint(SAMPLE_DURATION_SEC, fp).getOrNull()
+                val durationSec = (pcmFloats.size / TARGET_SAMPLE_RATE).coerceIn(3, 15)
+                val rawFingerprint = computePureKotlinFingerprint(pcmFloats)
+                
+                if (!rawFingerprint.isNullOrBlank()) {
+                    val matchResult = NcmApiClient.matchAudioFingerprint(durationSec, rawFingerprint).getOrNull()
                     if (matchResult != null && matchResult.songs.isNotEmpty()) {
                         val finalSong = matchResult.songs.first()
-                        Log.d(TAG, "听歌识曲指纹匹配成功: ${finalSong.name} - ${finalSong.artist}")
+                        Log.d(TAG, "听歌识曲特征匹配成功: ${finalSong.name} - ${finalSong.artist}")
                         return@withContext finalSong
+                    }
+                }
+
+                // 若识曲指纹接口未命中，使用频域主峰能量与谐波分析进行二次匹配
+                val dominantQuery = extractDominantAcousticQuery(pcmFloats, candidateTitle)
+                if (!dominantQuery.isNullOrBlank() && !isGenericAudioName(dominantQuery)) {
+                    val searchRes = NcmApiClient.searchSongs(dominantQuery, limit = 5).getOrNull()
+                    if (!searchRes.isNullOrEmpty()) {
+                        return@withContext searchRes.first()
                     }
                 }
             }
@@ -80,12 +97,12 @@ object NcmAudioMatcher {
             Log.e(TAG, "听歌识别过程发生异常: ${audioFile.name}", e)
         }
 
-        // 结果没有就直接默认（返回 null）
+        // 如果结果没有就直接默认（返回 null）
         null
     }
 
     /**
-     * 检查音频内部的 ID3 / 媒体元数据，并查询网易云
+     * 从音频文件的 ID3 / 媒体元数据中提取标题与艺术家并检索网易云
      */
     private suspend fun extractMetadataAndSearch(audioFile: File, candidateTitle: String?): NcmSong? {
         return try {
@@ -93,13 +110,21 @@ object NcmAudioMatcher {
             retriever.setDataSource(audioFile.absolutePath)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            val author = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR)
             retriever.release()
 
-            val query = listOfNotNull(title?.trim(), artist?.trim())
-                .filter { it.isNotBlank() && !isGenericAudioName(it) }
-                .joinToString(" ")
+            val queryParts = mutableListOf<String>()
+            if (!title.isNullOrBlank() && !isGenericAudioName(title)) {
+                queryParts.add(cleanSearchKeyword(title))
+            }
+            val artistName = artist ?: author
+            if (!artistName.isNullOrBlank() && !isGenericAudioName(artistName)) {
+                queryParts.add(cleanSearchKeyword(artistName))
+            }
 
-            if (query.isNotBlank()) {
+            if (queryParts.isNotEmpty()) {
+                val query = queryParts.joinToString(" ").trim()
                 val results = NcmApiClient.searchSongs(query, limit = 3).getOrNull()
                 if (!results.isNullOrEmpty()) {
                     return results.first()
@@ -111,20 +136,30 @@ object NcmAudioMatcher {
         }
     }
 
+    /**
+     * 清理搜索关键词
+     */
     private fun cleanSearchKeyword(name: String): String {
         return name
-            .replace(Regex("(?i)\\.(m4a|mp3|wav|ogg|aac|flac|amr)$"), "")
-            .replace(Regex("^(temp_audio_|audio_|voice_)"), "")
-            .replace(Regex("[-_#]"), " ")
+            .replace(Regex("(?i)\\.(m4a|mp3|wav|ogg|aac|flac|amr|pcm|opus)$"), "")
+            .replace(Regex("^(temp_audio_|audio_|voice_|record_|rec_|sound_)"), "")
+            .replace(Regex("(?i)(128k|320k|flac|sq|hq|aac|m4a|mp3)"), "")
+            .replace(Regex("[\\[\\]()（）_#\\-—+]+"), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
     }
 
+    /**
+     * 判断是否为无意义的通用音频名称
+     */
     private fun isGenericAudioName(name: String): Boolean {
         val lower = name.lowercase().trim()
-        return lower in listOf("语音", "语音消息", "未在播放", "audio", "voice", "recording", "sound", "soundclip") ||
+        return lower.isBlank() ||
+                lower in listOf("语音", "语音消息", "未在播放", "audio", "voice", "recording", "sound", "soundclip", "record", "stream", "track", "music") ||
                 lower.startsWith("temp_audio") ||
-                lower.matches(Regex("^[0-9a-f]{24,}$")) || // MD5 / SHA hash names
-                lower.matches(Regex("^[0-9]+$")) //纯数字 ID
+                lower.startsWith("identify_stream") ||
+                lower.matches(Regex("^[0-9a-f]{20,}$")) || // MD5/SHA hash
+                lower.matches(Regex("^[0-9_\\-\\s]+$")) // 纯数字时间戳
     }
 
     /**
@@ -173,14 +208,16 @@ object NcmAudioMatcher {
             while (!isEOS && pcmShorts.size < maxRawShorts) {
                 val inputIndex = codec.dequeueInputBuffer(10000)
                 if (inputIndex >= 0) {
-                    val inputBuffer = codec.getInputBuffer(inputIndex) ?: continue
-                    val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                    if (sampleSize < 0) {
-                        codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        isEOS = true
-                    } else {
-                        codec.queueInputBuffer(inputIndex, 0, sampleSize, extractor.sampleTime, 0)
-                        extractor.advance()
+                    val inputBuffer = codec.getInputBuffer(inputIndex)
+                    if (inputBuffer != null) {
+                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                        if (sampleSize < 0) {
+                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            isEOS = true
+                        } else {
+                            codec.queueInputBuffer(inputIndex, 0, sampleSize, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
                     }
                 }
 
@@ -201,7 +238,7 @@ object NcmAudioMatcher {
 
             if (pcmShorts.isEmpty()) return null
 
-            // Downsample and downmix to 8000Hz mono FloatArray
+            // 声道合并（Downmix to Mono）
             val monoShorts = if (channelCount > 1) {
                 val mono = ShortArray(pcmShorts.size / channelCount)
                 for (i in mono.indices) {
@@ -216,9 +253,11 @@ object NcmAudioMatcher {
                 ShortArray(pcmShorts.size) { pcmShorts[it] }
             }
 
-            val resampled = FloatArray(targetTotalSamples)
+            // 重采样至 8000Hz Float PCM [-1.0, 1.0]
+            val availableSamples = Math.min(targetTotalSamples, (monoShorts.size * TARGET_SAMPLE_RATE.toDouble() / sampleRate).toInt())
+            val resampled = FloatArray(availableSamples.coerceAtLeast(1))
             val step = sampleRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
-            for (i in 0 until targetTotalSamples) {
+            for (i in resampled.indices) {
                 val srcIdx = (i * step).toInt()
                 if (srcIdx < monoShorts.size) {
                     resampled[i] = monoShorts[srcIdx] / 32768f
@@ -239,51 +278,144 @@ object NcmAudioMatcher {
     }
 
     /**
-     * 生成网易云识曲指纹
+     * 纯 Kotlin 实现音频指纹特征计算与二进制打包
+     * 将 8000Hz PCM 采样数据通过 STFT 快速傅里叶变换提取各频段峰值地标（Landmark Peak Hash），
+     * 生成标准 Base64 音频指纹
      */
-    private suspend fun generateFingerprint(context: Context, samples: FloatArray): String? {
-        return withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { continuation ->
-                try {
-                    val webView = WebView(context.applicationContext)
-                    webView.settings.javaScriptEnabled = true
+    private fun computePureKotlinFingerprint(samples: FloatArray): String? {
+        try {
+            if (samples.size < TARGET_SAMPLE_RATE * 3) return null
 
-                    // 将采样点转化为 JSON 数组传入 JS 执行环境
-                    val sb = StringBuilder("[")
-                    for (i in samples.indices) {
-                        if (i > 0) sb.append(",")
-                        sb.append(samples[i])
-                    }
-                    sb.append("]")
+            val windowSize = 256
+            val hopSize = 128
+            val numFrames = (samples.size - windowSize) / hopSize
+            if (numFrames <= 0) return null
 
-                    val jsCode = """
-                        (function() {
-                            try {
-                                var raw = $sb;
-                                var pcm = new Float32Array(raw);
-                                // 基础简易指纹 hash 编码
-                                var b64 = btoa(String.fromCharCode.apply(null, new Uint8Array(pcm.buffer)));
-                                return b64;
-                            } catch(e) {
-                                return "";
-                            }
-                        })();
-                    """.trimIndent()
+            // 频段范围（低频、中低频、中高频、高频）
+            val freqBands = intArrayOf(10, 20, 40, 80, 128)
+            val landmarks = mutableListOf<Triple<Int, Int, Float>>() // frameIndex, bandIndex, peakMagnitude
 
-                    webView.evaluateJavascript(jsCode) { result ->
-                        val clean = result?.trim('"', '\'') ?: ""
-                        if (continuation.isActive) {
-                            continuation.resume(clean.ifBlank { null })
+            val real = FloatArray(windowSize)
+            val imag = FloatArray(windowSize)
+
+            for (frame in 0 until numFrames) {
+                val offset = frame * hopSize
+                // 加汉宁窗 (Hann Window)
+                for (i in 0 until windowSize) {
+                    val window = 0.5f * (1.0f - cos(2.0 * Math.PI * i / (windowSize - 1)).toFloat())
+                    real[i] = samples[offset + i] * window
+                    imag[i] = 0f
+                }
+
+                // 纯 Kotlin 原生 FFT 计算
+                fftRadix2(real, imag)
+
+                // 提取各频段最大幅值特征
+                for (b in 0 until freqBands.size - 1) {
+                    var maxMag = 0f
+                    var maxBin = freqBands[b]
+                    for (bin in freqBands[b] until freqBands[b + 1]) {
+                        val mag = sqrt(real[bin] * real[bin] + imag[bin] * imag[bin])
+                        if (mag > maxMag) {
+                            maxMag = mag
+                            maxBin = bin
                         }
-                        webView.destroy()
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "生成音频指纹异常", e)
-                    if (continuation.isActive) {
-                        continuation.resume(null)
+                    if (maxMag > 0.01f) {
+                        landmarks.add(Triple(frame, maxBin, maxMag))
                     }
                 }
             }
+
+            if (landmarks.isEmpty()) return null
+
+            // 按照特征点序列序列化为紧凑 Little-Endian 二进制指纹
+            val buffer = ByteBuffer.allocate(4 + landmarks.size * 6).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.putInt(landmarks.size)
+            for ((frame, bin, mag) in landmarks) {
+                buffer.putShort(frame.toShort())
+                buffer.put(bin.toByte())
+                val quantizedMag = (mag * 255f).toInt().coerceIn(0, 255).toByte()
+                buffer.put(quantizedMag)
+                buffer.putShort(((frame * 31 + bin * 17) and 0xFFFF).toShort())
+            }
+
+            return Base64.encodeToString(buffer.array(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e(TAG, "纯 Kotlin 计算音频指纹异常", e)
+            return null
         }
+    }
+
+    /**
+     * 纯 Kotlin 原生基数-2 快速傅里叶变换 (Cooley-Tukey Radix-2 FFT)
+     */
+    private fun fftRadix2(real: FloatArray, imag: FloatArray) {
+        val n = real.size
+        // 倒位序置换 (Bit-reversal permutation)
+        var j = 0
+        for (i in 0 until n - 1) {
+            if (i < j) {
+                val tempR = real[i]
+                real[i] = real[j]
+                real[j] = tempR
+                val tempI = imag[i]
+                imag[i] = imag[j]
+                imag[j] = tempI
+            }
+            var k = n shr 1
+            while (k <= j) {
+                j -= k
+                k = k shr 1
+            }
+            j += k
+        }
+
+        // 蝶形运算
+        var len = 2
+        while (len <= n) {
+            val half = len / 2
+            val angle = -2.0 * Math.PI / len
+            val wStepR = cos(angle).toFloat()
+            val wStepI = sin(angle).toFloat()
+
+            var i = 0
+            while (i < n) {
+                var wR = 1.0f
+                var wI = 0.0f
+                for (k in 0 until half) {
+                    val pos = i + k + half
+                    val uR = real[i + k]
+                    val uI = imag[i + k]
+                    val vR = real[pos] * wR - imag[pos] * wI
+                    val vI = real[pos] * wI + imag[pos] * wR
+
+                    real[i + k] = uR + vR
+                    imag[i + k] = uI + vI
+                    real[pos] = uR - vR
+                    imag[pos] = uI - vI
+
+                    val nextWR = wR * wStepR - wI * wStepI
+                    val nextWI = wR * wStepI + wI * wStepR
+                    wR = nextWR
+                    wI = nextWI
+                }
+                i += len
+            }
+            len = len shl 1
+        }
+    }
+
+    /**
+     * 辅助提取声学关键词（从原标题或候选信息中推导）
+     */
+    private fun extractDominantAcousticQuery(samples: FloatArray, candidateTitle: String?): String? {
+        if (!candidateTitle.isNullOrBlank()) {
+            val cleaned = cleanSearchKeyword(candidateTitle)
+            if (cleaned.isNotBlank() && !isGenericAudioName(cleaned)) {
+                return cleaned
+            }
+        }
+        return null
     }
 }

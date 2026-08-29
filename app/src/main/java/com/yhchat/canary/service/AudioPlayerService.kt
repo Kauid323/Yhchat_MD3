@@ -657,6 +657,28 @@ class AudioPlayerService : Service() {
                         updatePlaybackState(playing = true)
                         updateNotification(title, "正在播放")
                         startProgressUpdates()
+
+                        // 异步启动网易云听歌识别与热更新（流式播放）
+                        serviceScope.launch(Dispatchers.IO) {
+                            try {
+                                val audioFile = audioCacheManager.getCachedAudioFile(audioUrl)
+                                    ?: downloadAudioChunkForRecognition(audioUrl)
+                                if (audioFile != null && audioFile.exists()) {
+                                    val matched = NcmAudioMatcher.matchAudio(this@AudioPlayerService, audioFile, title)
+                                    if (matched != null) {
+                                        withContext(Dispatchers.Main) {
+                                            updateAudioInfo(
+                                                newTitle = matched.name,
+                                                newArtist = matched.artist,
+                                                newCoverUrl = matched.coverUrl
+                                            )
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "流式听歌识别失败", e)
+                            }
+                        }
                     }
 
                     setOnCompletionListener {
@@ -766,6 +788,30 @@ class AudioPlayerService : Service() {
              null
          }
      }
+
+      private suspend fun downloadAudioChunkForRecognition(audioUrl: String): File? = withContext(Dispatchers.IO) {
+          try {
+              val tempFile = File(cacheDir, "identify_stream_${System.currentTimeMillis()}.m4a")
+              val req = Request.Builder()
+                  .url(audioUrl)
+                  .addHeader("Range", "bytes=0-524288")
+                  .build()
+              okHttpClient.newCall(req).execute().use { resp ->
+                  val body = resp.body ?: return@withContext null
+                  tempFile.outputStream().use { out ->
+                      body.byteStream().copyTo(out)
+                  }
+              }
+              if (tempFile.exists() && tempFile.length() > 0) {
+                  tempFile
+              } else {
+                  null
+              }
+          } catch (e: Exception) {
+              Log.w(TAG, "下载识曲音频分段失败", e)
+              null
+          }
+      }
     
     private fun playLocalAudio(localPath: String, title: String) {
         // 停止当前播放
