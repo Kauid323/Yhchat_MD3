@@ -21,10 +21,6 @@ jobs:
             gradle_task: assembleStandardDebug
             artifact_name: apk-standard-debug
             asset_name: app-standard-debug.apk
-          - flavor: miuix
-            gradle_task: assembleMiuixDebug
-            artifact_name: apk-miuix-debug
-            asset_name: app-miuix-debug.apk
 
     steps:
       - name: Checkout code

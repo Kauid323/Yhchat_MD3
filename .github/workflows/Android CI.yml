@@ -21,34 +21,18 @@ jobs:
             gradle_task: assembleStandardRelease
             artifact_name: apk-standard
             asset_name: app-standard-release.apk
-          - flavor: miuix
-            gradle_task: assembleMiuixRelease
-            artifact_name: apk-miuix
-            asset_name: app-miuix-release.apk
           - flavor: player
             gradle_task: assemblePlayerRelease
             artifact_name: apk-player
             asset_name: app-player-release.apk
-          - flavor: playermiuix
-            gradle_task: assemblePlayermiuixRelease
-            artifact_name: apk-playermiuix
-            asset_name: app-playermiuix-release.apk
           - flavor: live
             gradle_task: assembleLiveRelease
             artifact_name: apk-live
             asset_name: app-live-release.apk
-          - flavor: livemiuix
-            gradle_task: assembleLivemiuixRelease
-            artifact_name: apk-livemiuix
-            asset_name: app-livemiuix-release.apk
           - flavor: full
             gradle_task: assembleFullRelease
             artifact_name: apk-full
             asset_name: app-full-release.apk
-          - flavor: fullmiuix
-            gradle_task: assembleFullmiuixRelease
-            artifact_name: apk-fullmiuix
-            asset_name: app-fullmiuix-release.apk
 
     steps:
       - name: Checkout code
@@ -122,11 +106,11 @@ jobs:
           path: dist/${{ matrix.asset_name }}
           retention-days: 30
 
-  release:
+  notify-bot:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout code
@@ -168,21 +152,19 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Prepare release metadata
+      - name: Prepare bot release metadata
         id: release_meta
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          TAG_NAME="build-${{ steps.commit.outputs.hash }}"
-          STANDARD_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-standard-release.apk"
-          MIUIX_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-miuix-release.apk"
-          PLAYER_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-player-release.apk"
-          PLAYER_MIUIX_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-playermiuix-release.apk"
-          LIVE_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-live-release.apk"
-          LIVE_MIUIX_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-livemiuix-release.apk"
-          FULL_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-full-release.apk"
-          FULL_MIUIX_APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-fullmiuix-release.apk"
           BEFORE_SHA="${{ github.event.before }}"
           EMPTY_BEFORE="0000000000000000000000000000000000000000"
+          RUN_ID="${{ github.run_id }}"
+          REPO="${{ github.repository }}"
+          ACTIONS_RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          STANDARD_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-standard.zip"
+          PLAYER_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-player.zip"
+          LIVE_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-live.zip"
+          FULL_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-full.zip"
 
           if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "$EMPTY_BEFORE" ]; then
             CHANGELOG=$(git log --format='- %s' "${BEFORE_SHA}..HEAD")
@@ -200,44 +182,19 @@ jobs:
             COMMIT_LIST="- \`${{ steps.commit.outputs.hash }}\` ${COMMIT_MESSAGE}"
           fi
 
-          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-
-          cat > release-body.md <<EOF
-          ## Build Information
-          - **Version**: ${{ steps.version.outputs.release_name }}
-          - **Commit Hash**: ${{ steps.commit.outputs.full_hash }}
-          - **Build Date**: ${{ steps.date.outputs.date }}
-          - **Branch**: ${{ github.ref_name }}
-
-          ## Build Variants
-          - **Standard**: [app-standard-release.apk](${STANDARD_APK_URL})
-          - **Miuix**: [app-miuix-release.apk](${MIUIX_APK_URL})
-          - **Player**: [app-player-release.apk](${PLAYER_APK_URL})
-          - **PlayerMiuix**: [app-playermiuix-release.apk](${PLAYER_MIUIX_APK_URL})
-          - **Live**: [app-live-release.apk](${LIVE_APK_URL})
-          - **LiveMiuix**: [app-livemiuix-release.apk](${LIVE_MIUIX_APK_URL})
-          - **Full**: [app-full-release.apk](${FULL_APK_URL})
-          - **FullMiuix**: [app-fullmiuix-release.apk](${FULL_MIUIX_APK_URL})
-
-          ## Changelog
-          ${CHANGELOG}
-
-          ## Commit List
-          ${COMMIT_LIST}
-          EOF
-
           cat > bot-release-body.md <<EOF
           ## Build Information
           - **Version**: ${{ steps.version.outputs.release_name }}
           - **Commit Hash**: ${{ steps.commit.outputs.full_hash }}
           - **Build Date**: ${{ steps.date.outputs.date }}
           - **Branch**: ${{ github.ref_name }}
+          - **Actions Run**: [查看 Actions 构建与产物](${ACTIONS_RUN_URL})
 
-          ## Build Variants
-          - **StandardRelease**: [app-standard-release.apk](${STANDARD_APK_URL})
-          - **MiuixRelease**: [app-miuix-release.apk](${MIUIX_APK_URL})
-          - **PlayerRelease**: [app-player-release.apk](${PLAYER_APK_URL})
-          - **PlayermiuixRelease**: [app-playermiuix-release.apk](${PLAYER_MIUIX_APK_URL})
+          ## Build Variants (点击直链下载)
+          - **StandardRelease**: [app-standard-release.apk (zip)](${STANDARD_APK_URL})
+          - **PlayerRelease**: [app-player-release.apk (zip)](${PLAYER_APK_URL})
+          - **LiveRelease**: [app-live-release.apk (zip)](${LIVE_APK_URL})
+          - **FullRelease**: [app-full-release.apk (zip)](${FULL_APK_URL})
 
           ## Changelog
           ${CHANGELOG}
@@ -246,21 +203,7 @@ jobs:
           ${COMMIT_LIST}
           EOF
 
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-assets/*.apk
-          name: Canary ${{ steps.version.outputs.release_name }} (${{ steps.date.outputs.date }})
-          tag_name: ${{ steps.release_meta.outputs.tag_name }}
-          body_path: release-body.md
-          draft: false
-          prerelease: true
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify bot about release
+      - name: Notify bot about build
         continue-on-error: true
         env:
           BOT_SEND_TOKEN_VAR: ${{ vars.YHCHAT_BOT_SEND_TOKEN }}
@@ -350,9 +293,9 @@ jobs:
 
           BOT_APKS=(
             "release-assets/app-standard-release.apk"
-            "release-assets/app-miuix-release.apk"
             "release-assets/app-player-release.apk"
-            "release-assets/app-playermiuix-release.apk"
+            "release-assets/app-live-release.apk"
+            "release-assets/app-full-release.apk"
           )
 
           for apk in "${BOT_APKS[@]}"
@@ -373,7 +316,7 @@ jobs:
           SUMMARY_PAYLOAD=$(jq -n \
             --arg recvId "$BOT_RECV_ID" \
             --arg recvType "$BOT_RECV_TYPE" \
-            --arg text "Release bot notification finished. StandardRelease, MiuixRelease, PlayerRelease, and PlayermiuixRelease were sent when upload succeeded; files >= 20MB were skipped." \
+            --arg text "Build bot notification finished. StandardRelease, PlayerRelease, LiveRelease, and FullRelease were sent when upload succeeded; files >= 20MB were skipped." \
             '{
               recvId: $recvId,
               recvType: $recvType,

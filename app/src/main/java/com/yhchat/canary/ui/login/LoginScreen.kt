@@ -64,8 +64,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -179,8 +181,11 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start
             ) {
-                Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher),
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(R.mipmap.ic_launcher)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = "云湖",
                     modifier = Modifier
                         .size(56.dp)
