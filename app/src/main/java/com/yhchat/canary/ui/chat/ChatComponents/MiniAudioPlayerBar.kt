@@ -31,7 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -510,9 +512,14 @@ private fun AudioPlayerBottomSheet(
         onPlayUrl(prevItem.url, prevItem.title)
     }
 
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    var sheetHeightPx by remember { mutableIntStateOf(0) }
+    var cardHeightPx by remember { mutableIntStateOf(0) }
+    var minSheetOffset by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         containerColor = MaterialTheme.colorScheme.surface
     ) {
@@ -520,6 +527,9 @@ private fun AudioPlayerBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
+                .onGloballyPositioned { coordinates ->
+                    sheetHeightPx = coordinates.size.height
+                }
         ) {
             // ── 顶部：Tab 栏 ──────────────────────────────────────────────
             val tabs = listOf("当前播放", "网易云", "本地录音", "我的列表")
@@ -774,10 +784,25 @@ private fun AudioPlayerBottomSheet(
                 }
 
                 // 【顶层 / 前景】：悬浮在列表最下方的播放器控制面板（浮动卡片）
+                // 滑动 BottomSheet 时卡片保持吸附在底部，直到拖拽手柄接触卡片时随之一同收回
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            cardHeightPx = coordinates.size.height
+                        }
+                        .graphicsLayer {
+                            val curOffset = runCatching { sheetState.requireOffset() }.getOrNull() ?: 0f
+                            if (curOffset > 0f && curOffset < minSheetOffset) {
+                                minSheetOffset = curOffset
+                            }
+                            val y0 = if (minSheetOffset != Float.MAX_VALUE) minSheetOffset else curOffset
+                            val delta = (curOffset - y0).coerceAtLeast(0f)
+                            val maxShift = (sheetHeightPx - cardHeightPx).coerceAtLeast(0).toFloat()
+                            val shift = delta.coerceIn(0f, maxShift)
+                            translationY = -shift
+                        }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,

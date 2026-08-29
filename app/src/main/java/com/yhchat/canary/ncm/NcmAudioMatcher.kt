@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.media.MediaMetadataRetriever
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -12,34 +11,31 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.MessageDigest
 import kotlin.math.cos
-import kotlin.math.ln
-import kotlin.math.log10
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * 网易云音乐音频识别匹配器 (100% 纯 Kotlin 原生实现)
+ * 网易云音乐听歌识曲匹配器 (100% 纯 Kotlin 原生声学特征识别)
  * 
  * 核心流程：
- * 1. 提取音频 ID3 / 媒体元数据（Title、Artist、Album）进行精准搜索
- * 2. 对文件名/语音标题进行关键词清洗、分词与智能网易云搜索匹配
- * 3. 使用 Android 原生 MediaExtractor + MediaCodec 解码音频，进行纯 Kotlin FFT 频谱分析与特征提取
- * 4. 决策逻辑：搜索/识别结果 >= 1 个取第 1 个，没有结果保持默认
+ * 1. 使用 Android 原生 MediaExtractor + MediaCodec 解码本地/缓存音频为 8000Hz Mono Float PCM
+ * 2. 纯 Kotlin 原生 STFT 快速傅里叶变换与频谱特征提取（Landmark Peak Hash 指纹）
+ * 3. 请求网易云听歌识曲接口 (https://interface.music.163.com/api/music/audio/match)
+ * 4. 识别结果 >= 1 个取第 1 个；无识别结果则保持默认（返回 null，绝不回退搜歌）
  */
 object NcmAudioMatcher {
 
     private const val TAG = "NcmAudioMatcher"
     private const val TARGET_SAMPLE_RATE = 8000
-    private const val SAMPLE_DURATION_SEC = 10
+    private const val SAMPLE_DURATION_SEC = 10 // 听歌识曲标准特征截取 10 秒
 
     /**
-     * 对音频文件进行识别
+     * 听歌识曲主函数
+     * 仅根据音频真实声学特征进行识别，不进行任何文本搜歌
      * @param context Android 上下文
      * @param audioFile 本地音频文件
-     * @param candidateTitle 候选标题/文件名
-     * @return 识别出的网易云歌曲信息（包含名称、歌手、封面等），若无匹配则返回 null
+     * @return 识别出的网易云歌曲信息，若未识别出则返回 null
      */
     suspend fun matchAudio(
         context: Context,
@@ -51,115 +47,39 @@ object NcmAudioMatcher {
         }
 
         try {
-            // 1. 尝试从音频文件中提取媒体元数据 (ID3 / MP4 Tag: title / artist / album)
-            val metadataSong = extractMetadataAndSearch(audioFile, candidateTitle)
-            if (metadataSong != null) {
-                Log.d(TAG, "从音频元数据成功识别网易云歌曲: ${metadataSong.name} - ${metadataSong.artist}")
-                return@withContext metadataSong
-            }
-
-            // 2. 尝试从文件名/标题进行智能网易云搜索匹配
-            val cleanTitle = cleanSearchKeyword(candidateTitle ?: audioFile.nameWithoutExtension)
-            if (cleanTitle.isNotBlank() && !isGenericAudioName(cleanTitle)) {
-                val searchRes = NcmApiClient.searchSongs(cleanTitle, limit = 5).getOrNull()
-                if (!searchRes.isNullOrEmpty()) {
-                    val matchedSong = searchRes.first()
-                    Log.d(TAG, "从标题智能匹配到网易云歌曲: ${matchedSong.name} - ${matchedSong.artist}")
-                    return@withContext matchedSong
-                }
-            }
-
-            // 3. 纯 Kotlin 解码音频并进行声学特征提取与指纹匹配
+            // 1. Android 原生解码音频并重采样至 8000Hz Mono Float PCM
             val pcmFloats = decodeAudioTo8000HzPcm(audioFile, SAMPLE_DURATION_SEC)
-            if (pcmFloats != null && pcmFloats.isNotEmpty()) {
-                val durationSec = (pcmFloats.size / TARGET_SAMPLE_RATE).coerceIn(3, 15)
-                val rawFingerprint = computePureKotlinFingerprint(pcmFloats)
-                
-                if (!rawFingerprint.isNullOrBlank()) {
-                    val matchResult = NcmApiClient.matchAudioFingerprint(durationSec, rawFingerprint).getOrNull()
-                    if (matchResult != null && matchResult.songs.isNotEmpty()) {
-                        val finalSong = matchResult.songs.first()
-                        Log.d(TAG, "听歌识曲特征匹配成功: ${finalSong.name} - ${finalSong.artist}")
-                        return@withContext finalSong
-                    }
-                }
+            if (pcmFloats == null || pcmFloats.isEmpty()) {
+                Log.w(TAG, "解码音频失败或无有效 PCM 数据: ${audioFile.name}")
+                return@withContext null
+            }
 
-                // 若识曲指纹接口未命中，使用频域主峰能量与谐波分析进行二次匹配
-                val dominantQuery = extractDominantAcousticQuery(pcmFloats, candidateTitle)
-                if (!dominantQuery.isNullOrBlank() && !isGenericAudioName(dominantQuery)) {
-                    val searchRes = NcmApiClient.searchSongs(dominantQuery, limit = 5).getOrNull()
-                    if (!searchRes.isNullOrEmpty()) {
-                        return@withContext searchRes.first()
-                    }
-                }
+            // 2. 纯 Kotlin 计算声学指纹
+            val durationSec = (pcmFloats.size / TARGET_SAMPLE_RATE).coerceIn(3, 15)
+            val rawFingerprint = computePureKotlinFingerprint(pcmFloats)
+            if (rawFingerprint.isNullOrBlank()) {
+                Log.w(TAG, "计算音频特征指纹失败: ${audioFile.name}")
+                return@withContext null
+            }
+
+            // 3. 请求网易云听歌识曲匹配接口 (algorithmCode=shazam_v2)
+            Log.d(TAG, "正在发起网易云听歌识曲识别: duration=${durationSec}s, fpLength=${rawFingerprint.length}")
+            val matchResult = NcmApiClient.matchAudioFingerprint(durationSec, rawFingerprint).getOrNull()
+            
+            if (matchResult != null && matchResult.songs.isNotEmpty()) {
+                // 识别到结果，大于等于1个直接取第1个
+                val finalSong = matchResult.songs.first()
+                Log.d(TAG, "听歌识曲识别成功: ${finalSong.name} - ${finalSong.artist}")
+                return@withContext finalSong
+            } else {
+                Log.d(TAG, "网易云听歌识曲未识别到匹配歌曲: ${audioFile.name}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "听歌识别过程发生异常: ${audioFile.name}", e)
+            Log.e(TAG, "听歌识曲过程发生异常: ${audioFile.name}", e)
         }
 
-        // 如果结果没有就直接默认（返回 null）
+        // 未识别出时坚决返回 null，保持默认标题，绝不胡乱文本搜索
         null
-    }
-
-    /**
-     * 从音频文件的 ID3 / 媒体元数据中提取标题与艺术家并检索网易云
-     */
-    private suspend fun extractMetadataAndSearch(audioFile: File, candidateTitle: String?): NcmSong? {
-        return try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(audioFile.absolutePath)
-            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-            val author = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR)
-            retriever.release()
-
-            val queryParts = mutableListOf<String>()
-            if (!title.isNullOrBlank() && !isGenericAudioName(title)) {
-                queryParts.add(cleanSearchKeyword(title))
-            }
-            val artistName = artist ?: author
-            if (!artistName.isNullOrBlank() && !isGenericAudioName(artistName)) {
-                queryParts.add(cleanSearchKeyword(artistName))
-            }
-
-            if (queryParts.isNotEmpty()) {
-                val query = queryParts.joinToString(" ").trim()
-                val results = NcmApiClient.searchSongs(query, limit = 3).getOrNull()
-                if (!results.isNullOrEmpty()) {
-                    return results.first()
-                }
-            }
-            null
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * 清理搜索关键词
-     */
-    private fun cleanSearchKeyword(name: String): String {
-        return name
-            .replace(Regex("(?i)\\.(m4a|mp3|wav|ogg|aac|flac|amr|pcm|opus)$"), "")
-            .replace(Regex("^(temp_audio_|audio_|voice_|record_|rec_|sound_)"), "")
-            .replace(Regex("(?i)(128k|320k|flac|sq|hq|aac|m4a|mp3)"), "")
-            .replace(Regex("[\\[\\]()（）_#\\-—+]+"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-
-    /**
-     * 判断是否为无意义的通用音频名称
-     */
-    private fun isGenericAudioName(name: String): Boolean {
-        val lower = name.lowercase().trim()
-        return lower.isBlank() ||
-                lower in listOf("语音", "语音消息", "未在播放", "audio", "voice", "recording", "sound", "soundclip", "record", "stream", "track", "music") ||
-                lower.startsWith("temp_audio") ||
-                lower.startsWith("identify_stream") ||
-                lower.matches(Regex("^[0-9a-f]{20,}$")) || // MD5/SHA hash
-                lower.matches(Regex("^[0-9_\\-\\s]+$")) // 纯数字时间戳
     }
 
     /**
@@ -404,18 +324,5 @@ object NcmAudioMatcher {
             }
             len = len shl 1
         }
-    }
-
-    /**
-     * 辅助提取声学关键词（从原标题或候选信息中推导）
-     */
-    private fun extractDominantAcousticQuery(samples: FloatArray, candidateTitle: String?): String? {
-        if (!candidateTitle.isNullOrBlank()) {
-            val cleaned = cleanSearchKeyword(candidateTitle)
-            if (cleaned.isNotBlank() && !isGenericAudioName(cleaned)) {
-                return cleaned
-            }
-        }
-        return null
     }
 }

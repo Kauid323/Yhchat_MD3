@@ -6,6 +6,17 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
+import android.graphics.SurfaceTexture
+import android.media.MediaPlayer
+import android.view.Surface as AndroidSurface
+import android.view.TextureView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.material3.Surface
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.MotionPhotosOn
+import kotlinx.coroutines.delay
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -33,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import com.yhchat.canary.ui.adaptive.YhIcon as Icon
 import com.yhchat.canary.ui.adaptive.YhText as Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -278,6 +290,30 @@ private fun ZoomableImagePage(
     val painter = rememberAsyncImagePainter(
         model = imageRequest
     )
+
+    // 扫描图片文件字节，异步检测与提取实况照片 (Live Photo / Motion Photo) 内嵌视频
+    val liveVideoFileState = produceState<File?>(initialValue = null, imageUrl, reloadKey) {
+        value = LivePhotoUtil.extractLivePhotoVideo(context, imageUrl)
+    }
+    val liveVideoFile = liveVideoFileState.value
+    var isLivePhotoPlaying by remember(imageUrl) { mutableStateOf(false) }
+
+    // 自适应计算原图在 Fit 模式下的显示分辨率、尺寸与位置
+    val intrinsicSize = painter.intrinsicSize
+    val hasIntrinsic = intrinsicSize.isSpecified && intrinsicSize.width > 0f && intrinsicSize.height > 0f
+    val (fittedWidthDp, fittedHeightDp) = if (hasIntrinsic && containerSize.width > 0f && containerSize.height > 0f) {
+        val imageAspect = intrinsicSize.width / intrinsicSize.height
+        val containerAspect = containerSize.width / containerSize.height
+        val (widthPx, heightPx) = if (imageAspect > containerAspect) {
+            containerSize.width to (containerSize.width / imageAspect)
+        } else {
+            (containerSize.height * imageAspect) to containerSize.height
+        }
+        with(density) { widthPx.toDp() } to with(density) { heightPx.toDp() }
+    } else {
+        with(density) { containerSize.width.toDp() } to with(density) { containerSize.height.toDp() }
+    }
+
     val transformableState = rememberTransformableState { _, zoomChange, panChange, _ ->
         val previousScale = scale
         val newScale = (scale * zoomChange).coerceIn(1f, 5f)
@@ -349,88 +385,274 @@ private fun ZoomableImagePage(
             }
 
             else -> {
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = "预览图片",
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .onSizeChanged {
                             containerSize = Size(it.width.toFloat(), it.height.toFloat())
-                        }
-                        .clip(RoundedCornerShape(0.dp))
-                        .graphicsLayer(
-                            scaleX = scale,
-                            scaleY = scale,
-                            translationX = offsetX,
-                            translationY = offsetY
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 底层静止原图
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = "预览图片",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(0.dp))
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                translationX = offsetX,
+                                translationY = offsetY
+                            ),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    // 实况图片播放层：精确自适应原图 Fit 显示分辨率、尺寸、缩放与位移
+                    if (isLivePhotoPlaying && liveVideoFile != null) {
+                        LivePhotoVideoPlayer(
+                            videoFile = liveVideoFile,
+                            isPlaying = true,
+                            modifier = Modifier
+                                .size(fittedWidthDp, fittedHeightDp)
+                                .clip(RoundedCornerShape(0.dp))
+                                .graphicsLayer(
+                                    scaleX = scale,
+                                    scaleY = scale,
+                                    translationX = offsetX,
+                                    translationY = offsetY
+                                )
                         )
-                        .transformable(
-                            state = transformableState,
-                            canPan = { scale > 1.02f }
-                        )
-                        .pointerInput(imageUrl) {
-                            awaitEachGesture {
-                                var lockPager = false
-                                var hasPressedPointers: Boolean
-                                do {
-                                    val event = awaitPointerEvent()
-                                    val pressedCount = event.changes.count { it.pressed }
-                                    val shouldLock = pressedCount > 1 || scale > 1.02f
-                                    hasPressedPointers = event.changes.any { it.pressed }
-                                    if (shouldLock != lockPager) {
-                                        lockPager = shouldLock
-                                        onGestureLockChange(lockPager)
+                    }
+
+                    // 统一手势处理层（缩放、双击、长按播放实况、点击显隐控制栏）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .transformable(
+                                state = transformableState,
+                                canPan = { scale > 1.02f }
+                            )
+                            .pointerInput(imageUrl) {
+                                awaitEachGesture {
+                                    var lockPager = false
+                                    var hasPressedPointers: Boolean
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val pressedCount = event.changes.count { it.pressed }
+                                        val shouldLock = pressedCount > 1 || scale > 1.02f
+                                        hasPressedPointers = event.changes.any { it.pressed }
+                                        if (shouldLock != lockPager) {
+                                            lockPager = shouldLock
+                                            onGestureLockChange(lockPager)
+                                        }
+                                    } while (hasPressedPointers)
+                                    if (lockPager) {
+                                        onGestureLockChange(false)
                                     }
-                                } while (hasPressedPointers)
-                                if (lockPager) {
-                                    onGestureLockChange(false)
                                 }
                             }
-                        }
-                        .pointerInput(imageUrl) {
-                            detectTapGestures(
-                                onDoubleTap = { tapOffset ->
-                                    if (scale > 1f) {
-                                        scale = 1f
-                                        offsetX = 0f
-                                        offsetY = 0f
-                                        onGestureLockChange(false)
-                                    } else {
-                                        val targetScale = 2.5f
-                                        val centeredTap = Offset(
-                                            x = tapOffset.x - containerSize.width / 2f,
-                                            y = tapOffset.y - containerSize.height / 2f
-                                        )
-                                        val targetOffset = boundImageOffset(
-                                            containerSize = containerSize,
-                                            scale = targetScale,
-                                            desiredOffset = Offset(
-                                                x = -centeredTap.x * (targetScale - 1f),
-                                                y = -centeredTap.y * (targetScale - 1f)
-                                            )
-                                        )
-                                        scale = targetScale
-                                        offsetX = targetOffset.x
-                                        offsetY = targetOffset.y
-                                        onGestureLockChange(true)
-                                    }
-                                },
-                                onTap = {
-                                    onToggleControls()
-                                },
-                                onLongPress = {
-                                    if (scale <= 1f) {
-                                        onToggleControls()
-                                    }
+                            .pointerInput(imageUrl, liveVideoFile) {
+                                if (liveVideoFile != null) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            var isLongPress = false
+                                            val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+                                                delay(260)
+                                                isLongPress = true
+                                                isLivePhotoPlaying = true
+                                            }
+                                            try {
+                                                tryAwaitRelease()
+                                            } finally {
+                                                job.cancel()
+                                                if (isLongPress) {
+                                                    isLivePhotoPlaying = false
+                                                }
+                                            }
+                                        },
+                                        onDoubleTap = { tapOffset ->
+                                            if (scale > 1f) {
+                                                scale = 1f
+                                                offsetX = 0f
+                                                offsetY = 0f
+                                                onGestureLockChange(false)
+                                            } else {
+                                                val targetScale = 2.5f
+                                                val centeredTap = Offset(
+                                                    x = tapOffset.x - containerSize.width / 2f,
+                                                    y = tapOffset.y - containerSize.height / 2f
+                                                )
+                                                val targetOffset = boundImageOffset(
+                                                    containerSize = containerSize,
+                                                    scale = targetScale,
+                                                    desiredOffset = Offset(
+                                                        x = -centeredTap.x * (targetScale - 1f),
+                                                        y = -centeredTap.y * (targetScale - 1f)
+                                                    )
+                                                )
+                                                scale = targetScale
+                                                offsetX = targetOffset.x
+                                                offsetY = targetOffset.y
+                                                onGestureLockChange(true)
+                                            }
+                                        },
+                                        onTap = {
+                                            onToggleControls()
+                                        }
+                                    )
+                                } else {
+                                    detectTapGestures(
+                                        onDoubleTap = { tapOffset ->
+                                            if (scale > 1f) {
+                                                scale = 1f
+                                                offsetX = 0f
+                                                offsetY = 0f
+                                                onGestureLockChange(false)
+                                            } else {
+                                                val targetScale = 2.5f
+                                                val centeredTap = Offset(
+                                                    x = tapOffset.x - containerSize.width / 2f,
+                                                    y = tapOffset.y - containerSize.height / 2f
+                                                )
+                                                val targetOffset = boundImageOffset(
+                                                    containerSize = containerSize,
+                                                    scale = targetScale,
+                                                    desiredOffset = Offset(
+                                                        x = -centeredTap.x * (targetScale - 1f),
+                                                        y = -centeredTap.y * (targetScale - 1f)
+                                                    )
+                                                )
+                                                scale = targetScale
+                                                offsetX = targetOffset.x
+                                                offsetY = targetOffset.y
+                                                onGestureLockChange(true)
+                                            }
+                                        },
+                                        onTap = {
+                                            onToggleControls()
+                                        },
+                                        onLongPress = {
+                                            if (scale <= 1f) {
+                                                onToggleControls()
+                                            }
+                                        }
+                                    )
                                 }
+                            }
+                    )
+                }
+
+                // 实况照片 (Live Photo) 标识徽章
+                if (liveVideoFile != null) {
+                    Surface(
+                        onClick = { isLivePhotoPlaying = !isLivePhotoPlaying },
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isLivePhotoPlaying) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.6f),
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(start = 16.dp, top = 60.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MotionPhotosOn,
+                                contentDescription = "实况图片",
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isLivePhotoPlaying) MaterialTheme.colorScheme.onPrimary else Color.White
                             )
-                        },
-                    contentScale = ContentScale.Fit
-                )
+                            Text(
+                                text = if (isLivePhotoPlaying) "实况 播放中" else "实况",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (isLivePhotoPlaying) MaterialTheme.colorScheme.onPrimary else Color.White
+                            )
+                        }
+                    }
+                }
             }
         }
 
     }
+}
+
+/**
+ * 原生实况视频播放组件
+ * 使用 TextureView + MediaPlayer 进行高帧率、低开销的平滑实况循环播放
+ */
+@Composable
+private fun LivePhotoVideoPlayer(
+    videoFile: File,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var mediaPlayer by remember(videoFile) { mutableStateOf<MediaPlayer?>(null) }
+    var isSurfaceReady by remember(videoFile) { mutableStateOf(false) }
+
+    DisposableEffect(videoFile) {
+        val player = MediaPlayer().apply {
+            setDataSource(videoFile.absolutePath)
+            isLooping = true
+            prepareAsync()
+        }
+        mediaPlayer = player
+
+        onDispose {
+            try {
+                player.stop()
+                player.release()
+            } catch (_: Exception) {}
+            mediaPlayer = null
+        }
+    }
+
+    LaunchedEffect(isPlaying, mediaPlayer, isSurfaceReady) {
+        val player = mediaPlayer ?: return@LaunchedEffect
+        if (isSurfaceReady) {
+            if (isPlaying) {
+                if (!player.isPlaying) {
+                    player.start()
+                }
+            } else {
+                if (player.isPlaying) {
+                    player.pause()
+                    player.seekTo(0)
+                }
+            }
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            TextureView(ctx).apply {
+                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                        mediaPlayer?.setSurface(AndroidSurface(surface))
+                        isSurfaceReady = true
+                        if (isPlaying && mediaPlayer?.isPlaying == false) {
+                            mediaPlayer?.start()
+                        }
+                    }
+
+                    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
+
+                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                        isSurfaceReady = false
+                        mediaPlayer?.setSurface(null)
+                        return true
+                    }
+
+                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+                }
+            }
+        },
+        modifier = modifier
+    )
 }
 
 @Composable
