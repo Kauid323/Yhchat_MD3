@@ -188,14 +188,15 @@ object AudioUtils {
     suspend fun uploadAudioToQiniu(
         file: File,
         token: String,
-        uploadUrl: String
+        uploadUrl: String,
+        onProgress: (Float) -> Unit = {}
     ): com.yhchat.canary.data.model.QiniuUploadResponse? = withContext(Dispatchers.IO) {
         runCatching {
             val client = OkHttpClient()
             
             val fileKey = file.nameWithoutExtension + "." + file.extension
             
-            val requestBody = MultipartBody.Builder()
+            val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("token", token)
                 .addFormDataPart("key", fileKey)
@@ -205,6 +206,8 @@ object AudioUtils {
                     file.asRequestBody("audio/*".toMediaType())
                 )
                 .build()
+                
+            val requestBody = com.yhchat.canary.utils.upload.ProgressRequestBody(multipartBody, onProgress)
             
             val request = Request.Builder()
                 .url(uploadUrl)

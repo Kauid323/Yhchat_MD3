@@ -150,7 +150,8 @@ object ImageUploadUtil {
     suspend fun uploadImage(
         context: Context,
         imageUri: Uri,
-        uploadToken: String
+        uploadToken: String,
+        onProgress: (Float) -> Unit = {}
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         var preparedImage: PreparedImageUpload? = null
         try {
@@ -231,7 +232,7 @@ object ImageUploadUtil {
             //     "key": (None, name),
             //     "file": (name, file)
             // }
-            val requestBody = MultipartBody.Builder()
+            val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("token", uploadToken)
                 .addFormDataPart("key", fileKey)
@@ -241,6 +242,8 @@ object ImageUploadUtil {
                     prepared.tempFile.asRequestBody(prepared.mimeType.toMediaTypeOrNull())
                 )
                 .build()
+                
+            val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
             Log.d(TAG, "📤 开始上传到七牛云...")
             Log.d(TAG, "📤 上传URL: https://$uploadHost")

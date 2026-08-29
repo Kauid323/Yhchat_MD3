@@ -40,12 +40,14 @@ object VideoUploadUtil {
      * @param context 上下文
      * @param videoUri 视频URI
      * @param uploadToken 七牛上传token（从/v1/misc/qiniu-token-video获取）
+     * @param onProgress 上传进度回调 (0.0 - 1.0)
      * @return 上传结果，包含key、hash、avinfo等信息
      */
     suspend fun uploadVideo(
         context: Context,
         videoUri: Uri,
-        uploadToken: String
+        uploadToken: String,
+        onProgress: (Float) -> Unit = {}
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "📹 ========== 开始上传视频 ==========")
@@ -104,8 +106,9 @@ object VideoUploadUtil {
                 .get()
                 .build()
             
-            val queryResponse = client.newCall(queryRequest).execute()
-            val uploadHost = if (queryResponse.isSuccessful) {
+            val uploadHost = client.newCall(queryRequest).execute().use { queryResponse ->
+                if (!queryResponse.isSuccessful) return@use null
+                
                 val queryJson = JSONObject(queryResponse.body?.string() ?: "{}")
                 Log.d(TAG, "📥 区域查询响应: $queryJson")
                 val hosts = queryJson.getJSONArray("hosts")
@@ -115,15 +118,12 @@ object VideoUploadUtil {
                 val resultHost = domains.getString(0)
                 Log.d(TAG, "✅ 上传host: $resultHost")
                 resultHost
-            } else {
-                Log.w(TAG, "⚠️ 查询host失败，使用默认: upload-cn-east-2.qiniup.com")
-                "upload-cn-east-2.qiniup.com"
-            }
+            } ?: "upload-cn-east-2.qiniup.com"
             
             // 7. 构建multipart/form-data请求
             Log.d(TAG, "📹 构建multipart/form-data请求体...")
             
-            val requestBody = MultipartBody.Builder()
+            val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("token", uploadToken)
                 .addFormDataPart("key", videoKey)
@@ -133,6 +133,8 @@ object VideoUploadUtil {
                     finalTempFile.asRequestBody(mimeType.toMediaTypeOrNull())
                 )
                 .build()
+            
+            val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
             Log.d(TAG, "✅ 请求体构建完成")
             

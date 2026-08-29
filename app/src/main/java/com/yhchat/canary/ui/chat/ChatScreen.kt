@@ -583,6 +583,10 @@ fun ChatScreen(
             )
         }
         
+        com.yhchat.canary.ui.chat.ChatComponents.MiniAudioPlayerBar(
+            modifier = Modifier.zIndex(2.5f)
+        )
+        
         
         // 单个机器人看板区域
         SingleBotBoardSection(
@@ -1232,6 +1236,45 @@ fun ChatScreen(
                 )
             }
         } else {
+            // 上传附件时的进度条
+            if (uiState.uploadProgress != null) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = true,
+                    enter = androidx.compose.animation.expandVertically(),
+                    exit = androidx.compose.animation.shrinkVertically()
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                        ) {
+                            androidx.compose.material3.Text(
+                                text = "正在上传附件...",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            androidx.compose.material3.Text(
+                                text = "${(uiState.uploadProgress!! * 100).toInt()}%",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(4.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { uiState.uploadProgress ?: 0f },
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                            trackColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
+                        )
+                    }
+                }
+            }
+
         // 底部输入栏
             ChatInputBar(
                 text = inputText,

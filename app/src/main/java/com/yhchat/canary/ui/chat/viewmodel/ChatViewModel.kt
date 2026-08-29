@@ -52,7 +52,8 @@ data class ChatUiState(
     val botLlmRefParams: List<BotLlmRefParamItem> = emptyList(),
     val botLlmParamValues: Map<String, List<BotLlmParamValue>> = emptyMap(),
     val chatBackgroundUrl: String? = null,  // 聊天背景图片URL
-    val menuButtons: List<com.yhchat.canary.data.model.MenuButton> = emptyList()  // 群聊菜单按钮
+    val menuButtons: List<com.yhchat.canary.data.model.MenuButton> = emptyList(),  // 群聊菜单按钮
+    val uploadProgress: Float? = null // 上传进度 (0.0 - 1.0)
 )
 
 @HiltViewModel
@@ -538,11 +539,16 @@ class ChatViewModel @Inject constructor(
     /**
      * 点击群菜单按钮
      */
-    fun clickMenuButton(chatId: String, buttonId: String) {
+    fun clickMenuButton(button: com.yhchat.canary.data.model.MenuButton) {
         viewModelScope.launch {
-            groupRepository.clickMenuButton(chatId, buttonId).fold(
+            groupRepository.clickMenuButton(
+                buttonId = button.id,
+                chatId = currentChatId,
+                chatType = currentChatType,
+                value = button.content
+            ).fold(
                 onSuccess = {
-                    Log.d(tag, "点击菜单按钮成功: $buttonId")
+                    Log.d(tag, "点击菜单按钮成功: ${button.id}")
                 },
                 onFailure = { error ->
                     Log.e(tag, "点击菜单按钮失败", error)
@@ -561,9 +567,6 @@ class ChatViewModel @Inject constructor(
                 when (event) {
                     is MessageEvent.NewMessage -> {
                         handleNewMessage(event.message)
-                    }
-                    is MessageEvent.MessageRecalled -> {
-                        handleRecalledMessage(event.msgId)
                     }
                     is MessageEvent.MessageEdited -> {
                         handleEditedMessage(event.message)
@@ -736,16 +739,20 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送图片: $imageUri")
+                _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("图片") {
                     apiService.getQiniuImageToken(it)
                 } ?: return@launch
 
                 Log.d(tag, "开始上传图片到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.ImageUploadUtil.uploadImage(
+                val uploadResult = com.yhchat.canary.utils.upload.ImageUploadUtil.uploadImage(
                     context = context,
                     imageUri = imageUri,
-                    uploadToken = uploadToken
+                    uploadToken = uploadToken,
+                    onProgress = { progress ->
+                        _uiState.value = _uiState.value.copy(uploadProgress = progress)
+                    }
                 )
 
                 uploadResult.fold(
@@ -810,6 +817,8 @@ class ChatViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送图片异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送图片失败: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(uploadProgress = null)
             }
         }
     }
@@ -830,16 +839,20 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 Log.d(tag, "开始上传并发送视频: $videoUri")
+                _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("视频") {
                     apiService.getQiniuVideoToken(it)
                 } ?: return@launch
 
                 Log.d(tag, "开始上传视频到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.VideoUploadUtil.uploadVideo(
+                val uploadResult = com.yhchat.canary.utils.upload.VideoUploadUtil.uploadVideo(
                     context = context,
                     videoUri = videoUri,
-                    uploadToken = uploadToken
+                    uploadToken = uploadToken,
+                    onProgress = { progress ->
+                        _uiState.value = _uiState.value.copy(uploadProgress = progress)
+                    }
                 )
 
                 uploadResult.fold(
@@ -892,6 +905,8 @@ class ChatViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送视频异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送视频失败: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(uploadProgress = null)
             }
         }
     }
@@ -914,16 +929,20 @@ class ChatViewModel @Inject constructor(
                 Log.d(tag, "开始上传并发送文件")
                 Log.d(tag, "文件URI: $fileUri")
                 Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
+                _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("文件") {
                     apiService.getQiniuFileToken(it)
                 } ?: return@launch
 
                 Log.d(tag, "开始上传文件到七牛云...")
-                val uploadResult = com.yhchat.canary.utils.FileUploadUtil.uploadFile(
+                val uploadResult = com.yhchat.canary.utils.upload.FileUploadUtil.uploadFile(
                     context = context,
                     fileUri = fileUri,
-                    uploadToken = uploadToken
+                    uploadToken = uploadToken,
+                    onProgress = { progress ->
+                        _uiState.value = _uiState.value.copy(uploadProgress = progress)
+                    }
                 )
 
                 uploadResult.fold(
@@ -984,6 +1003,8 @@ class ChatViewModel @Inject constructor(
                 Log.e(tag, "上传并发送文件异常", e)
                 e.printStackTrace()
                 _uiState.value = _uiState.value.copy(error = "发送文件失败: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(uploadProgress = null)
             }
         }
     }
@@ -1006,6 +1027,7 @@ class ChatViewModel @Inject constructor(
                 Log.d(tag, "开始上传并发送音频")
                 Log.d(tag, "音频URI: $audioUri")
                 Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
+                _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("音频") {
                     apiService.getQiniuAudioToken(it)
@@ -1038,7 +1060,10 @@ class ChatViewModel @Inject constructor(
                 val uploadResponse = com.yhchat.canary.utils.AudioUtils.uploadAudioToQiniu(
                     file = audioFile,
                     token = uploadToken,
-                    uploadUrl = uploadDomain
+                    uploadUrl = uploadDomain,
+                    onProgress = { progress ->
+                        _uiState.value = _uiState.value.copy(uploadProgress = progress)
+                    }
                 )
 
                 if (uploadResponse == null) {
@@ -1098,6 +1123,8 @@ class ChatViewModel @Inject constructor(
                 Log.e(tag, "上传并发送音频异常", e)
                 e.printStackTrace()
                 _uiState.value = _uiState.value.copy(error = "发送音频失败: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(uploadProgress = null)
             }
         }
     }

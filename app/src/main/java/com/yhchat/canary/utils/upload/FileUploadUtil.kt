@@ -46,7 +46,8 @@ object FileUploadUtil {
     suspend fun uploadFile(
         context: Context,
         fileUri: Uri,
-        uploadToken: String
+        uploadToken: String,
+        onProgress: (Float) -> Unit = {}
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         var tempFile: File? = null
         try {
@@ -115,7 +116,7 @@ object FileUploadUtil {
             // 7. 使用OkHttp的MultipartBody构建请求（自动处理正确的格式）
             Log.d(TAG, "📤 构建multipart/form-data请求体...")
             
-            val requestBody = MultipartBody.Builder()
+            val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("token", uploadToken)
                 .addFormDataPart("key", fileKey)
@@ -125,6 +126,8 @@ object FileUploadUtil {
                     preparedTempFile.asRequestBody(mimeType.toMediaTypeOrNull())
                 )
                 .build()
+                
+            val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
             Log.d(TAG, "✅ 请求体构建完成")
             
