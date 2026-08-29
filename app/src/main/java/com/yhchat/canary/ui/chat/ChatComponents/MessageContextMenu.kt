@@ -164,7 +164,7 @@ fun MessageContextMenu(
                 if (onAddToPlaylist != null && message.contentType == 11) {
                     ContextMenuAction(
                         onClick = onAddToPlaylist,
-                        icon = Icons.Default.PlaylistAdd,
+                        icon = Icons.Default.AddCircle,
                         text = "加入播放列表"
                     )
                 }

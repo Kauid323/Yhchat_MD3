@@ -262,7 +262,6 @@ fun MessageItem(
             { onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl) }
         } else null,
         onSaveAudio = saveAudioAction,
-        onAddToPlaylist = addToPlaylistAction,
         onSpeechToText = speechToTextAction,
         onExternalShare = externalShareMessage
     )
