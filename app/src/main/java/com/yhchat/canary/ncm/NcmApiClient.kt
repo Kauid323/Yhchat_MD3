@@ -21,7 +21,7 @@ object NcmApiClient {
 
     private const val TAG = "NcmApiClient"
     private const val LINUX_FORWARD_URL = "https://music.163.com/api/linux/forward"
-    private const val AUDIO_MATCH_URL = "https://interface.music.163.com/api/music/audio/match"
+    private const val AUDIO_MATCH_URL = "https://interface.music.163.com/eapi/music/audio/match"
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -290,7 +290,7 @@ object NcmApiClient {
     }
 
     /**
-     * 听歌识曲音频指纹识别
+     * 听歌识曲音频指纹识别 (使用 EAPI 接口与加密协议)
      * @param durationSec 音频时长（秒）
      * @param audioFP Base64 音频指纹
      */
@@ -299,126 +299,113 @@ object NcmApiClient {
         audioFP: String
     ): Result<NcmAudioMatchResult?> = withContext(Dispatchers.IO) {
         try {
-            val safeDuration = durationSec.coerceIn(1, 15)
-            var responseBody: String? = null
+            val safeDuration = String.format(java.util.Locale.US, "%.1f", durationSec.toDouble().coerceIn(1.0, 15.0))
+            val sessionId = java.util.UUID.randomUUID().toString()
 
-            // 优先使用 POST FormBody 避免 URL 过长触发网关 414 / RST 连接断开
-            try {
-                val formBody = FormBody.Builder()
-                    .add("sessionId", "0123456789abcdef")
-                    .add("algorithmCode", "shazam_v2")
-                    .add("duration", safeDuration.toString())
-                    .add("rawdata", audioFP)
-                    .add("times", "1")
-                    .add("decrypt", "1")
-                    .build()
-
-                val postRequest = Request.Builder()
-                    .url(AUDIO_MATCH_URL)
-                    .post(formBody)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; 23013RK75C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36 NeteaseMusic/9.1.65")
-                    .addHeader("Referer", "https://interface.music.163.com")
-                    .addHeader("Origin", "https://interface.music.163.com")
-                    .addHeader("Accept", "*/*")
-                    .build()
-
-                httpClient.newCall(postRequest).execute().use { response ->
-                    if (response.isSuccessful) {
-                        responseBody = response.body?.string()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "POST 识曲请求异常，尝试 GET 降级: ${e.message}")
+            val dataJson = JSONObject().apply {
+                put("duration", safeDuration)
+                put("times", "4")
+                put("rawdata", audioFP)
+                put("sessionId", sessionId)
+                put("algorithmCode", "shazam_v2")
+                put("header", "{}")
+                put("e_r", "true")
             }
 
-            // 若 POST 失败或未返回，尝试 GET
-            if (responseBody.isNullOrBlank()) {
-                val encodedFP = URLEncoder.encode(audioFP, "UTF-8")
-                val url = "$AUDIO_MATCH_URL?sessionId=0123456789abcdef&algorithmCode=shazam_v2&duration=$safeDuration&rawdata=$encodedFP&times=1&decrypt=1"
+            // EAPI 加密请求体: params
+            val encryptedParams = NcmCrypto.encryptEApi("/api/music/audio/match", dataJson.toString())
+            val formBody = FormBody.Builder()
+                .add("params", encryptedParams)
+                .build()
 
-                val getRequest = Request.Builder()
-                    .url(url)
-                    .get()
-                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .addHeader("Referer", "https://interface.music.163.com")
-                    .addHeader("Accept", "*/*")
-                    .build()
+            val request = Request.Builder()
+                .url(AUDIO_MATCH_URL)
+                .post(formBody)
+                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; 23013RK75C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36 NeteaseMusic/9.1.65")
+                .addHeader("Referer", "https://interface.music.163.com")
+                .addHeader("Cookie", "os=android; appver=9.1.65; osver=14")
+                .build()
 
-                httpClient.newCall(getRequest).execute().use { response ->
-                    if (response.isSuccessful) {
-                        responseBody = response.body?.string()
+            httpClient.newCall(request).execute().use { response ->
+                val respBytes = response.body?.bytes() ?: return@withContext Result.success(null)
+                val decryptedJsonStr = NcmCrypto.decryptEApi(respBytes)
+                Log.d(TAG, "EAPI 识曲解密响应: $decryptedJsonStr")
+
+                if (decryptedJsonStr.isBlank()) {
+                    return@withContext Result.success(null)
+                }
+
+                val json = JSONObject(decryptedJsonStr)
+                val dataObj = json.optJSONObject("data") ?: return@withContext Result.success(null)
+                val resultArray = dataObj.optJSONArray("result")
+                    ?: dataObj.optJSONObject("data")?.optJSONArray("result")
+                    ?: dataObj.optJSONArray("resultSongs")
+                    ?: return@withContext Result.success(null)
+
+                if (resultArray.length() == 0) {
+                    return@withContext Result.success(null)
+                }
+
+                val songsList = mutableListOf<NcmSong>()
+                var startTimeMs = 0L
+
+                for (i in 0 until resultArray.length()) {
+                    val item = resultArray.getJSONObject(i)
+                    if (startTimeMs == 0L) {
+                        startTimeMs = item.optLong("startTime", 0L)
                     }
-                }
-            }
 
-            val bodyStr = responseBody ?: return@withContext Result.success(null)
-            val json = JSONObject(bodyStr)
+                    val entry = item.optJSONObject("song")
+                        ?: item.optJSONObject("data")?.optJSONObject("song")
+                        ?: item
 
-            val dataObj = json.optJSONObject("data") ?: return@withContext Result.success(null)
-            val resultArray = dataObj.optJSONArray("result")
-                ?: dataObj.optJSONObject("data")?.optJSONArray("result")
-                ?: dataObj.optJSONArray("resultSongs")
-                ?: return@withContext Result.success(null)
+                    val song = entry.optJSONObject("song") ?: entry
+                    val songId = song.optLong("id", song.optLong("songId", 0L))
+                    if (songId == 0L) continue
 
-            val songsList = mutableListOf<NcmSong>()
-            var startTimeMs = 0L
+                    val songName = song.optString("name", song.optJSONObject("song")?.optString("name") ?: "未知歌曲")
 
-            for (i in 0 until resultArray.length()) {
-                val item = resultArray.getJSONObject(i)
-                if (startTimeMs == 0L) {
-                    startTimeMs = item.optLong("startTime", 0L)
-                }
+                    // 专辑及封面
+                    val al = song.optJSONObject("album") ?: song.optJSONObject("al")
+                    val albumName = al?.optString("name") ?: ""
+                    var picUrl = al?.optString("picUrl") ?: al?.optString("blurPicUrl") ?: ""
+                    if (picUrl.startsWith("http://")) {
+                        picUrl = "https://" + picUrl.removePrefix("http://")
+                    }
 
-                val entry = item.optJSONObject("song")
-                    ?: item.optJSONObject("data")?.optJSONObject("song")
-                    ?: item
-
-                val song = entry.optJSONObject("song") ?: entry
-                val songId = song.optLong("id", song.optLong("songId", 0L))
-                if (songId == 0L) continue
-
-                val songName = song.optString("name", song.optJSONObject("song")?.optString("name") ?: "未知歌曲")
-
-                // 专辑
-                val al = song.optJSONObject("album") ?: song.optJSONObject("al")
-                val albumName = al?.optString("name") ?: ""
-                var picUrl = al?.optString("picUrl") ?: ""
-                if (picUrl.startsWith("http://")) {
-                    picUrl = "https://" + picUrl.removePrefix("http://")
-                }
-
-                // 歌手
-                val ar = song.optJSONArray("artists") ?: song.optJSONArray("ar")
-                val artistName = buildString {
-                    if (ar != null) {
-                        for (k in 0 until ar.length()) {
-                            val aName = ar.getJSONObject(k).optString("name")
-                            if (aName.isNotBlank()) {
-                                if (isNotEmpty()) append(" / ")
-                                append(aName)
+                    // 歌手
+                    val ar = song.optJSONArray("artists") ?: song.optJSONArray("ar")
+                    val artistName = buildString {
+                        if (ar != null) {
+                            for (k in 0 until ar.length()) {
+                                val aName = ar.getJSONObject(k).optString("name")
+                                if (aName.isNotBlank()) {
+                                    if (isNotEmpty()) append(" / ")
+                                    append(aName)
+                                }
                             }
                         }
                     }
+
+                    songsList.add(
+                        NcmSong(
+                            id = songId,
+                            name = songName,
+                            artist = artistName,
+                            album = albumName,
+                            coverUrl = picUrl
+                        )
+                    )
                 }
 
-                songsList.add(
-                    NcmSong(
-                        id = songId,
-                        name = songName,
-                        artist = artistName,
-                        album = albumName,
-                        coverUrl = picUrl
-                    )
-                )
-            }
-
-            if (songsList.isEmpty()) {
-                Result.success(null)
-            } else {
-                Result.success(NcmAudioMatchResult(songs = songsList, startTimeMs = startTimeMs))
+                if (songsList.isEmpty()) {
+                    Result.success(null)
+                } else {
+                    Result.success(NcmAudioMatchResult(songs = songsList, startTimeMs = startTimeMs))
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "网易云听歌识别失败", e)
+            Log.e(TAG, "网易云 EAPI 听歌识别失败", e)
             Result.failure(e)
         }
     }

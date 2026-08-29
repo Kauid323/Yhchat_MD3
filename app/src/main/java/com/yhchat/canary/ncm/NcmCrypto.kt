@@ -83,6 +83,11 @@ object NcmCrypto {
      * EAPI 响应解密
      */
     fun decryptEApi(bytes: ByteArray): String {
+        if (bytes.isEmpty()) return ""
+        val rawStr = String(bytes, StandardCharsets.UTF_8).trim()
+        if (rawStr.startsWith("{") && rawStr.endsWith("}")) {
+            return rawStr
+        }
         return try {
             val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
             val keySpec = SecretKeySpec(EAPI_KEY.toByteArray(StandardCharsets.UTF_8), "AES")
@@ -90,7 +95,29 @@ object NcmCrypto {
             val decrypted = cipher.doFinal(bytes)
             String(decrypted, StandardCharsets.UTF_8)
         } catch (_: Exception) {
-            String(bytes, StandardCharsets.UTF_8)
+            try {
+                if (rawStr.matches(Regex("^[0-9a-fA-F]+$"))) {
+                    val hexBytes = hexToBytes(rawStr)
+                    val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+                    val keySpec = SecretKeySpec(EAPI_KEY.toByteArray(StandardCharsets.UTF_8), "AES")
+                    cipher.init(Cipher.DECRYPT_MODE, keySpec)
+                    val decrypted = cipher.doFinal(hexBytes)
+                    return String(decrypted, StandardCharsets.UTF_8)
+                }
+            } catch (_: Exception) {}
+            rawStr
+        }
+    }
+
+    /**
+     * EAPI 响应 Hex 字符串解密
+     */
+    fun decryptEApiHex(hexString: String): String {
+        return try {
+            val bytes = hexToBytes(hexString.trim())
+            decryptEApi(bytes)
+        } catch (_: Exception) {
+            hexString
         }
     }
 

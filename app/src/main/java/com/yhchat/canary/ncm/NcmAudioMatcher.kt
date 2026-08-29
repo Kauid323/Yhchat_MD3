@@ -28,7 +28,7 @@ object NcmAudioMatcher {
 
     private const val TAG = "NcmAudioMatcher"
     private const val TARGET_SAMPLE_RATE = 8000
-    private const val SAMPLE_DURATION_SEC = 3 // 听歌识曲标准特征截取 3 秒（与网易云官方识别算法规范一致）
+    private const val SAMPLE_DURATION_SEC = 12 // 听歌识曲特征截取时长 12 秒
 
     /**
      * 听歌识曲主函数
@@ -249,8 +249,8 @@ object NcmAudioMatcher {
 
             if (landmarks.isEmpty()) return null
 
-            // 选取能量最强的 Top 150 个特征地标，并按时间顺序排序，确保指纹精简且识别率最高
-            val selectedLandmarks = landmarks.sortedByDescending { it.third }.take(150).sortedBy { it.first }
+            // 选取能量最强的特征地标，并按时间顺序排序
+            val selectedLandmarks = landmarks.sortedByDescending { it.third }.take(350).sortedBy { it.first }
 
             // 按照特征点序列序列化为紧凑 Little-Endian 二进制指纹
             val buffer = ByteBuffer.allocate(4 + selectedLandmarks.size * 6).order(ByteOrder.LITTLE_ENDIAN)
@@ -263,11 +263,31 @@ object NcmAudioMatcher {
                 buffer.putShort(((frame * 31 + bin * 17) and 0xFFFF).toShort())
             }
 
-            return Base64.encodeToString(buffer.array(), Base64.NO_WRAP)
+            // 网易云 Shazam 识曲标准：对二进制指纹进行 ZLIB (Deflate) 压缩
+            val rawBytes = buffer.array()
+            val compressed = zlibCompress(rawBytes)
+            return Base64.encodeToString(compressed, Base64.NO_WRAP)
         } catch (e: Exception) {
             Log.e(TAG, "纯 Kotlin 计算音频指纹异常", e)
             return null
         }
+    }
+
+    /**
+     * 纯 Kotlin 原生 ZLIB 压缩（生成以 eJx 开头的 RFC 1950 压缩流）
+     */
+    private fun zlibCompress(data: ByteArray): ByteArray {
+        val deflater = java.util.zip.Deflater(java.util.zip.Deflater.DEFAULT_COMPRESSION)
+        deflater.setInput(data)
+        deflater.finish()
+        val bos = java.io.ByteArrayOutputStream(data.size)
+        val buf = ByteArray(1024)
+        while (!deflater.finished()) {
+            val count = deflater.deflate(buf)
+            bos.write(buf, 0, count)
+        }
+        deflater.end()
+        return bos.toByteArray()
     }
 
     /**
