@@ -58,9 +58,9 @@ object UnifiedLinkHandler {
         try {
             val normalizedUrl = normalizeYunhuLink(url)
             if (normalizedUrl != url) {
-                Log.d(TAG, "Normalized link: $url -> $normalizedUrl")
+                // Log.d(TAG, "Normalized link: $url -> $normalizedUrl")
             }
-            Log.d(TAG, "Processing link: $normalizedUrl")
+            // Log.d(TAG, "Processing link: $normalizedUrl")
             
             when {
                 normalizedUrl.startsWith("yunhu://chat-add") -> {
@@ -133,7 +133,7 @@ object UnifiedLinkHandler {
             }
         }
         
-        Log.d(TAG, "Opening chat add: id=$id, type=$typeString")
+        // Log.d(TAG, "Opening chat add: id=$id, type=$typeString")
         val intent = Intent(context, ChatAddActivity::class.java).apply {
             putExtra("chat_id", id)
             putExtra("chat_type", type.chatType)
@@ -155,7 +155,7 @@ object UnifiedLinkHandler {
             return
         }
         
-        Log.d(TAG, "Opening post detail: postId=$postId")
+        // Log.d(TAG, "Opening post detail: postId=$postId")
         val intent = Intent(context, PostDetailActivity::class.java).apply {
             putExtra("post_id", postId)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -177,7 +177,7 @@ object UnifiedLinkHandler {
             return
         }
         
-        Log.d(TAG, "Opening yhfx share: key=$key, ts=$ts")
+        // Log.d(TAG, "Opening yhfx share: key=$key, ts=$ts")
         // 直接打开 ChatAddActivity，传递 key 和 ts 参数
         val intent = Intent(context, ChatAddActivity::class.java).apply {
             putExtra("share_key", key)
@@ -199,7 +199,7 @@ object UnifiedLinkHandler {
             return
         }
         
-        Log.d(TAG, "Opening alley detail: boardId=$boardId")
+        // Log.d(TAG, "Opening alley detail: boardId=$boardId")
         val intent = Intent(context, BoardDetailActivity::class.java).apply {
             putExtra("board_id", boardId)
             putExtra("board_name", "分区详情")
@@ -212,7 +212,7 @@ object UnifiedLinkHandler {
      * 处理 yunhu://ad 链接
      */
     private fun handleYunhuAdLink(context: Context, url: String) {
-        Log.d(TAG, "Handling yunhu ad link: $url")
+        // Log.d(TAG, "Handling yunhu ad link: $url")
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -228,12 +228,12 @@ object UnifiedLinkHandler {
      * 处理网页文章链接 https://www.yhchat.com/c/p/文章id
      */
     private fun handleWebArticleLink(context: Context, url: String) {
-        Log.d(TAG, "Handling web article link: $url")
+        // Log.d(TAG, "Handling web article link: $url")
         
         // 尝试从网页链接中提取文章ID
         val postId = extractPostIdFromLink(url)
         if (postId != null) {
-            Log.d(TAG, "Opening post detail from web link: postId=$postId")
+            // Log.d(TAG, "Opening post detail from web link: postId=$postId")
             val intent = Intent(context, PostDetailActivity::class.java).apply {
                 putExtra("post_id", postId)
                 putExtra("post_title", "文章详情")
@@ -259,7 +259,7 @@ object UnifiedLinkHandler {
             return
         }
 
-        Log.d(TAG, "Opening user detail from homepage link: userId=$userId")
+        // Log.d(TAG, "Opening user detail from homepage link: userId=$userId")
         UserDetailActivity.start(context, userId)
     }
     
@@ -268,7 +268,7 @@ object UnifiedLinkHandler {
      */
     private fun handleExternalLink(context: Context, url: String) {
         try {
-            Log.d(TAG, "Opening external link: $url")
+            // Log.d(TAG, "Opening external link: $url")
             
             if (url.startsWith("yunhu://")) {
                 Log.w(TAG, "Refusing to route custom yunhu link through WebView: $url")
@@ -285,7 +285,7 @@ object UnifiedLinkHandler {
 
             // 统一使用 WebViewActivity 打开外部链接，它内部会处理是否需要跳转到外部浏览器
             com.yhchat.canary.ui.webview.WebViewActivity.start(context, finalUrl)
-            Log.d(TAG, "Started WebViewActivity for link: $finalUrl")
+            // Log.d(TAG, "Started WebViewActivity for link: $finalUrl")
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open external link: $url", e)
@@ -462,10 +462,10 @@ object UnifiedLinkHandler {
      */
     fun isChatAddLink(uriString: String): Boolean {
         return try {
-            Log.d(TAG, "检查 Deep Link: $uriString")
+            // Log.d(TAG, "检查 Deep Link: $uriString")
             val uri = Uri.parse(uriString)
             val isValid = uri.scheme == "yunhu" && (uri.host == "chat-add" || uri.host == "jwznb.com")
-            Log.d(TAG, "Deep Link 有效性: $isValid")
+            // Log.d(TAG, "Deep Link 有效性: $isValid")
             isValid
         } catch (e: Exception) {
             Log.e(TAG, "Deep Link 检查异常: $uriString", e)
@@ -479,7 +479,7 @@ object UnifiedLinkHandler {
      */
     fun parseChatAddLink(uriString: String): ChatAddInfo? {
         return try {
-            Log.d(TAG, "开始解析 Deep Link: $uriString")
+            // Log.d(TAG, "开始解析 Deep Link: $uriString")
             
             val uri = Uri.parse(uriString)
             
@@ -530,7 +530,7 @@ object UnifiedLinkHandler {
                 return null
             }
             
-            Log.d(TAG, "解析成功: id=$id, chatType=${type.chatType}")
+            // Log.d(TAG, "解析成功: id=$id, chatType=${type.chatType}")
             
             ChatAddInfo(
                 id = id,

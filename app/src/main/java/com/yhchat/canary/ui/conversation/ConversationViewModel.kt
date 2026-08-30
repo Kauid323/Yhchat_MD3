@@ -150,7 +150,7 @@ class ConversationViewModel @Inject constructor(
         // 同时监听会话更新事件（这个流专门用于会话列表更新）
         viewModelScope.launch {
             webSocketManager.getConversationUpdates().collect { update ->
-                Log.d("ConversationViewModel", "Received ConversationUpdate: ${update::class.simpleName}")
+                // Log.d("ConversationViewModel", "Received ConversationUpdate: ${update::class.simpleName}")
                 when (update) {
                     is com.yhchat.canary.data.websocket.ConversationUpdate.NewMessage -> {
                         updateConversationWithNewMessage(update.message)
@@ -177,7 +177,7 @@ class ConversationViewModel @Inject constructor(
             val targetChatType = if (isPrivateChat) message.sender.chatType else message.chatType ?: 0
             
             if (blocklistRepository.isUserBlocked(message.sender.chatId) || (isPrivateChat && blocklistRepository.isUserBlocked(targetChatId))) {
-                Log.d("ConversationViewModel", "Message from blocked user ignored for conversation: $targetChatId")
+                // Log.d("ConversationViewModel", "Message from blocked user ignored for conversation: $targetChatId")
                 return@launch
             }
             
@@ -203,7 +203,7 @@ class ConversationViewModel @Inject constructor(
                 // 因为 WebSocketManager 在收到消息时已经通过 ConversationRepository 更新了数据库
                 // 这样避免了未读消息数被重复 +1 的问题。
                 
-                Log.d("ConversationViewModel", "Updated conversation: chatId=$targetChatId, unread=${updatedConversation.unreadMessage}, preview=$messagePreview")
+                // Log.d("ConversationViewModel", "Updated conversation: chatId=$targetChatId, unread=${updatedConversation.unreadMessage}, preview=$messagePreview")
             } else {
                 // 创建新会话 - 只有在私聊或机器人对话时才创建
                 if (isPrivateChat) {
@@ -225,7 +225,7 @@ class ConversationViewModel @Inject constructor(
                 } else {
                     // 对于群聊消息，如果会话不存在，我们不创建新会话
                     // 群聊会话应该通过API获取，而不是通过WebSocket消息创建
-                    Log.d("ConversationViewModel", "Group conversation not found, skipping creation for chatId: ${message.chatId}")
+                    // Log.d("ConversationViewModel", "Group conversation not found, skipping creation for chatId: ${message.chatId}")
                 }
             }
             
@@ -234,7 +234,7 @@ class ConversationViewModel @Inject constructor(
             _conversations.value = currentConversations
             
             // 同步更新分页显示的会话列表
-            Log.d("ConversationViewModel", "Updated conversation list, total: ${currentConversations.size}")
+            // Log.d("ConversationViewModel", "Updated conversation list, total: ${currentConversations.size}")
         }
     }
     
@@ -287,7 +287,7 @@ class ConversationViewModel @Inject constructor(
         // 确保返回非空字符串
         val nonNullContentPreview = contentPreview ?: "[消息]"
         
-        Log.d("ConversationViewModel", "Message preview - chatType: $targetChatType, sender: ${message.sender.name}, content: $nonNullContentPreview")
+        // Log.d("ConversationViewModel", "Message preview - chatType: $targetChatType, sender: ${message.sender.name}, content: $nonNullContentPreview")
         
         // 根据会话类型决定显示格式
         return when (targetChatType) {
@@ -448,7 +448,7 @@ class ConversationViewModel @Inject constructor(
                 Log.e("ConversationViewModel", "Failed to clear cached unread state: chatId=$chatId", error)
             }
         }
-        Log.d("ConversationViewModel", "Cleared unread state from server-backed conversation: chatId=$chatId")
+        // Log.d("ConversationViewModel", "Cleared unread state from server-backed conversation: chatId=$chatId")
     }
 
 /**

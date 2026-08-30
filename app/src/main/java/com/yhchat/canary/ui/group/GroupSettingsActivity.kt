@@ -35,7 +35,7 @@ class GroupSettingsActivity : ComponentActivity() {
         
         val groupName = intent.getStringExtra(EXTRA_GROUP_NAME) ?: "群聊设置"
         
-        android.util.Log.d("GroupSettingsActivity", "Opening group settings: id=$groupId, name=$groupName")
+        android.util.// Log.d("GroupSettingsActivity", "Opening group settings: id=$groupId, name=$groupName")
         
         setContent {
             YhchatCanaryTheme {

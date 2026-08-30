@@ -32,7 +32,7 @@ object NcmAccountManager {
             .putString(KEY_COOKIE, mergedCookie)
             .putLong(KEY_LOGIN_TIME, System.currentTimeMillis())
             .apply()
-        Log.d(TAG, "网易云 Cookie 已持久化保存, 长度=${mergedCookie.length}")
+        // Log.d(TAG, "网易云 Cookie 已持久化保存, 长度=${mergedCookie.length}")
     }
 
     /**
@@ -56,7 +56,7 @@ object NcmAccountManager {
      */
     fun clearCookie(context: Context) {
         getPrefs(context).edit().clear().apply()
-        Log.d(TAG, "网易云 Cookie 已清除")
+        // Log.d(TAG, "网易云 Cookie 已清除")
     }
 
     /**

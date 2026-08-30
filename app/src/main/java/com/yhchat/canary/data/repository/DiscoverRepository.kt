@@ -51,10 +51,10 @@ class DiscoverRepository(
                 val botsType = object : TypeToken<List<RecommendBot>>() {}.type
                 val groups = gson.fromJson<List<RecommendGroup>>(cachedData.groupsJson, groupsType)
                 val bots = gson.fromJson<List<RecommendBot>>(cachedData.botsJson, botsType)
-                Log.d(TAG, "从缓存加载数据成功")
+                // Log.d(TAG, "从缓存加载数据成功")
                 Pair(groups, bots)
             } else {
-                Log.d(TAG, "缓存无效或已过期")
+                // Log.d(TAG, "缓存无效或已过期")
                 null
             }
         } catch (e: Exception) {
@@ -77,7 +77,6 @@ class DiscoverRepository(
                 timestamp = System.currentTimeMillis()
             )
             cachedDiscoverDataDao.insertCachedData(cachedData)
-            Log.d(TAG, "保存数据到缓存成功")
         } catch (e: Exception) {
             Log.e(TAG, "保存数据到缓存失败", e)
         }
@@ -103,7 +102,6 @@ class DiscoverRepository(
                 val body = response.body()
                 if (body?.code == 1) {
                     val categories = body.data?.categories ?: emptyList()
-                    Log.d(TAG, "获取群聊分类成功: ${categories.size}个分类")
                     Result.success(categories)
                 } else {
                     Log.e(TAG, "获取群聊分类失败: ${body?.msg}")
@@ -144,7 +142,7 @@ class DiscoverRepository(
                 val body = response.body()
                 if (body?.code == 1) {
                     val groups = body.data?.groupList ?: emptyList()
-                    Log.d(TAG, "获取推荐群聊成功: ${groups.size}个群聊")
+                    // Log.d(TAG, "获取推荐群聊成功: ${groups.size}个群聊")
                     Result.success(groups)
                 } else {
                     Log.e(TAG, "获取推荐群聊失败: ${body?.msg}")
@@ -177,7 +175,7 @@ class DiscoverRepository(
                 val body = response.body()
                 if (body?.code == 1) {
                     val bots = body.data?.botList ?: emptyList()
-                    Log.d(TAG, "获取推荐机器人成功: ${bots.size}个机器人")
+                    // Log.d(TAG, "获取推荐机器人成功: ${bots.size}个机器人")
                     Result.success(bots)
                 } else {
                     Log.e(TAG, "获取推荐机器人失败: ${body?.msg}")

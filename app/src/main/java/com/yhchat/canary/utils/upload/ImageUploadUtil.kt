@@ -59,11 +59,11 @@ object ImageUploadUtil {
         imageUri: Uri,
         quality: Int = 95
     ): PreparedImageUpload = withContext(Dispatchers.IO) {
-        Log.d(TAG, "🗜️ 开始压缩图片为WebP格式，质量: $quality%")
+        // Log.d(TAG, "🗜️ 开始压缩图片为WebP格式，质量: $quality%")
 
         val rotation = getExifRotationDegrees(context, imageUri)
         if (rotation != 0) {
-            Log.d(TAG, "🧭 检测到图片EXIF旋转: $rotation°，将自动校正方向")
+            // Log.d(TAG, "🧭 检测到图片EXIF旋转: $rotation°，将自动校正方向")
         }
 
         // 先获取图片尺寸，按需下采样避免超大图OOM
@@ -90,7 +90,7 @@ object ImageUploadUtil {
 
         val finalBitmap = rotateBitmapIfRequired(decodedBitmap, rotation)
 
-        Log.d(TAG, "✅ 纠正方向后的图片尺寸: ${finalBitmap.width}x${finalBitmap.height}")
+        // Log.d(TAG, "✅ 纠正方向后的图片尺寸: ${finalBitmap.width}x${finalBitmap.height}")
 
         val tempFile = File(
             context.cacheDir,
@@ -105,7 +105,7 @@ object ImageUploadUtil {
             }
 
             val md5 = calculateMD5(tempFile)
-            Log.d(TAG, "✅ WebP压缩完成，压缩后大小: ${tempFile.length()} bytes")
+            // Log.d(TAG, "✅ WebP压缩完成，压缩后大小: ${tempFile.length()} bytes")
 
             PreparedImageUpload(
                 tempFile = tempFile,
@@ -129,7 +129,7 @@ object ImageUploadUtil {
         context: Context,
         imageUri: Uri
     ): PreparedImageUpload = withContext(Dispatchers.IO) {
-        Log.d(TAG, "📖 开始读取原图")
+        // Log.d(TAG, "📖 开始读取原图")
 
         val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
         val extension = when (mimeType) {
@@ -150,7 +150,7 @@ object ImageUploadUtil {
             val (md5, totalBytes) = copyToTempFileAndCalculateMD5(inputStream, tempFile)
             val (width, height) = decodeImageBounds(tempFile)
 
-            Log.d(TAG, "✅ 原图读取完成，大小: $totalBytes bytes, MIME: $mimeType")
+            // Log.d(TAG, "✅ 原图读取完成，大小: $totalBytes bytes, MIME: $mimeType")
 
             PreparedImageUpload(
                 tempFile = tempFile,
@@ -181,15 +181,15 @@ object ImageUploadUtil {
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         var preparedImage: PreparedImageUpload? = null
         try {
-            Log.d(TAG, "📤 ========== 开始上传图片 ==========")
-            Log.d(TAG, "📤 图片URI: $imageUri")
+            // Log.d(TAG, "📤 ========== 开始上传图片 ==========")
+            // Log.d(TAG, "📤 图片URI: $imageUri")
             
             // 1. 获取图片上传设置
             val sharedPrefs = context.getSharedPreferences("image_settings", Context.MODE_PRIVATE)
             val uploadOriginal = sharedPrefs.getBoolean("upload_original_image", false)
             val webpQuality = sharedPrefs.getInt("webp_quality", 95)
             
-            Log.d(TAG, "⚙️ 上传设置 - 原图上传: $uploadOriginal, WebP质量: $webpQuality")
+            // Log.d(TAG, "⚙️ 上传设置 - 原图上传: $uploadOriginal, WebP质量: $webpQuality")
             
             // 2. 根据设置决定是否压缩
             preparedImage = if (uploadOriginal) {
@@ -202,11 +202,11 @@ object ImageUploadUtil {
             val prepared = preparedImage
                 ?: return@withContext Result.failure(Exception("图片预处理失败"))
 
-            Log.d(
+            // Log.d(
                 TAG,
                 "✅ 图片处理完成，大小: ${prepared.tempFile.length()} bytes, MIME: ${prepared.mimeType}"
             )
-            Log.d(TAG, "✅ MD5计算完成: ${prepared.md5}")
+            // Log.d(TAG, "✅ MD5计算完成: ${prepared.md5}")
             
             // 4. 根据MIME类型确定文件扩展名
             val extension = when (prepared.mimeType) {
@@ -220,15 +220,15 @@ object ImageUploadUtil {
             
             // 文件key = MD5.扩展名
             val fileKey = "${prepared.md5}.$extension"
-            Log.d(TAG, "✅ 文件key: $fileKey")
-            Log.d(TAG, "✅ MIME类型: ${prepared.mimeType}")
-            Log.d(TAG, "✅ 图片尺寸: ${prepared.width}x${prepared.height}")
+            // Log.d(TAG, "✅ 文件key: $fileKey")
+            // Log.d(TAG, "✅ MIME类型: ${prepared.mimeType}")
+            // Log.d(TAG, "✅ 图片尺寸: ${prepared.width}x${prepared.height}")
             
             // 6. 获取上传host - 参考Python实现
             // uhost = httpx.get(f"https://api.qiniu.com/v4/query?ak={utoken.split(':')[0]}&bucket={bucket}").json()["hosts"][0]["up"]["domains"][0]
             val ak = uploadToken.split(":")[0]
             val queryUrl = "https://api.qiniu.com/v4/query?ak=$ak&bucket=$IMAGE_BUCKET"
-            Log.d(TAG, "📤 查询上传host: $queryUrl")
+            // Log.d(TAG, "📤 查询上传host: $queryUrl")
             
             val queryRequest = Request.Builder()
                 .url(queryUrl)
@@ -249,8 +249,8 @@ object ImageUploadUtil {
                 }
             }
             
-            Log.d(TAG, "✅ 上传host: $uploadHost")
-            Log.d(TAG, "✅ 临时文件: ${prepared.tempFile.absolutePath}")
+            // Log.d(TAG, "✅ 上传host: $uploadHost")
+            // Log.d(TAG, "✅ 临时文件: ${prepared.tempFile.absolutePath}")
             
             // 8. 构建multipart/form-data请求 - 参考Python实现
             // params = {
@@ -271,8 +271,8 @@ object ImageUploadUtil {
                 
             val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
-            Log.d(TAG, "📤 开始上传到七牛云...")
-            Log.d(TAG, "📤 上传URL: https://$uploadHost")
+            // Log.d(TAG, "📤 开始上传到七牛云...")
+            // Log.d(TAG, "📤 上传URL: https://$uploadHost")
             
             val request = Request.Builder()
                 .url("https://$uploadHost")
@@ -283,11 +283,11 @@ object ImageUploadUtil {
             
             // 9. 执行上传
             client.newCall(request).execute().use { response ->
-                Log.d(TAG, "📥 七牛云响应码: ${response.code}")
+                // Log.d(TAG, "📥 七牛云响应码: ${response.code}")
 
                 if (response.isSuccessful) {
                     val responseBody = response.body?.string()
-                    Log.d(TAG, "✅ 上传成功！响应: $responseBody")
+                    // Log.d(TAG, "✅ 上传成功！响应: $responseBody")
 
                     if (responseBody != null) {
                         val json = JSONObject(responseBody)
@@ -317,10 +317,10 @@ object ImageUploadUtil {
                             }
                         )
 
-                        Log.d(TAG, "✅ ========== 上传完成 ==========")
-                        Log.d(TAG, "✅ key: ${uploadResponse.key}")
-                        Log.d(TAG, "✅ hash: ${uploadResponse.hash}")
-                        Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
+                        // Log.d(TAG, "✅ ========== 上传完成 ==========")
+                        // Log.d(TAG, "✅ key: ${uploadResponse.key}")
+                        // Log.d(TAG, "✅ hash: ${uploadResponse.hash}")
+                        // Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
 
                         Result.success(uploadResponse)
                     } else {
@@ -353,8 +353,8 @@ object ImageUploadUtil {
      */
     suspend fun getQiniuUploadToken(context: Context, token: String): String = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "🔑 开始获取七牛云上传token")
-            Log.d(TAG, "🔑 用户token: ${token.take(10)}...")
+            // Log.d(TAG, "🔑 开始获取七牛云上传token")
+            // Log.d(TAG, "🔑 用户token: ${token.take(10)}...")
             
             val request = Request.Builder()
                 .url("https://chat-go.jwzhd.com/v1/misc/qiniu-token")
@@ -363,14 +363,14 @@ object ImageUploadUtil {
                 .get()
                 .build()
             
-            Log.d(TAG, "🔑 发送请求到: ${request.url}")
+            // Log.d(TAG, "🔑 发送请求到: ${request.url}")
             
             client.newCall(request).execute().use { response ->
                 val responseCode = response.code
                 val responseBody = response.body?.string()
 
-                Log.d(TAG, "🔑 响应码: $responseCode")
-                Log.d(TAG, "🔑 响应体: $responseBody")
+                // Log.d(TAG, "🔑 响应码: $responseCode")
+                // Log.d(TAG, "🔑 响应体: $responseBody")
 
                 if (response.isSuccessful && responseBody != null) {
                     val jsonObject = JSONObject(responseBody)
@@ -378,7 +378,7 @@ object ImageUploadUtil {
                     if (code == 1) {
                         val dataObject = jsonObject.optJSONObject("data")
                         val uploadToken = dataObject?.optString("token", null)
-                        Log.d(TAG, "🔑 获取到上传token: ${uploadToken?.take(20)}...")
+                        // Log.d(TAG, "🔑 获取到上传token: ${uploadToken?.take(20)}...")
                         uploadToken ?: ""
                     } else {
                         val msg = jsonObject.optString("msg", "未知错误")

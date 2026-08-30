@@ -48,27 +48,21 @@ class DiskRepository @Inject constructor(
                 parentFolderId = parentFolderId
             )
             
-            Log.d(TAG, "创建文件夹: $folderName")
-            
             val response = apiService.createFolder(token, request)
             
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 创建文件夹成功")
                     Result.success(true)
                 } else {
                     val error = "创建文件夹失败: ${body?.message ?: "未知错误"}"
-                    Log.e(TAG, error)
                     Result.failure(Exception(error))
                 }
             } else {
                 val error = "创建文件夹失败: ${response.code()}"
-                Log.e(TAG, error)
                 Result.failure(Exception(error))
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ 创建文件夹异常", e)
             Result.failure(e)
         }
     }
@@ -101,7 +95,6 @@ class DiskRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 获取文件列表成功: ${body.data.list.size}个文件")
                     Result.success(body.data.list)
                 } else {
                     val error = "获取文件列表失败: ${response.code()}"
@@ -150,14 +143,11 @@ class DiskRepository @Inject constructor(
                 folderId = folderId
             )
             
-            Log.d(TAG, "上传文件到云盘: $fileName")
-            
             val response = apiService.uploadFileToDisk(token, request)
             
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 文件上传成功")
                     Result.success(true)
                 } else {
                     val error = "文件上传失败: ${body?.message ?: "未知错误"}"
@@ -201,7 +191,6 @@ class DiskRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 重命名文件成功")
                     Result.success(true)
                 } else {
                     val error = "重命名文件失败: ${body?.message ?: "未知错误"}"
@@ -243,7 +232,6 @@ class DiskRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 删除文件成功")
                     Result.success(true)
                 } else {
                     val error = "删除文件失败: ${body?.message ?: "未知错误"}"

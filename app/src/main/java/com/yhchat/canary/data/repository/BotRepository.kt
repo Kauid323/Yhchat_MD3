@@ -50,7 +50,7 @@ class BotRepository @Inject constructor(
      */
     suspend fun getBotInfoSimple(botId: String): Result<BotInfo> {
         return try {
-            Log.d(TAG, "开始获取机器人简单信息(JSON): $botId")
+            // Log.d(TAG, "开始获取机器人简单信息(JSON): $botId")
             
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -96,7 +96,7 @@ class BotRepository @Inject constructor(
      */
     suspend fun getBotInfo(botId: String): Result<bot_info> {
         return try {
-            Log.d(TAG, "开始获取机器人信息: $botId")
+            // Log.d(TAG, "开始获取机器人信息: $botId")
             
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -112,7 +112,7 @@ class BotRepository @Inject constructor(
             val requestBody = request.toByteArray()
                 .toRequestBody("application/x-protobuf".toMediaType())
             
-            Log.d(TAG, "发送请求: botId=$botId")
+            // Log.d(TAG, "发送请求: botId=$botId")
             
             // 发送请求
             val response = apiService.getBotInfo(
@@ -135,7 +135,7 @@ class BotRepository @Inject constructor(
             // 解析 protobuf 响应
             val botInfo = bot_info.parseFrom(responseBody.bytes())
             
-            Log.d(TAG, "解析成功: status=${botInfo.status.code}, msg=${botInfo.status.msg}")
+            // Log.d(TAG, "解析成功: status=${botInfo.status.code}, msg=${botInfo.status.msg}")
             
             if (botInfo.status.code != 1) {
                 val errorMsg = "获取机器人信息失败: ${botInfo.status.msg}"
@@ -143,16 +143,16 @@ class BotRepository @Inject constructor(
                 return Result.failure(Exception(errorMsg))
             }
             
-            Log.d(TAG, "✅ 机器人信息获取成功")
-            Log.d(TAG, "  机器人ID: ${botInfo.data.botId}")
-            Log.d(TAG, "  机器人名称: ${botInfo.data.name}")
-            Log.d(TAG, "  使用人数: ${botInfo.data.headcount}")
-            Log.d(TAG, "  是否私有: ${botInfo.data.private}")
-            Log.d(TAG, "  是否停用: ${botInfo.data.isStop}")
-            Log.d(TAG, "  自动进群: ${botInfo.data.alwaysAgree}")
-            Log.d(TAG, "  免打扰: ${botInfo.data.doNotDisturb}")
-            Log.d(TAG, "  置顶: ${botInfo.data.top}")
-            Log.d(TAG, "  限制进群: ${botInfo.data.groupLimit}")
+            // Log.d(TAG, "✅ 机器人信息获取成功")
+            // Log.d(TAG, "  机器人ID: ${botInfo.data.botId}")
+            // Log.d(TAG, "  机器人名称: ${botInfo.data.name}")
+            // Log.d(TAG, "  使用人数: ${botInfo.data.headcount}")
+            // Log.d(TAG, "  是否私有: ${botInfo.data.private}")
+            // Log.d(TAG, "  是否停用: ${botInfo.data.isStop}")
+            // Log.d(TAG, "  自动进群: ${botInfo.data.alwaysAgree}")
+            // Log.d(TAG, "  免打扰: ${botInfo.data.doNotDisturb}")
+            // Log.d(TAG, "  置顶: ${botInfo.data.top}")
+            // Log.d(TAG, "  限制进群: ${botInfo.data.groupLimit}")
             
             Result.success(botInfo)
             
@@ -172,7 +172,7 @@ class BotRepository @Inject constructor(
      */
     suspend fun getBotBoard(chatId: String, chatType: Int): Result<board> {
         return try {
-            Log.d(TAG, "开始获取看板信息: chatId=$chatId, chatType=$chatType")
+            // Log.d(TAG, "开始获取看板信息: chatId=$chatId, chatType=$chatType")
             
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -191,7 +191,7 @@ class BotRepository @Inject constructor(
                 .toRequestBody("application/x-protobuf".
                 toMediaType())
             
-            Log.d(TAG, "发送请求: chatId=$chatId, chatType=$chatType")
+            // Log.d(TAG, "发送请求: chatId=$chatId, chatType=$chatType")
             
             // 发送请求
             val response = apiService.getBotBoard(
@@ -214,7 +214,7 @@ class BotRepository @Inject constructor(
             // 解析 protobuf 响应
             val boardResponse = board.parseFrom(responseBody.bytes())
 
-            Log.d(TAG, "解析成功: status=${boardResponse.status.code}, msg=${boardResponse.status.msg},看板数量=${boardResponse.boardCount}")
+            // Log.d(TAG, "解析成功: status=${boardResponse.status.code}, msg=${boardResponse.status.msg},看板数量=${boardResponse.boardCount}")
 
             if (boardResponse.status.code != 1) {
                 val errorMsg = "API返回错误: ${boardResponse.status.msg} (code: ${boardResponse.status.code})"
@@ -325,7 +325,7 @@ class BotRepository @Inject constructor(
      */
     suspend fun getMyBotList(): Result<List<com.yhchat.canary.data.model.CreatedBot>> {
         return try {
-            Log.d(TAG, "开始获取我创建的机器人列表")
+            // Log.d(TAG, "开始获取我创建的机器人列表")
             
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -339,7 +339,7 @@ class BotRepository @Inject constructor(
                 val responseBody = response.body()
                 if (responseBody != null && responseBody.code == 1) {
                     val botList = responseBody.data.list.bots
-                    Log.d(TAG, "✅ 我创建的机器人列表获取成功！共 ${botList.size} 个")
+                    // Log.d(TAG, "✅ 我创建的机器人列表获取成功！共 ${botList.size} 个")
                     Result.success(botList)
                 } else {
                     Log.e(TAG, "获取机器人列表失败: ${responseBody?.message}")
@@ -475,7 +475,7 @@ class BotRepository @Inject constructor(
         isPrivate: Boolean
     ): Result<Unit> {
         return try {
-            Log.d(TAG, "开始编辑机器人信息: botId=$botId")
+            // Log.d(TAG, "开始编辑机器人信息: botId=$botId")
 
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -499,7 +499,7 @@ class BotRepository @Inject constructor(
             if (response.isSuccessful) {
                 val responseBody = response.body()
                 if (responseBody != null && responseBody.code == 1) {
-                    Log.d(TAG, "✅ 机器人信息编辑成功")
+                    // Log.d(TAG, "✅ 机器人信息编辑成功")
                     Result.success(Unit)
                 } else {
                     Log.e(TAG, "编辑机器人信息失败: ${responseBody?.message}")
@@ -521,7 +521,7 @@ class BotRepository @Inject constructor(
      */
     suspend fun removeGroupBot(botId: String, groupId: String): Result<Boolean> {
         return try {
-            Log.d(TAG, "开始移除群机器人: botId=$botId, groupId=$groupId")
+            // Log.d(TAG, "开始移除群机器人: botId=$botId, groupId=$groupId")
             
             val token = tokenRepository.getTokenSync()
             if (token.isNullOrEmpty()) {
@@ -537,7 +537,7 @@ class BotRepository @Inject constructor(
             val response = apiService.removeGroupBot(token, request)
             
             if (response.isSuccessful && response.body()?.code == 1) {
-                Log.d(TAG, "✅ 移除群机器人成功")
+                // Log.d(TAG, "✅ 移除群机器人成功")
                 Result.success(true)
         } else {
                 val errorMsg = response.body()?.message ?: "移除失败"
@@ -576,7 +576,7 @@ class BotRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            Log.d(TAG, "🤖 创建机器人: name=$name, isPrivate=$isPrivate")
+            // Log.d(TAG, "🤖 创建机器人: name=$name, isPrivate=$isPrivate")
             val response = apiService.createBot(token, requestBody)
             
             if (response.isSuccessful) {
@@ -586,7 +586,7 @@ class BotRepository @Inject constructor(
                     
                     if (createBotResponse.status.code == 1) {
                         val botId = createBotResponse.data.botId
-                        Log.d(TAG, "✅ 机器人创建成功: botId=$botId")
+                        // Log.d(TAG, "✅ 机器人创建成功: botId=$botId")
                         Result.success(botId)
                     } else {
                         Result.failure(Exception(createBotResponse.status.msg))

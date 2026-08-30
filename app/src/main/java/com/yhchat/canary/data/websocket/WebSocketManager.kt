@@ -34,7 +34,7 @@ class WebSocketManager @Inject constructor(
         // 使用SupervisorJob确保一个子协程失败不会影响其他协程
         scope.launch {
             webSocketService.messageEvents.collect { event ->
-                Log.d(tag, "Received message event: ${event::class.simpleName}")
+                // Log.d(tag, "Received message event: ${event::class.simpleName}")
                 handleMessageEvent(event)
             }
         }
@@ -42,7 +42,7 @@ class WebSocketManager @Inject constructor(
         // 持续监听会话更新事件
         scope.launch {
             webSocketService.conversationUpdates.collect { update ->
-                Log.d(tag, "Received conversation update: ${update::class.simpleName}")
+                // Log.d(tag, "Received conversation update: ${update::class.simpleName}")
                 handleConversationUpdate(update)
             }
         }
@@ -52,19 +52,19 @@ class WebSocketManager @Inject constructor(
             webSocketService.draftUpdates
                 .debounce(500) // 防抖500ms，避免频繁保存
                 .collect { draftUpdate ->
-                    Log.d(tag, "📝 保存远程草稿到本地: chatId=${draftUpdate.chatId}")
+                    // Log.d(tag, "📝 保存远程草稿到本地: chatId=${draftUpdate.chatId}")
                     handleDraftUpdate(draftUpdate)
                 }
         }
         
-        Log.d(tag, "WebSocketManager initialized with persistent listeners")
+        // Log.d(tag, "WebSocketManager initialized with persistent listeners")
     }
     
     /**
      * 连接WebSocket
      */
     suspend fun connect(userId: String, platform: String = "android") {
-        Log.d(tag, "Connecting WebSocket for user: $userId")
+        // Log.d(tag, "Connecting WebSocket for user: $userId")
         webSocketService.connect(userId, platform)
     }
     
@@ -131,42 +131,42 @@ class WebSocketManager @Inject constructor(
         try {
             when (event) {
                 is MessageEvent.NewMessage -> {
-                    Log.d(tag, "Handling new message: ${event.message.msgId}")
+                    // Log.d(tag, "Handling new message: ${event.message.msgId}")
                     
                     // 将新消息插入到本地数据库/缓存
                     insertMessageToLocal(event.message)
                 }
                 
                 is MessageEvent.MessageEdited -> {
-                    Log.d(tag, "Handling edited message: ${event.message.msgId}")
+                    // Log.d(tag, "Handling edited message: ${event.message.msgId}")
                     
                     // 更新本地消息
                     updateLocalMessage(event.message)
                 }
                 
                 is MessageEvent.MessageDeleted -> {
-                    Log.d(tag, "Handling deleted message: ${event.msgId}")
+                    // Log.d(tag, "Handling deleted message: ${event.msgId}")
                     
                     // 删除本地消息
                     deleteLocalMessage(event.msgId)
                 }
                 
                 is MessageEvent.DraftUpdated -> {
-                    Log.d(tag, "Handling draft update for chat: ${event.chatId}")
+                    // Log.d(tag, "Handling draft update for chat: ${event.chatId}")
                     
                     // 可以在这里处理草稿同步，比如更新UI状态
                     // 暂时只记录日志
                 }
                 
                 is MessageEvent.BotBoardMessage -> {
-                    Log.d(tag, "Handling bot board message from: ${event.botId}")
+                    // Log.d(tag, "Handling bot board message from: ${event.botId}")
                     
                     // 处理机器人公告消息
                     // 可以显示为系统消息或特殊通知
                 }
                 
                 is MessageEvent.StreamMessage -> {
-                    Log.d(tag, "Handling stream message update: msgId=${event.msgId}, chatId=${event.chatId}")
+                    // Log.d(tag, "Handling stream message update: msgId=${event.msgId}, chatId=${event.chatId}")
                     // 流式消息由前台实时渲染，无需写入本地数据库
                 }
             }
@@ -180,7 +180,7 @@ class WebSocketManager @Inject constructor(
      */
     private suspend fun handleDraftUpdate(draftUpdate: com.yhchat.canary.data.websocket.DraftUpdate) {
         // 事件已经通过flow转发给ChatViewModel处理了，这里不需要做任何事
-        Log.d(tag, "草稿更新: chatId=${draftUpdate.chatId}")
+        // Log.d(tag, "草稿更新: chatId=${draftUpdate.chatId}")
     }
     
     /**
@@ -190,14 +190,14 @@ class WebSocketManager @Inject constructor(
         try {
             when (update) {
                 is ConversationUpdate.NewMessage -> {
-                    Log.d(tag, "Updating conversation for new message from: ${update.message.sender.chatId}")
+                    // Log.d(tag, "Updating conversation for new message from: ${update.message.sender.chatId}")
                     
                     // 更新会话的最后一条消息和时间
                     updateConversationLastMessage(update.message)
                 }
                 
                 is ConversationUpdate.MessageEdited -> {
-                    Log.d(tag, "Updating conversation for edited message: ${update.message.msgId}")
+                    // Log.d(tag, "Updating conversation for edited message: ${update.message.msgId}")
                     
                     // 如果编辑的是最后一条消息，需要更新会话显示
                     updateConversationIfLastMessage(update.message)
@@ -215,7 +215,7 @@ class WebSocketManager @Inject constructor(
         try {
             // 直接插入新消息到本地数据库（Dao 使用 REPLACE 策略，避免额外查库）
             messageRepository.insertMessage(message)
-            Log.d(tag, "Inserted new message: ${message.msgId}")
+            // Log.d(tag, "Inserted new message: ${message.msgId}")
         } catch (e: Exception) {
             Log.e(tag, "Error inserting message to local storage", e)
         }
@@ -227,7 +227,7 @@ class WebSocketManager @Inject constructor(
     private suspend fun updateLocalMessage(message: ChatMessage) {
         try {
             messageRepository.updateMessage(message)
-            Log.d(tag, "Updated local message: ${message.msgId}")
+            // Log.d(tag, "Updated local message: ${message.msgId}")
         } catch (e: Exception) {
             Log.e(tag, "Error updating local message", e)
         }
@@ -239,7 +239,7 @@ class WebSocketManager @Inject constructor(
     private suspend fun deleteLocalMessage(msgId: String) {
         try {
             messageRepository.deleteMessage(msgId)
-            Log.d(tag, "Deleted local message: $msgId")
+            // Log.d(tag, "Deleted local message: $msgId")
         } catch (e: Exception) {
             Log.e(tag, "Error deleting local message", e)
         }
@@ -259,9 +259,9 @@ class WebSocketManager @Inject constructor(
                 val targetChatId = message.sender.chatId
                 val targetChatType = message.sender.chatType
                 
-                Log.d(tag, "Updating private conversation:")
-                Log.d(tag, "  - Private chat with: ${message.sender.chatId} (${message.sender.name})")
-                Log.d(tag, "  - Message preview: ${getMessagePreview(message)}")
+                // Log.d(tag, "Updating private conversation:")
+                // Log.d(tag, "  - Private chat with: ${message.sender.chatId} (${message.sender.name})")
+                // Log.d(tag, "  - Message preview: ${getMessagePreview(message)}")
                 
                 conversationRepository.updateLastMessage(
                     chatId = targetChatId,
@@ -271,17 +271,17 @@ class WebSocketManager @Inject constructor(
                     unreadCount = 1
                 )
                 
-                Log.d(tag, "Successfully updated private conversation: $targetChatId")
+                // Log.d(tag, "Successfully updated private conversation: $targetChatId")
                 
             } else {
                 // 群聊消息：更新群聊会话，不创建私聊会话
                 val targetChatId = message.chatId!!
                 val targetChatType = message.chatType!!
                 
-                Log.d(tag, "Updating group conversation:")
-                Log.d(tag, "  - Group: $targetChatId (type: $targetChatType)")
-                Log.d(tag, "  - Sender: ${message.sender.chatId} (${message.sender.name})")
-                Log.d(tag, "  - Message preview: ${getMessagePreview(message)}")
+                // Log.d(tag, "Updating group conversation:")
+                // Log.d(tag, "  - Group: $targetChatId (type: $targetChatType)")
+                // Log.d(tag, "  - Sender: ${message.sender.chatId} (${message.sender.name})")
+                // Log.d(tag, "  - Message preview: ${getMessagePreview(message)}")
                 
                 conversationRepository.updateLastMessage(
                     chatId = targetChatId,
@@ -291,7 +291,7 @@ class WebSocketManager @Inject constructor(
                     unreadCount = 1
                 )
                 
-                Log.d(tag, "Successfully updated group conversation: $targetChatId")
+                // Log.d(tag, "Successfully updated group conversation: $targetChatId")
             }
             
         } catch (e: Exception) {
@@ -324,7 +324,7 @@ class WebSocketManager @Inject constructor(
                     unreadCount = null // 不改变未读数
                 )
                 
-                Log.d(tag, "Updated conversation for edited last message: ${message.msgId}")
+                // Log.d(tag, "Updated conversation for edited last message: ${message.msgId}")
             }
             
         } catch (e: Exception) {

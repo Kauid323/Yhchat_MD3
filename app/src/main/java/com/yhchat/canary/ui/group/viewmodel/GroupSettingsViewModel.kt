@@ -191,12 +191,12 @@ class GroupSettingsViewModel @Inject constructor(
      */
     fun loadGroupInfo(groupId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Loading group info for: $groupId")
+            // Log.d(tag, "Loading group info for: $groupId")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             groupRepository.getGroupInfo(groupId).fold(
                 onSuccess = { groupInfo ->
-                    Log.d(tag, "✅ Group info loaded: ${groupInfo.name}")
+                    // Log.d(tag, "✅ Group info loaded: ${groupInfo.name}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         groupInfo = groupInfo,
@@ -258,7 +258,7 @@ class GroupSettingsViewModel @Inject constructor(
         val groupInfo = currentState.groupInfo ?: return
         
         viewModelScope.launch {
-            Log.d(tag, "Saving group settings for: ${groupInfo.groupId}")
+            // Log.d(tag, "Saving group settings for: ${groupInfo.groupId}")
             _uiState.value = _uiState.value.copy(isSaving = true, saveError = null)
             
             groupRepository.editGroupInfo(
@@ -273,7 +273,7 @@ class GroupSettingsViewModel @Inject constructor(
                 isPrivate = currentState.editedPrivate
             ).fold(
                 onSuccess = {
-                    Log.d(tag, "✅ Group settings saved successfully")
+                    // Log.d(tag, "✅ Group settings saved successfully")
                     _uiState.value = _uiState.value.copy(
                         isSaving = false,
                         isEditing = false,
@@ -446,11 +446,11 @@ class GroupSettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isSettingMessageTypeLimit = true)
             
             val typeString = selectedTypes.sorted().joinToString(",")
-            Log.d(tag, "Setting message type limit: $typeString")
+            // Log.d(tag, "Setting message type limit: $typeString")
             
             groupRepository.setMessageTypeLimit(groupInfo.groupId, typeString).fold(
                 onSuccess = {
-                    Log.d(tag, "✅ Message type limit set successfully")
+                    // Log.d(tag, "✅ Message type limit set successfully")
                     _uiState.value = _uiState.value.copy(
                         isSettingMessageTypeLimit = false,
                         showMessageTypeLimitDialog = false

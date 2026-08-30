@@ -31,7 +31,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
     }
     
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(tag, "📨 收到通知动作广播: ${intent.action}")
+        // Log.d(tag, "📨 收到通知动作广播: ${intent.action}")
         
         // 处理"标记为已读"动作
         if (intent.action == "ACTION_MARK_AS_READ") {
@@ -54,7 +54,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
         val chatName = intent.getStringExtra(EXTRA_CHAT_NAME) ?: "会话"
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
         
-        Log.d(tag, "💬 快捷回复: chatId=$chatId, chatType=$chatType, text=$replyText")
+        // Log.d(tag, "💬 快捷回复: chatId=$chatId, chatType=$chatType, text=$replyText")
         
         // 显示"正在发送"通知
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -78,7 +78,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
                 
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "✅ 快捷回复发送成功: $replyText")
+                        // Log.d(tag, "✅ 快捷回复发送成功: $replyText")
                         showSuccessNotification(context, notificationManager, notificationId, chatName, replyText)
                     },
                     onFailure = { error ->
@@ -102,14 +102,14 @@ class NotificationReplyReceiver : BroadcastReceiver() {
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID) ?: return
         
-        Log.d(tag, "✓ 标记会话为已读: chatId=$chatId, notificationId=$notificationId")
+        // Log.d(tag, "✓ 标记会话为已读: chatId=$chatId, notificationId=$notificationId")
         
         // 取消通知
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(notificationId)
         
         // 通知历史会在下次消息到来时自动清理，或在打开会话时清理
-        Log.d(tag, "通知已取消，历史将在打开会话时清理")
+        // Log.d(tag, "通知已取消，历史将在打开会话时清理")
     }
     
     /**

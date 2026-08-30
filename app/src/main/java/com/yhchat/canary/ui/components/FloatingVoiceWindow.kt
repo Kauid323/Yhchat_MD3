@@ -185,8 +185,8 @@ fun FloatingVoiceWindow(
     // 初始化TTS引擎（使用最佳实践）
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            Log.d("FloatingVoiceWindow", "🎤 ========== TTS初始化开始 ==========")
-            Log.d("FloatingVoiceWindow", "📱 设备信息: SDK=${Build.VERSION.SDK_INT}, 型号=${Build.MODEL}")
+            // Log.d("FloatingVoiceWindow", "🎤 ========== TTS初始化开始 ==========")
+            // Log.d("FloatingVoiceWindow", "📱 设备信息: SDK=${Build.VERSION.SDK_INT}, 型号=${Build.MODEL}")
             
             // 1. 检测所有可用TTS引擎
             val engines = detectAllTtsEngines(context)
@@ -198,7 +198,7 @@ fun FloatingVoiceWindow(
             val bestEngine = findBestTtsEngine(engines)
             
             if (bestEngine != null) {
-                Log.d("FloatingVoiceWindow", "🎯 选择最佳引擎: ${bestEngine.label} (${bestEngine.packageName})")
+                // Log.d("FloatingVoiceWindow", "🎯 选择最佳引擎: ${bestEngine.label} (${bestEngine.packageName})")
                 withContext(Dispatchers.Main) {
                     selectedTtsEngine = bestEngine.packageName
                 }
@@ -217,8 +217,8 @@ fun FloatingVoiceWindow(
         var tts: TextToSpeech? = null
         var timeoutJob: kotlinx.coroutines.Job? = null
         
-        Log.d("FloatingVoiceWindow", "🎤 ========== TTS实例初始化 ========== (重试: $ttsRetryCount)")
-        Log.d("FloatingVoiceWindow", "🔧 目标引擎: ${currentEngine ?: "系统默认"}")
+        // Log.d("FloatingVoiceWindow", "🎤 ========== TTS实例初始化 ========== (重试: $ttsRetryCount)")
+        // Log.d("FloatingVoiceWindow", "🔧 目标引擎: ${currentEngine ?: "系统默认"}")
         
         isInitializing = true
         initTimeout = false
@@ -235,17 +235,17 @@ fun FloatingVoiceWindow(
         }
         
         tts = if (!currentEngine.isNullOrBlank()) {
-            Log.d("FloatingVoiceWindow", "📦 创建指定引擎TTS: $currentEngine")
+            // Log.d("FloatingVoiceWindow", "📦 创建指定引擎TTS: $currentEngine")
             try {
                 TextToSpeech(context, { status ->
                     timeoutJob?.cancel()
                     isInitializing = false
                     
-                    Log.d("FloatingVoiceWindow", "📡 TTS初始化回调: status=$status (${getStatusName(status)}), engine=$currentEngine")
+                    // Log.d("FloatingVoiceWindow", "📡 TTS初始化回调: status=$status (${getStatusName(status)}), engine=$currentEngine")
                 
                 if (status == TextToSpeech.SUCCESS) {
                     tts?.let { engine ->
-                        Log.d("FloatingVoiceWindow", "✅ TTS引擎初始化成功")
+                        // Log.d("FloatingVoiceWindow", "✅ TTS引擎初始化成功")
                         
                         // 1. 设置语言
                         val languageResult = engine.setLanguage(Locale.CHINESE)
@@ -253,7 +253,7 @@ fun FloatingVoiceWindow(
                             TextToSpeech.LANG_AVAILABLE,
                             TextToSpeech.LANG_COUNTRY_AVAILABLE,
                             TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> {
-                                Log.d("FloatingVoiceWindow", "✅ 中文语言设置成功: $languageResult")
+                                // Log.d("FloatingVoiceWindow", "✅ 中文语言设置成功: $languageResult")
                                 
                                 // 2. 配置音频属性（关键！）
                                 configureAudioAttributes(engine)
@@ -261,14 +261,14 @@ fun FloatingVoiceWindow(
                                 // 3. 应用语音参数
                                 engine.setSpeechRate(ttsSpeechRate)
                                 engine.setPitch(ttsPitch)
-                                Log.d("FloatingVoiceWindow", "🎚️ 参数配置: 语速=$ttsSpeechRate, 音调=$ttsPitch")
+                                // Log.d("FloatingVoiceWindow", "🎚️ 参数配置: 语速=$ttsSpeechRate, 音调=$ttsPitch")
                                 
                                 // 4. 记录引擎详细信息
                                 logEngineDetails(engine)
                                 
                                 ttsError = null
                                 ttsEngine = tts
-                                Log.d("FloatingVoiceWindow", "🎉 TTS完全就绪")
+                                // Log.d("FloatingVoiceWindow", "🎉 TTS完全就绪")
                             }
                             TextToSpeech.LANG_MISSING_DATA -> {
                                 Log.e("FloatingVoiceWindow", "❌ 缺少中文语言数据")
@@ -302,17 +302,17 @@ fun FloatingVoiceWindow(
                 null
             }
         } else {
-            Log.d("FloatingVoiceWindow", "📦 创建默认TTS引擎")
+            // Log.d("FloatingVoiceWindow", "📦 创建默认TTS引擎")
             try {
                 TextToSpeech(context) { status ->
                     timeoutJob?.cancel()
                     isInitializing = false
                     
-                    Log.d("FloatingVoiceWindow", "📡 TTS初始化回调 (默认引擎): status=$status (${getStatusName(status)})")
+                    // Log.d("FloatingVoiceWindow", "📡 TTS初始化回调 (默认引擎): status=$status (${getStatusName(status)})")
                 
                 if (status == TextToSpeech.SUCCESS) {
                     tts?.let { engine ->
-                        Log.d("FloatingVoiceWindow", "✅ TTS引擎初始化成功 (默认引擎)")
+                        // Log.d("FloatingVoiceWindow", "✅ TTS引擎初始化成功 (默认引擎)")
                         
                         // 1. 设置语言
                         val languageResult = engine.setLanguage(Locale.CHINESE)
@@ -320,7 +320,7 @@ fun FloatingVoiceWindow(
                             TextToSpeech.LANG_AVAILABLE,
                             TextToSpeech.LANG_COUNTRY_AVAILABLE,
                             TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> {
-                                Log.d("FloatingVoiceWindow", "✅ 中文语言设置成功: $languageResult")
+                                // Log.d("FloatingVoiceWindow", "✅ 中文语言设置成功: $languageResult")
                                 
                                 // 2. 配置音频属性（关键！）
                                 configureAudioAttributes(engine)
@@ -328,14 +328,14 @@ fun FloatingVoiceWindow(
                                 // 3. 应用语音参数
                                 engine.setSpeechRate(ttsSpeechRate)
                                 engine.setPitch(ttsPitch)
-                                Log.d("FloatingVoiceWindow", "🎚️ 参数配置: 语速=$ttsSpeechRate, 音调=$ttsPitch")
+                                // Log.d("FloatingVoiceWindow", "🎚️ 参数配置: 语速=$ttsSpeechRate, 音调=$ttsPitch")
                                 
                                 // 4. 记录引擎详细信息
                                 logEngineDetails(engine)
                                 
                                 ttsError = null
                                 ttsEngine = tts
-                                Log.d("FloatingVoiceWindow", "🎉 TTS完全就绪 (默认引擎)")
+                                // Log.d("FloatingVoiceWindow", "🎉 TTS完全就绪 (默认引擎)")
                             }
                             TextToSpeech.LANG_MISSING_DATA -> {
                                 Log.e("FloatingVoiceWindow", "❌ 缺少中文语言数据")
@@ -371,7 +371,7 @@ fun FloatingVoiceWindow(
         }
         
         onDispose {
-            Log.d("FloatingVoiceWindow", "🔚 TTS实例销毁")
+            // Log.d("FloatingVoiceWindow", "🔚 TTS实例销毁")
             timeoutJob?.cancel()
             tts?.shutdown()
             isInitializing = false
@@ -1547,14 +1547,14 @@ fun detectAllTtsEngines(context: Context): List<TtsEngineInfo> {
     val engines = mutableListOf<TtsEngineInfo>()
     
     try {
-        Log.d("FloatingVoiceWindow", "🔍 开始检测TTS引擎...")
-        Log.d("FloatingVoiceWindow", "📱 SDK版本: ${Build.VERSION.SDK_INT}")
+        // Log.d("FloatingVoiceWindow", "🔍 开始检测TTS引擎...")
+        // Log.d("FloatingVoiceWindow", "📱 SDK版本: ${Build.VERSION.SDK_INT}")
         
         // 1. 查询系统已安装的TTS服务
         val ttsServiceIntent = Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)
         val resolveInfoList = context.packageManager.queryIntentServices(ttsServiceIntent, 0)
         
-        Log.d("FloatingVoiceWindow", "📋 系统查询到 ${resolveInfoList.size} 个TTS服务")
+        // Log.d("FloatingVoiceWindow", "📋 系统查询到 ${resolveInfoList.size} 个TTS服务")
         
         if (resolveInfoList.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Log.e("FloatingVoiceWindow", "⚠️ Android 11+ 未检测到TTS引擎！请检查AndroidManifest.xml的<queries>配置")
@@ -1575,7 +1575,7 @@ fun detectAllTtsEngines(context: Context): List<TtsEngineInfo> {
             ))
             installedPackages.add(packageName)
             
-            Log.d("FloatingVoiceWindow", "  ✅ ${appName} ($packageName)")
+            // Log.d("FloatingVoiceWindow", "  ✅ ${appName} ($packageName)")
         }
         
         // 2. 添加已知但可能未被系统API检测到的引擎
@@ -1606,12 +1606,12 @@ fun detectAllTtsEngines(context: Context): List<TtsEngineInfo> {
                 ))
                 
                 if (isInstalled) {
-                    Log.d("FloatingVoiceWindow", "  ✅ 已知引擎: $label ($packageName)")
+                    // Log.d("FloatingVoiceWindow", "  ✅ 已知引擎: $label ($packageName)")
                 }
             }
         }
         
-        Log.d("FloatingVoiceWindow", "✅ 总共检测到 ${engines.count { it.isInstalled }} 个已安装引擎")
+        // Log.d("FloatingVoiceWindow", "✅ 总共检测到 ${engines.count { it.isInstalled }} 个已安装引擎")
         
     } catch (e: Exception) {
         Log.e("FloatingVoiceWindow", "❌ 检测TTS引擎失败", e)
@@ -1625,17 +1625,17 @@ fun detectAllTtsEngines(context: Context): List<TtsEngineInfo> {
  * 策略：Google TTS → 系统默认 → 其他已安装引擎
  */
 fun findBestTtsEngine(engines: List<TtsEngineInfo>): TtsEngineInfo? {
-    Log.d("FloatingVoiceWindow", "🔍 寻找最佳TTS引擎...")
+    // Log.d("FloatingVoiceWindow", "🔍 寻找最佳TTS引擎...")
     
     // 1. 优先选择Google TTS
     engines.find { it.packageName == "com.google.android.tts" && it.isInstalled }?.let {
-        Log.d("FloatingVoiceWindow", "🎯 找到Google TTS，优先使用")
+        // Log.d("FloatingVoiceWindow", "🎯 找到Google TTS，优先使用")
         return it
     }
     
     // 2. 选择第一个已安装的引擎
     engines.find { it.isInstalled }?.let {
-        Log.d("FloatingVoiceWindow", "🎯 使用第一个可用引擎: ${it.label}")
+        // Log.d("FloatingVoiceWindow", "🎯 使用第一个可用引擎: ${it.label}")
         return it
     }
     
@@ -1655,14 +1655,14 @@ fun configureAudioAttributes(tts: TextToSpeech) {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()
             tts.setAudioAttributes(audioAttributes)
-            Log.d("FloatingVoiceWindow", "🔊 音频属性配置: USAGE_MEDIA + CONTENT_TYPE_SPEECH")
+            // Log.d("FloatingVoiceWindow", "🔊 音频属性配置: USAGE_MEDIA + CONTENT_TYPE_SPEECH")
         } else {
             // Android 5.0以下使用流类型（已废弃但仍然可用）
             try {
                 // 使用反射调用已废弃的setStreamType方法
                 val method = TextToSpeech::class.java.getMethod("setStreamType", Int::class.javaPrimitiveType)
                 method.invoke(tts, AudioManager.STREAM_MUSIC)
-                Log.d("FloatingVoiceWindow", "🔊 音频流类型: STREAM_MUSIC (反射调用)")
+                // Log.d("FloatingVoiceWindow", "🔊 音频流类型: STREAM_MUSIC (反射调用)")
             } catch (e: Exception) {
                 Log.w("FloatingVoiceWindow", "⚠️ 设置音频流类型失败", e)
             }
@@ -1679,16 +1679,16 @@ fun logEngineDetails(tts: TextToSpeech) {
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val voice = tts.voice
-            Log.d("FloatingVoiceWindow", "🎤 当前语音: ${voice?.name ?: "未知"}")
-            Log.d("FloatingVoiceWindow", "🌍 语言: ${voice?.locale ?: "未知"}")
+            // Log.d("FloatingVoiceWindow", "🎤 当前语音: ${voice?.name ?: "未知"}")
+            // Log.d("FloatingVoiceWindow", "🌍 语言: ${voice?.locale ?: "未知"}")
             
             val voices = tts.voices
-            Log.d("FloatingVoiceWindow", "📝 可用语音数: ${voices?.size ?: 0}")
+            // Log.d("FloatingVoiceWindow", "📝 可用语音数: ${voices?.size ?: 0}")
             voices?.take(3)?.forEachIndexed { index, v ->
-                Log.d("FloatingVoiceWindow", "  [$index] ${v.name} (${v.locale})")
+                // Log.d("FloatingVoiceWindow", "  [$index] ${v.name} (${v.locale})")
             }
         } else {
-            Log.d("FloatingVoiceWindow", "📱 API < 21，无法获取详细语音信息")
+            // Log.d("FloatingVoiceWindow", "📱 API < 21，无法获取详细语音信息")
         }
     } catch (e: Exception) {
         Log.e("FloatingVoiceWindow", "❌ 获取引擎详情失败", e)
@@ -1716,7 +1716,7 @@ fun checkTtsLanguageSupport(tts: TextToSpeech, locale: Locale): Boolean {
             TextToSpeech.LANG_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> {
-                Log.d("FloatingVoiceWindow", "✅ 支持 ${locale.displayName}")
+                // Log.d("FloatingVoiceWindow", "✅ 支持 ${locale.displayName}")
                 true
             }
             TextToSpeech.LANG_MISSING_DATA -> {
@@ -1772,7 +1772,7 @@ suspend fun synthesizeTTS(
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val audioFile = File(audioDir, "tts_${timestamp}.wav")
         
-        Log.d("FloatingVoiceWindow", "开始合成音频到: ${audioFile.absolutePath}")
+        // Log.d("FloatingVoiceWindow", "开始合成音频到: ${audioFile.absolutePath}")
         
         // 创建合成参数
         val params = Bundle()
@@ -1785,12 +1785,12 @@ suspend fun synthesizeTTS(
         
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                Log.d("FloatingVoiceWindow", "TTS合成开始")
+                // Log.d("FloatingVoiceWindow", "TTS合成开始")
                 onProgress(0.0f)
             }
             
             override fun onDone(utteranceId: String?) {
-                Log.d("FloatingVoiceWindow", "TTS合成完成")
+                // Log.d("FloatingVoiceWindow", "TTS合成完成")
                 synthesisComplete = true
                 synthesisSuccess = true
                 onProgress(1.0f)
@@ -1818,13 +1818,13 @@ suspend fun synthesizeTTS(
         })
         
         // 开始合成
-        Log.d("FloatingVoiceWindow", "📝 开始调用synthesizeToFile API")
+        // Log.d("FloatingVoiceWindow", "📝 开始调用synthesizeToFile API")
         @Suppress("DEPRECATION")
         val result = tts.synthesizeToFile(text, params, audioFile, params.getString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID))
         
         when (result) {
             TextToSpeech.SUCCESS -> {
-                Log.d("FloatingVoiceWindow", "✅ synthesizeToFile调用成功，等待合成完成...")
+                // Log.d("FloatingVoiceWindow", "✅ synthesizeToFile调用成功，等待合成完成...")
             }
             TextToSpeech.ERROR -> {
                 Log.e("FloatingVoiceWindow", "❌ synthesizeToFile调用失败: ERROR")
@@ -1844,20 +1844,20 @@ suspend fun synthesizeTTS(
         
         // 等待合成完成（最多30秒）
         var waitTime = 0
-        Log.d("FloatingVoiceWindow", "⏳ 等待TTS合成完成...")
+        // Log.d("FloatingVoiceWindow", "⏳ 等待TTS合成完成...")
         while (!synthesisComplete && waitTime < 30000) {
             kotlinx.coroutines.delay(100)
             waitTime += 100
             
             // 每2秒记录一次等待状态
             if (waitTime % 2000 == 0) {
-                Log.d("FloatingVoiceWindow", "⏳ 已等待 ${waitTime/1000}秒...")
+                // Log.d("FloatingVoiceWindow", "⏳ 已等待 ${waitTime/1000}秒...")
             }
         }
         
         // 检查合成结果
-        Log.d("FloatingVoiceWindow", "📊 合成状态: complete=$synthesisComplete, success=$synthesisSuccess")
-        Log.d("FloatingVoiceWindow", "📊 文件状态: exists=${audioFile.exists()}, size=${if (audioFile.exists()) audioFile.length() else 0}")
+        // Log.d("FloatingVoiceWindow", "📊 合成状态: complete=$synthesisComplete, success=$synthesisSuccess")
+        // Log.d("FloatingVoiceWindow", "📊 文件状态: exists=${audioFile.exists()}, size=${if (audioFile.exists()) audioFile.length() else 0}")
         
         withContext(Dispatchers.Main) {
             when {
@@ -1879,8 +1879,8 @@ suspend fun synthesizeTTS(
                 }
                 else -> {
                     val uri = Uri.fromFile(audioFile)
-                    Log.d("FloatingVoiceWindow", "🎉 音频合成成功: ${audioFile.absolutePath}")
-                    Log.d("FloatingVoiceWindow", "📦 文件大小: ${audioFile.length()} 字节 (${audioFile.length() / 1024}KB)")
+                    // Log.d("FloatingVoiceWindow", "🎉 音频合成成功: ${audioFile.absolutePath}")
+                    // Log.d("FloatingVoiceWindow", "📦 文件大小: ${audioFile.length()} 字节 (${audioFile.length() / 1024}KB)")
                     onComplete(uri)
                 }
             }
@@ -1910,11 +1910,11 @@ fun playTTS(
     // 设置播放监听器
     tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) {
-            Log.d("FloatingVoiceWindow", "TTS播放开始")
+            // Log.d("FloatingVoiceWindow", "TTS播放开始")
         }
         
         override fun onDone(utteranceId: String?) {
-            Log.d("FloatingVoiceWindow", "TTS播放完成")
+            // Log.d("FloatingVoiceWindow", "TTS播放完成")
             onComplete()
         }
         

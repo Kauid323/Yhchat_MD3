@@ -51,10 +51,10 @@ class ChatSearchViewModel @Inject constructor(
     }
     
     fun searchMessages(chatId: String, chatType: Int, query: String, isLoadMore: Boolean = false) {
-        Log.d(TAG, "searchMessages: query='$query', chatId='$chatId', chatType=$chatType, isLoadMore=$isLoadMore")
+        // Log.d(TAG, "searchMessages: query='$query', chatId='$chatId', chatType=$chatType, isLoadMore=$isLoadMore")
         
         if (query.isBlank()) {
-            Log.d(TAG, "searchMessages: query is blank, clearing results")
+            // Log.d(TAG, "searchMessages: query is blank, clearing results")
             _state.value = _state.value.copy(
                 searchResults = emptyList(),
                 currentPage = 0,
@@ -66,10 +66,10 @@ class ChatSearchViewModel @Inject constructor(
         
         viewModelScope.launch {
             if (isLoadMore) {
-                Log.d(TAG, "searchMessages: loading more results, current page: ${_state.value.currentPage}")
+                // Log.d(TAG, "searchMessages: loading more results, current page: ${_state.value.currentPage}")
                 _state.value = _state.value.copy(isLoadingMore = true)
             } else {
-                Log.d(TAG, "searchMessages: starting new search")
+                // Log.d(TAG, "searchMessages: starting new search")
                 _state.value = _state.value.copy(
                     isLoading = true, 
                     error = null,
@@ -82,7 +82,7 @@ class ChatSearchViewModel @Inject constructor(
             try {
                 val userToken = tokenRepository.getToken().first()
                 val token = userToken?.token
-                Log.d(TAG, "searchMessages: got token, length=${token?.length ?: 0}")
+                // Log.d(TAG, "searchMessages: got token, length=${token?.length ?: 0}")
                 
                 if (token.isNullOrBlank()) {
                     Log.w(TAG, "searchMessages: token is null or blank")
@@ -97,7 +97,7 @@ class ChatSearchViewModel @Inject constructor(
                 val pageSize = 30
                 // 使用时间戳进行分页，而不是累积数量
                 val timestamp = if (isLoadMore) _state.value.lastTimestamp else 9999999999999L
-                Log.d(TAG, "searchMessages: requesting with timestamp=$timestamp, pageSize=$pageSize, isLoadMore=$isLoadMore")
+                // Log.d(TAG, "searchMessages: requesting with timestamp=$timestamp, pageSize=$pageSize, isLoadMore=$isLoadMore")
 
                 val json = JSONObject().apply {
                     // keyword / word
@@ -122,18 +122,18 @@ class ChatSearchViewModel @Inject constructor(
                 val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
                 val response = apiService.searchChatMessagesRaw(token, requestBody)
-                Log.d(TAG, "searchMessages: API response received, isSuccessful=${response.isSuccessful}, code=${response.code()}")
+                // Log.d(TAG, "searchMessages: API response received, isSuccessful=${response.isSuccessful}, code=${response.code()}")
                 
                 if (response.isSuccessful) {
                     val body = response.body()
-                    Log.d(TAG, "searchMessages: response body code=${body?.code}, msg='${body?.msg}'")
+                    // Log.d(TAG, "searchMessages: response body code=${body?.code}, msg='${body?.msg}'")
                     
                     if (body?.code == 1) {
                         val searchResults = body.data?.list ?: emptyList()
-                        Log.d(TAG, "searchMessages: got ${searchResults.size} search results")
+                        // Log.d(TAG, "searchMessages: got ${searchResults.size} search results")
                         
                         if (searchResults.isEmpty() && !isLoadMore) {
-                            Log.d(TAG, "searchMessages: no results found for new search")
+                            // Log.d(TAG, "searchMessages: no results found for new search")
                             _state.value = _state.value.copy(
                                 isLoading = false,
                                 isLoadingMore = false,
@@ -145,19 +145,19 @@ class ChatSearchViewModel @Inject constructor(
                         }
                         
                         // 直接将搜索结果转换为ChatMessage对象（用于列表显示）
-                        Log.d(TAG, "searchMessages: converting ${searchResults.size} search results to ChatMessage objects")
+                        // Log.d(TAG, "searchMessages: converting ${searchResults.size} search results to ChatMessage objects")
                         val fullMessages = searchResults.map { searchMessage ->
                             convertSearchMessageToChatMessage(searchMessage)
                         }
                         
-                        Log.d(TAG, "searchMessages: successfully fetched ${fullMessages.size} full messages")
+                        // Log.d(TAG, "searchMessages: successfully fetched ${fullMessages.size} full messages")
                         
                         val currentResults = if (isLoadMore) _state.value.searchResults else emptyList()
                         val newResults = if (isLoadMore) {
                             // 去重：只添加不在当前结果中的消息
                             val existingIds = currentResults.map { it.msgId }.toSet()
                             val filtered = fullMessages.filter { it.msgId !in existingIds }
-                            Log.d(TAG, "searchMessages: filtered ${filtered.size} new messages from ${fullMessages.size} total")
+                            // Log.d(TAG, "searchMessages: filtered ${filtered.size} new messages from ${fullMessages.size} total")
                             filtered
                         } else {
                             fullMessages
@@ -168,7 +168,7 @@ class ChatSearchViewModel @Inject constructor(
                         // 判断是否还有更多结果
                         // 只有在加载更多时返回空结果或去重后没有新消息时才认为没有更多
                         val hasMore = if (isLoadMore && (searchResults.isEmpty() || newResults.isEmpty())) {
-                            Log.d(TAG, "searchMessages: load more returned empty or no new results, no more results")
+                            // Log.d(TAG, "searchMessages: load more returned empty or no new results, no more results")
                             false
                         } else {
                             // 第一次搜索或有新结果时，假设还有更多（让用户滑到底部时再判断）
@@ -183,7 +183,7 @@ class ChatSearchViewModel @Inject constructor(
                             9999999999999L
                         }
                         
-                        Log.d(TAG, "searchMessages: final=${finalResults.size}, new=${newResults.size}, hasMore=$hasMore, timestamp=$newLastTimestamp")
+                        // Log.d(TAG, "searchMessages: final=${finalResults.size}, new=${newResults.size}, hasMore=$hasMore, timestamp=$newLastTimestamp")
                         
                         _state.value = _state.value.copy(
                             isLoading = false,
@@ -221,37 +221,37 @@ class ChatSearchViewModel @Inject constructor(
     }
     
     fun loadMoreResults(chatId: String, chatType: Int, query: String) {
-        Log.d(TAG, "loadMoreResults: isLoadingMore=${_state.value.isLoadingMore}, hasMoreResults=${_state.value.hasMoreResults}")
+        // Log.d(TAG, "loadMoreResults: isLoadingMore=${_state.value.isLoadingMore}, hasMoreResults=${_state.value.hasMoreResults}")
         if (_state.value.isLoadingMore || !_state.value.hasMoreResults) {
-            Log.d(TAG, "loadMoreResults: skipping - already loading or no more results")
+            // Log.d(TAG, "loadMoreResults: skipping - already loading or no more results")
             return
         }
         // 使用当前保存的搜索词，而不是传入的参数
         val currentQuery = _state.value.searchQuery.takeIf { it.isNotBlank() } ?: query
-        Log.d(TAG, "loadMoreResults: triggering search for more results with query='$currentQuery', lastTimestamp=${_state.value.lastTimestamp}")
+        // Log.d(TAG, "loadMoreResults: triggering search for more results with query='$currentQuery', lastTimestamp=${_state.value.lastTimestamp}")
         searchMessages(chatId, chatType, currentQuery, isLoadMore = true)
     }
     
     fun showMessageDetail(message: ChatMessage) {
-        Log.d(TAG, "showMessageDetail: showing message ${message.msgId}")
+        // Log.d(TAG, "showMessageDetail: showing message ${message.msgId}")
         // 直接显示搜索结果中的消息，不需要重新获取
         _state.value = _state.value.copy(selectedMessage = message)
     }
     
     fun hideMessageDetail() {
-        Log.d(TAG, "hideMessageDetail: hiding message detail")
+        // Log.d(TAG, "hideMessageDetail: hiding message detail")
         _state.value = _state.value.copy(selectedMessage = null)
     }
     
     fun getMessageDetail(chatId: String, chatType: Int, messageId: String) {
-        Log.d(TAG, "getMessageDetail: fetching detail for message $messageId")
+        // Log.d(TAG, "getMessageDetail: fetching detail for message $messageId")
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoadingMessageDetail = true)
             
             try {
                 val userToken = tokenRepository.getToken().first()
                 val token = userToken?.token
-                Log.d(TAG, "getMessageDetail: got token, length=${token?.length ?: 0}")
+                // Log.d(TAG, "getMessageDetail: got token, length=${token?.length ?: 0}")
                 
                 if (token.isNullOrBlank()) {
                     Log.w(TAG, "getMessageDetail: token is null or blank")
@@ -263,10 +263,10 @@ class ChatSearchViewModel @Inject constructor(
                 }
                 
                 // 使用API获取完整的消息详情
-                Log.d(TAG, "getMessageDetail: calling messageRepository.getMessageByIdFromApi($messageId)")
+                // Log.d(TAG, "getMessageDetail: calling messageRepository.getMessageByIdFromApi($messageId)")
                 val message = messageRepository.getMessageByIdFromApi(messageId, chatId, chatType)
                 if (message != null) {
-                    Log.d(TAG, "getMessageDetail: successfully got message detail, type=${message.contentType}")
+                    // Log.d(TAG, "getMessageDetail: successfully got message detail, type=${message.contentType}")
                     _state.value = _state.value.copy(
                         isLoadingMessageDetail = false,
                         selectedMessage = message
@@ -289,7 +289,7 @@ class ChatSearchViewModel @Inject constructor(
     }
     
     fun clearError() {
-        Log.d(TAG, "clearError: clearing error state")
+        // Log.d(TAG, "clearError: clearing error state")
         _state.value = _state.value.copy(error = null)
     }
     

@@ -77,7 +77,7 @@ class WebDAVBrowserViewModel : ViewModel() {
                             )
                             decryptedMountSettings.add(decryptedMountSetting)
 
-                            Log.d("WebDAVBrowser", "挂载点 ${mountSetting.mountName} 密码解密成功")
+                            // Log.d("WebDAVBrowser", "挂载点 ${mountSetting.mountName} 密码解密成功")
                         } catch (e: Exception) {
                             Log.e("WebDAVBrowser", "挂载点 ${mountSetting.mountName} 密码解密失败", e)
                             decryptedMountSettings.add(mountSetting.copy(webdavPassword = ""))
@@ -177,7 +177,7 @@ class WebDAVBrowserViewModel : ViewModel() {
     fun enterFolder(relativePath: String) {
         val selectedMount = _uiState.value.mountSettings.getOrNull(_uiState.value.selectedMountIndex)
         if (selectedMount != null) {
-            Log.d("WebDAVBrowser", "enterFolder: relativePath=$relativePath")
+            // Log.d("WebDAVBrowser", "enterFolder: relativePath=$relativePath")
             loadFiles(selectedMount, relativePath)
         }
     }

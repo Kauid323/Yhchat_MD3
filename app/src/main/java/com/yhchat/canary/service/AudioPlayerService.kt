@@ -261,7 +261,7 @@ class AudioPlayerService : Service() {
             })
             isActive = true
         }
-        Log.d(TAG, "AudioPlayerService created")
+        // Log.d(TAG, "AudioPlayerService created")
     }
 
      private fun createNotificationChannel() {
@@ -447,7 +447,7 @@ class AudioPlayerService : Service() {
     }
 
     private fun handlePlaybackCompletion(tempAudioFileToDelete: File? = null) {
-        Log.d(TAG, "handlePlaybackCompletion, currentTitle=$currentTitle")
+        // Log.d(TAG, "handlePlaybackCompletion, currentTitle=$currentTitle")
         this@AudioPlayerService.isPlaying = false
         saveProgressForCurrentAudio(0L)
         stopProgressUpdates()
@@ -456,7 +456,7 @@ class AudioPlayerService : Service() {
         tempAudioFileToDelete?.let { file ->
             if (file.name.startsWith("temp_audio_")) {
                 file.delete()
-                Log.d(TAG, "清理临时音频文件: ${file.name}")
+                // Log.d(TAG, "清理临时音频文件: ${file.name}")
             }
         }
 
@@ -485,7 +485,7 @@ class AudioPlayerService : Service() {
             }
 
             if (targetSongId != null && targetSongId > 0L) {
-                Log.d(TAG, "检测到网络音频播放完成，准备请求网易云打卡接口(+1): songId=$targetSongId")
+                // Log.d(TAG, "检测到网络音频播放完成，准备请求网易云打卡接口(+1): songId=$targetSongId")
                 val reportResult = NcmApiClient.reportSongListened(
                     context = this@AudioPlayerService,
                     songId = targetSongId,
@@ -1106,7 +1106,7 @@ class AudioPlayerService : Service() {
                     updatePlaybackState(playing = true)
                     updateNotification(title, "正在播放")
                     startProgressUpdates()
-                    Log.d(TAG, "开始播放音频")
+                    // Log.d(TAG, "开始播放音频")
 
                     // 异步启动网易云听歌识别与热更新
                     serviceScope.launch(Dispatchers.IO) {
@@ -1130,7 +1130,7 @@ class AudioPlayerService : Service() {
                 }
                 
                 setOnCompletionListener {
-                    Log.d(TAG, "音频播放完成")
+                    // Log.d(TAG, "音频播放完成")
                     handlePlaybackCompletion(tempAudioFileToDelete = audioFile)
                 }
                 
@@ -1143,7 +1143,7 @@ class AudioPlayerService : Service() {
                     // 只清理临时文件，保留缓存文件
                     if (audioFile.name.startsWith("temp_audio_")) {
                         audioFile.delete()
-                        Log.d(TAG, "清理临时音频文件")
+                        // Log.d(TAG, "清理临时音频文件")
                     }
                     updateNotification(title, "播放出错")
                     stopSelf()
@@ -1157,7 +1157,7 @@ class AudioPlayerService : Service() {
             // 只清理临时文件，保留缓存文件
             if (audioFile.name.startsWith("temp_audio_")) {
                 audioFile.delete()
-                Log.d(TAG, "清理临时音频文件")
+                // Log.d(TAG, "清理临时音频文件")
             }
             updateNotification(title, "播放失败")
             stopSelf()
@@ -1302,7 +1302,7 @@ class AudioPlayerService : Service() {
      * 实时覆盖正在播放的音频标题、歌手、封面图，并热更新通知栏与播放列表
      */
     fun updateAudioInfo(newTitle: String, newArtist: String = "", newCoverUrl: String? = null) {
-        Log.d(TAG, "听歌识曲热更新: title=$newTitle, artist=$newArtist, coverUrl=$newCoverUrl")
+        // Log.d(TAG, "听歌识曲热更新: title=$newTitle, artist=$newArtist, coverUrl=$newCoverUrl")
         currentTitle = newTitle
         currentArtist = newArtist
         currentCoverUrl = newCoverUrl

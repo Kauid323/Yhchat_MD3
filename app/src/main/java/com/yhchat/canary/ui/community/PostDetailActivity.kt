@@ -1262,7 +1262,7 @@ fun PostDetailScreen(
             // 获取token
             currentToken = viewModel.getTokenAsync()
             isTokenLoaded = true
-            android.util.Log.d("PostDetailActivity", "🔑 Token加载完成: ${currentToken.take(10)}...")
+            android.util.// Log.d("PostDetailActivity", "🔑 Token加载完成: ${currentToken.take(10)}...")
         }
     }
     

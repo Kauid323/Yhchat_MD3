@@ -48,7 +48,7 @@ class GroupTagRepository @Inject constructor(
                 val body = response.body()
                 if (body != null && body.code == 1) {
                     val tags = body.data?.list ?: emptyList()
-                    Log.d(TAG, "获取群组标签成功: ${tags.size}个标签")
+                    // Log.d(TAG, "获取群组标签成功: ${tags.size}个标签")
                     Result.success(tags)
                 } else {
                     val error = body?.msg ?: "获取标签列表失败"
@@ -93,7 +93,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "标签排序成功: ${tags.size}个标签")
+                    // Log.d(TAG, "标签排序成功: ${tags.size}个标签")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "标签排序失败"
@@ -140,7 +140,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "创建群组标签成功")
+                    // Log.d(TAG, "创建群组标签成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "创建标签失败"
@@ -189,7 +189,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "编辑群组标签成功")
+                    // Log.d(TAG, "编辑群组标签成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "编辑标签失败"
@@ -223,7 +223,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "删除群组标签成功")
+                    // Log.d(TAG, "删除群组标签成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "删除标签失败"
@@ -260,7 +260,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "关联用户标签成功")
+                    // Log.d(TAG, "关联用户标签成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "关联标签失败"
@@ -297,7 +297,7 @@ class GroupTagRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "取消关联用户标签成功")
+                    // Log.d(TAG, "取消关联用户标签成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "取消关联失败"
@@ -366,7 +366,7 @@ class GroupTagRepository @Inject constructor(
                             )
                         }
                         
-                        Log.d(TAG, "获取标签成员成功: ${members.size}/${tagMemberProto.total}")
+                        // Log.d(TAG, "获取标签成员成功: ${members.size}/${tagMemberProto.total}")
                         Result.success(
                             TagMembersData(
                                 members = members,

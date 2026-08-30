@@ -193,23 +193,23 @@ class ChatViewModel @Inject constructor(
      * 处理草稿更新（多端同步）
      */
     private fun handleDraftUpdate(draftUpdate: com.yhchat.canary.data.websocket.DraftUpdate) {
-        Log.d(tag, "📝 处理草稿更新: chatId=${draftUpdate.chatId}, currentChatId=$currentChatId, input='${draftUpdate.input.take(50)}${if (draftUpdate.input.length > 50) "..." else ""}'")
+        // Log.d(tag, "📝 处理草稿更新: chatId=${draftUpdate.chatId}, currentChatId=$currentChatId, input='${draftUpdate.input.take(50)}${if (draftUpdate.input.length > 50) "..." else ""}'")
         
         // 如果草稿时间戳距离上次发送草稿时间小于1秒，可能是自己发送的，跳过
         val timeSinceLastSent = System.currentTimeMillis() - lastDraftSentTime
         if (timeSinceLastSent < 1000) {
-            Log.d(tag, "⏭️ 跳过草稿更新（可能是自己发送的，时间差${timeSinceLastSent}ms）")
+            // Log.d(tag, "⏭️ 跳过草稿更新（可能是自己发送的，时间差${timeSinceLastSent}ms）")
             return
         }
         
         // 只判断chatId就够了
         if (draftUpdate.chatId == currentChatId) {
             // 当前正在该聊天界面，直接更新输入框
-            Log.d(tag, "✅ 当前在该聊天界面 (chatId匹配)，通知UI更新输入框")
+            // Log.d(tag, "✅ 当前在该聊天界面 (chatId匹配)，通知UI更新输入框")
             _remoteDraftInput.value = draftUpdate.input
         } else {
             // 不在该聊天界面，保存草稿到本地
-            Log.d(tag, "💾 不在该聊天界面 (chatId=$currentChatId != ${draftUpdate.chatId})，保存草稿到本地")
+            // Log.d(tag, "💾 不在该聊天界面 (chatId=$currentChatId != ${draftUpdate.chatId})，保存草稿到本地")
             draftStore.saveDraft(draftUpdate.chatId, currentChatType, draftUpdate.input)
         }
     }
@@ -229,7 +229,7 @@ class ChatViewModel @Inject constructor(
         currentChatType = chatType
         currentUserId = userId
         
-        Log.d(tag, "Initializing chat: chatId=$chatId, chatType=$chatType, userId=$userId")
+        // Log.d(tag, "Initializing chat: chatId=$chatId, chatType=$chatType, userId=$userId")
         
         // 清空之前的消息
         _messages.clear()
@@ -260,7 +260,7 @@ class ChatViewModel @Inject constructor(
         startListeningToWebSocketMessages()
         
         // 加载最新消息
-        Log.d(tag, "Loading latest messages")
+        // Log.d(tag, "Loading latest messages")
         loadMessages()
     }
 
@@ -398,12 +398,12 @@ class ChatViewModel @Inject constructor(
      */
     private fun loadGroupInfo(groupId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Loading group info for: $groupId")
+            // Log.d(tag, "Loading group info for: $groupId")
             groupRepository.setTokenRepository(tokenRepository)
             
             groupRepository.getGroupInfo(groupId).fold(
                 onSuccess = { groupDetail ->
-                    Log.d(tag, "✅ Group info loaded successfully")
+                    // Log.d(tag, "✅ Group info loaded successfully")
                     _uiState.value = _uiState.value.copy(
                         groupInfo = groupDetail,
                         groupMemberCount = groupDetail.memberCount,
@@ -423,13 +423,13 @@ class ChatViewModel @Inject constructor(
      */
     private fun loadGroupMembers(groupId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Loading group info and members for: $groupId")
+            // Log.d(tag, "Loading group info and members for: $groupId")
             groupRepository.setTokenRepository(tokenRepository)
             
             // 加载群信息以获取成员总数
             groupRepository.getGroupInfo(groupId).fold(
                 onSuccess = { groupInfo ->
-                    Log.d(tag, "Group info loaded, member count: ${groupInfo.memberCount}")
+                    // Log.d(tag, "Group info loaded, member count: ${groupInfo.memberCount}")
                     
                     // 只加载前100人用于显示权限标签，避免加载所有成员
                     val membersToLoad = minOf(DEFAULT_LOAD_MEMBERS_COUNT, groupInfo.memberCount)
@@ -440,7 +440,7 @@ class ChatViewModel @Inject constructor(
                         groupRepository.getGroupMembers(groupId, page = page, size = MEMBERS_PER_PAGE).fold(
                             onSuccess = { members ->
                                 allMembers.addAll(members)
-                                Log.d(tag, "Loaded page $page: ${members.size} members, total: ${allMembers.size}")
+                                // Log.d(tag, "Loaded page $page: ${members.size} members, total: ${allMembers.size}")
                             },
                             onFailure = { error ->
                                 Log.e(tag, "Failed to load group members page $page", error)
@@ -455,7 +455,7 @@ class ChatViewModel @Inject constructor(
                         groupMembers = membersMap,
                         groupMemberCount = groupInfo.memberCount
                     )
-                    Log.d(tag, "Group members loaded: ${membersMap.size} members (for permission display)")
+                    // Log.d(tag, "Group members loaded: ${membersMap.size} members (for permission display)")
                 },
                 onFailure = { error ->
                     Log.e(tag, "Failed to load group info", error)
@@ -493,12 +493,12 @@ class ChatViewModel @Inject constructor(
      */
     private fun loadGroupBotBoards(chatId: String) {
         viewModelScope.launch {
-            Log.d(tag, "开始加载群聊机器人看板: groupId=$chatId")
+            // Log.d(tag, "开始加载群聊机器人看板: groupId=$chatId")
             // 使用chatType=2获取群聊的看板
             botRepository.getBotBoard(chatId, 2).fold(
                 onSuccess = { boardResponse ->
                     val boardsDataList = boardResponse.boardList
-                    Log.d(tag, "✅ 加载群聊看板成功: groupId=$chatId, 数量=${boardsDataList.size}")
+                    // Log.d(tag, "✅ 加载群聊看板成功: groupId=$chatId, 数量=${boardsDataList.size}")
                     val boardsMap = boardsDataList.associateBy { it.botId }
                     _uiState.value = _uiState.value.copy(groupBotBoards = boardsMap)
                 },
@@ -548,7 +548,7 @@ class ChatViewModel @Inject constructor(
                 value = button.content
             ).fold(
                 onSuccess = {
-                    Log.d(tag, "点击菜单按钮成功: ${button.id}")
+                    // Log.d(tag, "点击菜单按钮成功: ${button.id}")
                 },
                 onFailure = { error ->
                     Log.e(tag, "点击菜单按钮失败", error)
@@ -593,7 +593,7 @@ class ChatViewModel @Inject constructor(
             blocklistRepository.isUserBlocked(message.sender.chatId)
         }.getOrElse { false }
         if (isBlocked) {
-            Log.d(tag, "Message from blocked user ${message.sender.chatId}, ignored in real-time")
+            // Log.d(tag, "Message from blocked user ${message.sender.chatId}, ignored in real-time")
             return
         }
 
@@ -609,7 +609,7 @@ class ChatViewModel @Inject constructor(
             streamingMessageContentTypes[normalizedMessage.msgId] = normalizedMessage.contentType
             
             if (normalizedMessage.sender.chatType == 3) {
-                Log.d(tag, "Initialized streaming cache for bot message: ${normalizedMessage.msgId}")
+                // Log.d(tag, "Initialized streaming cache for bot message: ${normalizedMessage.msgId}")
             }
         }
         
@@ -620,7 +620,7 @@ class ChatViewModel @Inject constructor(
                 // 按时间排序插入新消息
                 val insertIndex = _messages.indexOfLast { it.sendTime <= normalizedMessage.sendTime } + 1
                 _messages.add(insertIndex, normalizedMessage)
-                Log.d(tag, "Inserted new real-time message at index $insertIndex: ${normalizedMessage.msgId}")
+                // Log.d(tag, "Inserted new real-time message at index $insertIndex: ${normalizedMessage.msgId}")
                 
                 handleAutoCollapseForMessages(listOf(normalizedMessage))
                 
@@ -632,7 +632,7 @@ class ChatViewModel @Inject constructor(
                     streamingMessages[normalizedMessage.msgId] = normalizedMessage.content.text ?: ""
                     streamingMessageSenders[normalizedMessage.msgId] = normalizedMessage.sender
                     streamingMessageContentTypes[normalizedMessage.msgId] = normalizedMessage.contentType
-                    Log.d(tag, "Initialized streaming cache for bot message: ${normalizedMessage.msgId}")
+                    // Log.d(tag, "Initialized streaming cache for bot message: ${normalizedMessage.msgId}")
                 }
             }
         }
@@ -646,7 +646,7 @@ class ChatViewModel @Inject constructor(
         if (existingIndex != -1) {
             val message = _messages[existingIndex]
             _messages[existingIndex] = message.copy(msgDeleteTime = System.currentTimeMillis())
-            Log.d(tag, "Marked recalled message in current list: $msgId")
+            // Log.d(tag, "Marked recalled message in current list: $msgId")
         }
         streamingMessages.remove(msgId)
         streamingMessageSenders.remove(msgId)
@@ -676,7 +676,7 @@ class ChatViewModel @Inject constructor(
                 val result = messageRepository.addExpressionToFavorites(expressionId)
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "添加表情成功: $expressionId")
+                        // Log.d(tag, "添加表情成功: $expressionId")
                     },
                     onFailure = { error ->
                         Log.e(tag, "添加表情失败: ${error.message}")
@@ -711,7 +711,7 @@ class ChatViewModel @Inject constructor(
     ): String? {
         val userToken = getUserToken() ?: return null
 
-        Log.d(tag, "获取七牛${tokenType}上传token...")
+        // Log.d(tag, "获取七牛${tokenType}上传token...")
         val tokenResponse = getTokenApi(userToken)
 
         if (!tokenResponse.isSuccessful || tokenResponse.body()?.code != 1) {
@@ -727,7 +727,7 @@ class ChatViewModel @Inject constructor(
             return null
         }
 
-        Log.d(tag, "获取到${tokenType}上传token: ${uploadToken.take(20)}...")
+        // Log.d(tag, "获取到${tokenType}上传token: ${uploadToken.take(20)}...")
         return uploadToken
     }
 
@@ -758,14 +758,14 @@ class ChatViewModel @Inject constructor(
         uploadJob?.cancel()
         uploadJob = viewModelScope.launch {
             try {
-                Log.d(tag, "开始上传并发送图片: $imageUri")
+                // Log.d(tag, "开始上传并发送图片: $imageUri")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("图片") {
                     apiService.getQiniuImageToken(it)
                 } ?: return@launch
 
-                Log.d(tag, "开始上传图片到七牛云...")
+                // Log.d(tag, "开始上传图片到七牛云...")
                 val uploadResult = com.yhchat.canary.utils.ImageUploadUtil.uploadImage(
                     context = context,
                     imageUri = imageUri,
@@ -777,10 +777,10 @@ class ChatViewModel @Inject constructor(
 
                 uploadResult.fold(
                     onSuccess = { uploadResponse ->
-                        Log.d(tag, "图片上传成功！")
-                        Log.d(tag, "   key: ${uploadResponse.key}")
-                        Log.d(tag, "   hash: ${uploadResponse.hash}")
-                        Log.d(tag, "   size: ${uploadResponse.fsize}")
+                        // Log.d(tag, "图片上传成功！")
+                        // Log.d(tag, "   key: ${uploadResponse.key}")
+                        // Log.d(tag, "   hash: ${uploadResponse.hash}")
+                        // Log.d(tag, "   size: ${uploadResponse.fsize}")
 
                         val width = uploadResponse.avinfo?.video?.width ?: 1080
                         val height = uploadResponse.avinfo?.video?.height ?: 1920
@@ -792,7 +792,7 @@ class ChatViewModel @Inject constructor(
                             else -> "image/jpeg"
                         }
 
-                        Log.d(tag, "发送图片消息...")
+                        // Log.d(tag, "发送图片消息...")
                         val sendResult = messageRepository.sendMessage(
                             chatId = currentChatId,
                             chatType = currentChatType,
@@ -819,7 +819,7 @@ class ChatViewModel @Inject constructor(
 
                         sendResult.fold(
                             onSuccess = {
-                                Log.d(tag, "图片消息发送成功！")
+                                // Log.d(tag, "图片消息发送成功！")
                                 loadMessages(refresh = true)
                             },
                             onFailure = { error ->
@@ -835,7 +835,7 @@ class ChatViewModel @Inject constructor(
                 )
 
             } catch (e: CancellationException) {
-                Log.d(tag, "上传图片已取消")
+                // Log.d(tag, "上传图片已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送图片异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送图片失败: ${e.message}")
@@ -862,14 +862,14 @@ class ChatViewModel @Inject constructor(
         uploadJob?.cancel()
         uploadJob = viewModelScope.launch {
             try {
-                Log.d(tag, "开始上传并发送视频: $videoUri")
+                // Log.d(tag, "开始上传并发送视频: $videoUri")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("视频") {
                     apiService.getQiniuVideoToken(it)
                 } ?: return@launch
 
-                Log.d(tag, "开始上传视频到七牛云...")
+                // Log.d(tag, "开始上传视频到七牛云...")
                 val uploadResult = com.yhchat.canary.utils.VideoUploadUtil.uploadVideo(
                     context = context,
                     videoUri = videoUri,
@@ -881,10 +881,10 @@ class ChatViewModel @Inject constructor(
 
                 uploadResult.fold(
                     onSuccess = { uploadResponse ->
-                        Log.d(tag, "视频上传成功！")
-                        Log.d(tag, "   key: ${uploadResponse.key}")
-                        Log.d(tag, "   hash: ${uploadResponse.hash}")
-                        Log.d(tag, "   size: ${uploadResponse.fsize}")
+                        // Log.d(tag, "视频上传成功！")
+                        // Log.d(tag, "   key: ${uploadResponse.key}")
+                        // Log.d(tag, "   hash: ${uploadResponse.hash}")
+                        // Log.d(tag, "   size: ${uploadResponse.fsize}")
 
                         val videoSuffix = uploadResponse.key.substringAfterLast('.', "mp4").lowercase()
                         val sendResult = messageRepository.sendMessage(
@@ -911,7 +911,7 @@ class ChatViewModel @Inject constructor(
 
                         sendResult.fold(
                             onSuccess = {
-                                Log.d(tag, "视频消息发送成功！")
+                                // Log.d(tag, "视频消息发送成功！")
                                 loadMessages(refresh = true)
                             },
                             onFailure = { error ->
@@ -927,7 +927,7 @@ class ChatViewModel @Inject constructor(
                 )
 
             } catch (e: CancellationException) {
-                Log.d(tag, "上传视频已取消")
+                // Log.d(tag, "上传视频已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送视频异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送视频失败: ${e.message}")
@@ -954,16 +954,16 @@ class ChatViewModel @Inject constructor(
         uploadJob?.cancel()
         uploadJob = viewModelScope.launch {
             try {
-                Log.d(tag, "开始上传并发送文件")
-                Log.d(tag, "文件URI: $fileUri")
-                Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
+                // Log.d(tag, "开始上传并发送文件")
+                // Log.d(tag, "文件URI: $fileUri")
+                // Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("文件") {
                     apiService.getQiniuFileToken(it)
                 } ?: return@launch
 
-                Log.d(tag, "开始上传文件到七牛云...")
+                // Log.d(tag, "开始上传文件到七牛云...")
                 val uploadResult = com.yhchat.canary.utils.FileUploadUtil.uploadFile(
                     context = context,
                     fileUri = fileUri,
@@ -975,23 +975,23 @@ class ChatViewModel @Inject constructor(
 
                 uploadResult.fold(
                     onSuccess = { uploadResponse ->
-                        Log.d(tag, "文件上传成功！")
-                        Log.d(tag, "   key: ${uploadResponse.key}")
-                        Log.d(tag, "   hash (etag): ${uploadResponse.hash}")
-                        Log.d(tag, "   size: ${uploadResponse.fsize} bytes")
+                        // Log.d(tag, "文件上传成功！")
+                        // Log.d(tag, "   key: ${uploadResponse.key}")
+                        // Log.d(tag, "   hash (etag): ${uploadResponse.hash}")
+                        // Log.d(tag, "   size: ${uploadResponse.fsize} bytes")
 
                         val fileName = getFileNameFromUri(context, fileUri) ?: "未知文件"
-                        Log.d(tag, "原始文件名: $fileName")
+                        // Log.d(tag, "原始文件名: $fileName")
 
                         val fileMd5 = uploadResponse.key.substringAfter("disk/").substringBefore(".")
-                        Log.d(tag, "文件MD5: $fileMd5")
+                        // Log.d(tag, "文件MD5: $fileMd5")
 
                         val fileKey = uploadResponse.key
 
-                        Log.d(tag, "发送文件消息...")
-                        Log.d(tag, "   fileName: $fileName")
-                        Log.d(tag, "   fileKey: $fileKey")
-                        Log.d(tag, "   fileSize: ${uploadResponse.fsize}")
+                        // Log.d(tag, "发送文件消息...")
+                        // Log.d(tag, "   fileName: $fileName")
+                        // Log.d(tag, "   fileKey: $fileKey")
+                        // Log.d(tag, "   fileSize: ${uploadResponse.fsize}")
 
                         val sendResult = messageRepository.sendMessage(
                             chatId = currentChatId,
@@ -1012,7 +1012,7 @@ class ChatViewModel @Inject constructor(
 
                         sendResult.fold(
                             onSuccess = {
-                                Log.d(tag, "文件消息发送成功！")
+                                // Log.d(tag, "文件消息发送成功！")
                                 loadMessages(refresh = true)
                             },
                             onFailure = { error ->
@@ -1028,7 +1028,7 @@ class ChatViewModel @Inject constructor(
                 )
 
             } catch (e: CancellationException) {
-                Log.d(tag, "上传文件已取消")
+                // Log.d(tag, "上传文件已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送文件异常", e)
                 e.printStackTrace()
@@ -1056,9 +1056,9 @@ class ChatViewModel @Inject constructor(
         uploadJob?.cancel()
         uploadJob = viewModelScope.launch {
             try {
-                Log.d(tag, "开始上传并发送音频")
-                Log.d(tag, "音频URI: $audioUri")
-                Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
+                // Log.d(tag, "开始上传并发送音频")
+                // Log.d(tag, "音频URI: $audioUri")
+                // Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
                 val uploadToken = getQiniuUploadToken("音频") {
@@ -1087,7 +1087,7 @@ class ChatViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d(tag, "上传域名: $uploadDomain")
+                // Log.d(tag, "上传域名: $uploadDomain")
 
                 val uploadResponse = com.yhchat.canary.utils.AudioUtils.uploadAudioToQiniu(
                     file = audioFile,
@@ -1105,13 +1105,13 @@ class ChatViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d(tag, "音频上传成功！")
-                Log.d(tag, "   key: ${uploadResponse.key}")
-                Log.d(tag, "   hash (etag): ${uploadResponse.hash}")
-                Log.d(tag, "   size: ${uploadResponse.fsize} bytes")
+                // Log.d(tag, "音频上传成功！")
+                // Log.d(tag, "   key: ${uploadResponse.key}")
+                // Log.d(tag, "   hash (etag): ${uploadResponse.hash}")
+                // Log.d(tag, "   size: ${uploadResponse.fsize} bytes")
 
                 val duration = com.yhchat.canary.utils.AudioUtils.getAudioDuration(audioFile)
-                Log.d(tag, "音频时长: ${duration}秒")
+                // Log.d(tag, "音频时长: ${duration}秒")
 
                 val audioSuffix = uploadResponse.key.substringAfterLast('.', "m4a").lowercase()
                 val sendResult = messageRepository.sendMessage(
@@ -1140,7 +1140,7 @@ class ChatViewModel @Inject constructor(
 
                 sendResult.fold(
                     onSuccess = {
-                        Log.d(tag, "语音消息发送成功！")
+                        // Log.d(tag, "语音消息发送成功！")
                         loadMessages(refresh = true)
                         audioFile.delete()
                     },
@@ -1152,7 +1152,7 @@ class ChatViewModel @Inject constructor(
                 )
 
             } catch (e: CancellationException) {
-                Log.d(tag, "上传音频已取消")
+                // Log.d(tag, "上传音频已取消")
             } catch (e: Exception) {
                 Log.e(tag, "上传并发送音频异常", e)
                 e.printStackTrace()
@@ -1239,7 +1239,7 @@ class ChatViewModel @Inject constructor(
             streamingMessages.remove(normalizedMessage.msgId)
             streamingMessageSenders.remove(normalizedMessage.msgId)
             streamingMessageContentTypes.remove(normalizedMessage.msgId)
-            Log.d(
+            // Log.d(
                 tag,
                 "Updated edited message in current list: msgId=${normalizedMessage.msgId}, " +
                     "oldText=${existingMessage.content.text?.take(50)}, " +
@@ -1257,7 +1257,7 @@ class ChatViewModel @Inject constructor(
 
         val targetChatId = resolveMessageChatId(normalizedMessage)
         if (targetChatId == currentChatId) {
-            Log.d(tag, "Edited message belongs to current chat but is not loaded yet: ${normalizedMessage.msgId}")
+            // Log.d(tag, "Edited message belongs to current chat but is not loaded yet: ${normalizedMessage.msgId}")
             refreshEditedMessageFromApi(
                 patchMessage = normalizedMessage,
                 fallbackMessage = normalizedMessage
@@ -1272,7 +1272,7 @@ class ChatViewModel @Inject constructor(
         val existingIndex = _messages.indexOfFirst { it.msgId == messageId }
         if (existingIndex != -1) {
             _messages.removeAt(existingIndex)
-            Log.d(tag, "Removed deleted message: $messageId")
+            // Log.d(tag, "Removed deleted message: $messageId")
         }
         streamingMessages.remove(messageId)
         streamingMessageSenders.remove(messageId)
@@ -1288,7 +1288,7 @@ class ChatViewModel @Inject constructor(
             return
         }
         
-        Log.d(tag, "Handling stream message: msgId=${event.msgId}, content=${event.content}")
+        // Log.d(tag, "Handling stream message: msgId=${event.msgId}, content=${event.content}")
         
         // 查找是否已有此消息
         val existingIndex = _messages.indexOfFirst { it.msgId == event.msgId }
@@ -1344,7 +1344,7 @@ class ChatViewModel @Inject constructor(
             streamingMessages[event.msgId] = initialContent
             streamingMessageSenders[event.msgId] = baseSender
             streamingMessageContentTypes.putIfAbsent(event.msgId, baseMessage.contentType)
-            Log.d(tag, "Created base message for stream at index $insertIndex")
+            // Log.d(tag, "Created base message for stream at index $insertIndex")
         } else {
             // 消息已存在，追加内容
             val existingMessage = _messages[existingIndex]
@@ -1380,7 +1380,7 @@ class ChatViewModel @Inject constructor(
             )
             _messages[existingIndex] = updatedMessage
             streamingMessageContentTypes[event.msgId] = updatedMessage.contentType
-            Log.d(tag, "Updated stream message at index $existingIndex")
+            // Log.d(tag, "Updated stream message at index $existingIndex")
         }
     }
 
@@ -1438,7 +1438,7 @@ class ChatViewModel @Inject constructor(
 
                 result.fold(
                     onSuccess = { newMessages ->
-                        Log.d(tag, "Loaded ${newMessages.size} messages from position $msgId")
+                        // Log.d(tag, "Loaded ${newMessages.size} messages from position $msgId")
                         
                         // 过滤被屏蔽用户的消息
                         val filteredMessages = newMessages.filter { message ->
@@ -1449,7 +1449,7 @@ class ChatViewModel @Inject constructor(
                         }
                         
                         if (filteredMessages.size < newMessages.size) {
-                            Log.d(tag, "Filtered out ${newMessages.size - filteredMessages.size} messages from blocked users")
+                            // Log.d(tag, "Filtered out ${newMessages.size - filteredMessages.size} messages from blocked users")
                         }
                         
                         _messages.clear()
@@ -1484,7 +1484,7 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * 通过消息ID加载消息（用于跳转到引用消息或搜索结果定位）
      * 使用 list-message-by-mid-seq API 精确定位并加载消息
@@ -1501,110 +1501,147 @@ class ChatViewModel @Inject constructor(
             try {
                 // 点击被引用消息时传入的 seq 默认为 64 位无符号整数（uint64）的最大值 (即 -1L)
                 val seqToUse = targetMsgSeq ?: -1L
-                Log.d(tag, "📍 开始通过 msgId 加载引用/搜索消息: $quoteMsgId, targetMsgSeq=$seqToUse")
-                Log.d(tag, "📊 当前聊天: chatId=$currentChatId, chatType=$currentChatType")
+                // Log.d(tag, "📍 开始通过 msgId 加载引用/搜索消息: $quoteMsgId, targetMsgSeq=$seqToUse")
+                // Log.d(tag, "📊 当前聊天: chatId=$currentChatId, chatType=$currentChatType")
                 
                 // 步骤1: 先在已加载的消息列表中通过msgId精确查找
-                Log.d(tag, "🔍 步骤1: 在已加载的 ${_messages.size} 条消息中查找 msgId: $quoteMsgId")
+                // Log.d(tag, "🔍 步骤1: 在已加载的 ${_messages.size} 条消息中查找 msgId: $quoteMsgId")
                 val existingMessage = _messages.find { it.msgId == quoteMsgId }
                 
                 if (existingMessage != null) {
-                    Log.d(tag, "✅ 消息已在列表中，msgId: $quoteMsgId，发送时间: ${existingMessage.sendTime}")
+                    // Log.d(tag, "✅ 消息已在列表中，msgId: $quoteMsgId，发送时间: ${existingMessage.sendTime}")
                     _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
                     return@launch
                 }
                 
-                Log.d(tag, "⚠️ 消息不在列表中，准备从服务器加载")
+                // Log.d(tag, "⚠️ 消息不在列表中，准备从服务器加载")
 
                 // 步骤2: 先尝试从本地缓存获取目标消息
-                Log.d(tag, "📡 步骤2: 先从本地缓存获取目标消息")
+                // Log.d(tag, "📡 步骤2: 先从本地缓存获取目标消息")
                 val cachedMessage = messageRepository.getMessageById(quoteMsgId)
                 
                 if (cachedMessage != null) {
-                    Log.d(tag, "✅ 从缓存获取到目标消息，msgSeq=${cachedMessage.msgSeq}")
-                    // 如果获取到了目标消息，直接添加到列表中
-                    val existingMsgIds = _messages.map { it.msgId }.toSet()
-                    if (cachedMessage.msgId !in existingMsgIds) {
-                        _messages.add(cachedMessage)
-                        val sortedMessages = _messages.sortedBy { it.sendTime }
-                        _messages.clear()
-                        _messages.addAll(sortedMessages)
+                    // Log.d(tag, "✅ 从缓存获取到目标消息，msgSeq=${cachedMessage.msgSeq}")
+                    val existingIndex = _messages.indexOfFirst { it.msgId == cachedMessage.msgId }
+                    if (existingIndex == -1) {
+                        val insertIndex = _messages.indexOfLast { it.sendTime <= cachedMessage.sendTime } + 1
+                        _messages.add(insertIndex, cachedMessage)
                         handleAutoCollapseForMessages(listOf(cachedMessage))
-                        Log.d(tag, "🎉 目标消息已成功添加到列表")
+                        // Log.d(tag, "🎉 目标消息已成功插入列表位置: $insertIndex, sendTime: ${cachedMessage.sendTime}")
                     }
                     _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
                     return@launch
                 } else {
-                    Log.w(tag, "⚠️ 本地缓存中未找到消息，尝试使用 list-message-by-mid-seq")
+                    Log.w(tag, "⚠️ 本地缓存中未找到消息，尝试使用 list-message-by-mid-seq 进行链式加载")
                     
-                    // 步骤3: 使用 list-message-by-mid-seq API 加载消息（包含该消息及其前后文）
-                    Log.d(tag, "📡 步骤3: 调用 list-message-by-mid-seq API")
-                    Log.d(tag, "   参数: chatId=$currentChatId, chatType=$currentChatType, msgId=$quoteMsgId, msgCount=30, msgSeq=$seqToUse")
+                    // 记录调用前已有消息中最旧消息的时间戳（用于判断区间断层）
+                    val minExistingSendTime = _messages.minOfOrNull { it.sendTime }
+                    val timeGapThresholdMs = 4 * 60 * 60 * 1000L // 4小时时间差阈值
+                    val maxChainIterations = 10 // 最多连续向后抓取10次，防止无消息死循环
                     
-                    // 直接在当前协程中处理 list-message-by-mid-seq 的结果
-                    val result = messageRepository.getMessagesByMsgId(
-                        chatId = currentChatId,
-                        chatType = currentChatType,
-                        msgId = quoteMsgId,
-                        msgCount = 30,
-                        msgSeq = seqToUse
-                    )
+                    val accumulatedMessages = mutableListOf<ChatMessage>()
+                    val fetchedMsgIds = mutableSetOf<String>()
                     
-                    result.fold(
-                        onSuccess = { newMessages ->
-                            Log.d(tag, "✅ API返回 ${newMessages.size} 条消息")
-                            
-                            // 验证目标消息是否在返回的消息中
-                            val targetMessage = newMessages.find { it.msgId == quoteMsgId }
-                            if (targetMessage != null) {
-                                Log.d(tag, "🎯 确认找到目标消息 msgId: $quoteMsgId")
-                            } else {
-                                Log.w(tag, "⚠️ API返回的消息中不包含目标 msgId: $quoteMsgId")
-                            }
-                            
-                            // 过滤被屏蔽用户的消息
-                            val filteredMessages = newMessages.filter { message ->
-                                val isBlocked = kotlin.runCatching {
-                                    blocklistRepository.isUserBlocked(message.sender.chatId)
-                                }.getOrElse { false }
-                                !isBlocked
-                            }
-                            
-                            Log.d(tag, "🔒 过滤后剩余 ${filteredMessages.size} 条消息")
-                            
-                            // 合并到现有消息列表，使用msgId去重
-                            val existingMsgIds = _messages.map { it.msgId }.toSet()
-                            Log.d(tag, "📋 当前已有 ${existingMsgIds.size} 个不重复的msgId")
-                            
-                            val newMsgs = filteredMessages.filter { it.msgId !in existingMsgIds }
-                            Log.d(tag, "➕ 准备添加 ${newMsgs.size} 条新消息（去重后）")
-                            
-                            if (newMsgs.isNotEmpty()) {
-                                _messages.addAll(newMsgs)
-                                // 重新按时间排序
-                                val sortedMessages = _messages.sortedBy { it.sendTime }
-                                _messages.clear()
-                                _messages.addAll(sortedMessages)
-                                handleAutoCollapseForMessages(newMsgs)
-                                Log.d(tag, "✅ 成功添加并排序，当前共 ${_messages.size} 条消息")
-                                
-                                // 确认目标消息是否在最终列表中
-                                val finalCheck = _messages.find { it.msgId == quoteMsgId }
-                                if (finalCheck != null) {
-                                    Log.d(tag, "🎉 目标消息 msgId: $quoteMsgId 已成功加入消息列表")
-                                } else {
-                                    Log.e(tag, "❌ 目标消息 msgId: $quoteMsgId 未能加入消息列表")
-                                }
-                            } else {
-                                Log.d(tag, "ℹ️ 没有新消息需要添加（可能都已存在）")
-                            }
-                            _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
-                        },
-                        onFailure = { exception ->
-                            Log.e(tag, "❌ 通过 msgId 加载消息失败: $quoteMsgId", exception)
-                            _uiState.value = _uiState.value.copy(error = "加载引用消息失败")
+                    var nextQueryMsgId: String? = quoteMsgId
+                    var nextQueryMsgSeq: Long = seqToUse
+                    var iteration = 0
+                    
+                    while (nextQueryMsgId != null && iteration < maxChainIterations) {
+                        iteration++
+                        // Log.d(tag, "📡 步骤3.${iteration}: 调用 list-message-by-mid-seq API, msgId=$nextQueryMsgId, msgSeq=$nextQueryMsgSeq")
+                        
+                        val result = messageRepository.getMessagesByMsgId(
+                            chatId = currentChatId,
+                            chatType = currentChatType,
+                            msgId = nextQueryMsgId,
+                            msgCount = 30,
+                            msgSeq = nextQueryMsgSeq
+                        )
+                        
+                        val fetchedList = result.getOrNull()
+                        if (fetchedList.isNullOrEmpty()) {
+                            // Log.d(tag, "📡 第 $iteration 次请求未获取到消息，停止向后连接")
+                            break
                         }
-                    )
+                        
+                        // 过滤被屏蔽用户的消息
+                        val validMessages = fetchedList.filter { message ->
+                            val isBlocked = kotlin.runCatching {
+                                blocklistRepository.isUserBlocked(message.sender.chatId)
+                            }.getOrElse { false }
+                            !isBlocked
+                        }
+                        
+                        val freshMsgs = validMessages.filter { it.msgId !in fetchedMsgIds }
+                        if (freshMsgs.isEmpty()) {
+                            // Log.d(tag, "📡 第 $iteration 次请求没有返回更多新消息，停止向后连接")
+                            break
+                        }
+                        
+                        for (m in freshMsgs) {
+                            fetchedMsgIds.add(m.msgId)
+                            accumulatedMessages.add(m)
+                        }
+                        
+                        // 获取当前累积获取到的消息中时间戳最大的一条消息
+                        val maxNewMessage = accumulatedMessages.maxByOrNull { it.sendTime }
+                        if (minExistingSendTime == null || maxNewMessage == null) {
+                            // 原本列表为空，无需与旧消息对比时间差
+                            break
+                        }
+                        
+                        val timeDiff = minExistingSendTime - maxNewMessage.sendTime
+                        // Log.d(tag, "⏱️ 时间戳对比: 抓取最新=${maxNewMessage.sendTime}, 原有最旧=$minExistingSendTime, 差值=${timeDiff / 1000}秒 (${timeDiff / (3600 * 1000)}小时)")
+                        
+                        // 如果获取到的最新消息时间已接近（相差在4小时以内）或已超过原有最旧消息，说明已经成功衔接
+                        if (timeDiff <= timeGapThresholdMs) {
+                            // Log.d(tag, "✅ 时间戳相差在4小时以内或已衔接上，无需继续向后请求")
+                            break
+                        }
+                        
+                        // 避免相同的 msgId 重复死循环
+                        if (maxNewMessage.msgId == nextQueryMsgId) {
+                            Log.w(tag, "⚠️ 消息ID未向前推进，停止链式请求")
+                            break
+                        }
+                        
+                        nextQueryMsgId = maxNewMessage.msgId
+                        nextQueryMsgSeq = maxNewMessage.msgSeq.takeIf { it > 0L } ?: -1L
+                        // Log.d(tag, "⏳ 时间差超过 4 小时，以最新消息 ($nextQueryMsgId) 再次请求 by-mid-seq...")
+                    }
+                            
+                    // 去重并按发送时间升序排列
+                    val newMsgs = accumulatedMessages.filter { newMsg ->
+                        _messages.none { it.msgId == newMsg.msgId }
+                    }.sortedBy { it.sendTime }
+                    // Log.d(tag, "➕ 准备按时间戳插入 ${newMsgs.size} 条新消息（去重后）")
+                    
+                    if (newMsgs.isNotEmpty()) {
+                        for (newMsg in newMsgs) {
+                            val insertIndex = _messages.indexOfLast { it.sendTime <= newMsg.sendTime } + 1
+                            _messages.add(insertIndex, newMsg)
+                        }
+                        handleAutoCollapseForMessages(newMsgs)
+                        
+                        // 更新最旧消息的序列号和ID
+                        val oldest = _messages.minByOrNull { it.sendTime }
+                        if (oldest != null) {
+                            oldestMsgId = oldest.msgId
+                            oldestMsgSeq = oldest.msgSeq
+                        }
+                        // Log.d(tag, "✅ 成功按时间戳插入，当前共 ${_messages.size} 条消息")
+                        
+                        // 确认目标消息是否在最终列表中
+                        val finalCheck = _messages.find { it.msgId == quoteMsgId }
+                        if (finalCheck != null) {
+                            // Log.d(tag, "🎉 目标消息 msgId: $quoteMsgId 已成功加入消息列表")
+                        } else {
+                            Log.e(tag, "❌ 目标消息 msgId: $quoteMsgId 未能加入消息列表")
+                        }
+                    } else {
+                        // Log.d(tag, "ℹ️ 没有新消息需要添加（可能都已存在）")
+                    }
+                    _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
                 }
             } catch (e: Exception) {
                 Log.e(tag, "❌ 加载消息异常 msgId: $quoteMsgId", e)
@@ -1651,7 +1688,7 @@ class ChatViewModel @Inject constructor(
 
                 result.fold(
                     onSuccess = { newMessages ->
-                        Log.d(tag, "Loaded ${newMessages.size} messages")
+                        // Log.d(tag, "Loaded ${newMessages.size} messages")
                         
                         // 过滤被屏蔽用户的消息
                         val filteredMessages = newMessages.filter { message ->
@@ -1662,7 +1699,7 @@ class ChatViewModel @Inject constructor(
                         }
                         
                         if (filteredMessages.size < newMessages.size) {
-                            Log.d(tag, "Filtered out ${newMessages.size - filteredMessages.size} messages from blocked users")
+                            // Log.d(tag, "Filtered out ${newMessages.size - filteredMessages.size} messages from blocked users")
                         }
                         
                         if (refresh) {
@@ -1686,7 +1723,7 @@ class ChatViewModel @Inject constructor(
                             val oldestMessage = newMessages.minByOrNull { it.sendTime }
                             if (oldestMessage != null) {
                                 oldestMsgId = oldestMessage.msgId
-                                Log.d(tag, "Updated oldestMsgId to: $oldestMsgId, sendTime: ${oldestMessage.sendTime}")
+                                // Log.d(tag, "Updated oldestMsgId to: $oldestMsgId, sendTime: ${oldestMessage.sendTime}")
                             }
                         }
 
@@ -1749,11 +1786,11 @@ class ChatViewModel @Inject constructor(
      */
     fun loadMoreMessages() {
         if (!hasMoreMessages || _uiState.value.isLoading) {
-            Log.d(tag, "No more messages to load or already loading")
+            // Log.d(tag, "No more messages to load or already loading")
             return
         }
         
-        Log.d(tag, "Loading more messages from msgId: $oldestMsgId, seq: $oldestMsgSeq")
+        // Log.d(tag, "Loading more messages from msgId: $oldestMsgId, seq: $oldestMsgSeq")
         loadMessages(refresh = false)
     }
 
@@ -1802,7 +1839,7 @@ class ChatViewModel @Inject constructor(
 
         val now = System.currentTimeMillis()
         if (now - lastTextSendAtMs < textSendDebounceWindowMs) {
-            Log.d(tag, "Ignore duplicated send in debounce window: ${now - lastTextSendAtMs}ms")
+            // Log.d(tag, "Ignore duplicated send in debounce window: ${now - lastTextSendAtMs}ms")
             return
         }
         lastTextSendAtMs = now
@@ -1821,7 +1858,7 @@ class ChatViewModel @Inject constructor(
                     !quoteMsgId.isNullOrEmpty() -> " (引用消息)"
                     else -> ""
                 }
-                Log.d(tag, "Sending $typeText message: $text$quoteMediaInfo$mentionInfo")
+                // Log.d(tag, "Sending $typeText message: $text$quoteMediaInfo$mentionInfo")
                 
                 val result = messageRepository.sendMessage(
                     chatId = currentChatId,
@@ -1841,7 +1878,7 @@ class ChatViewModel @Inject constructor(
                 result.fold(
                     onSuccess = { success ->
                         if (success) {
-                            Log.d(tag, "$typeText message sent successfully")
+                            // Log.d(tag, "$typeText message sent successfully")
                             // 发送成功后刷新消息列表以获取最新消息
                             loadMessages(refresh = true)
                             onSuccess()
@@ -1886,7 +1923,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "Sending expression message: id=${expression.id}, url=${expression.url}")
+                // Log.d(tag, "Sending expression message: id=${expression.id}, url=${expression.url}")
                 
                 val result = messageRepository.sendMessage(
                     chatId = currentChatId,
@@ -1907,7 +1944,7 @@ class ChatViewModel @Inject constructor(
                 result.fold(
                     onSuccess = { success ->
                         if (success) {
-                            Log.d(tag, "Expression message sent successfully")
+                            // Log.d(tag, "Expression message sent successfully")
                             loadMessages(refresh = true)
                         }
                     },
@@ -1946,7 +1983,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "Sending sticker message: id=${stickerItem.id}, url=${stickerItem.url}")
+                // Log.d(tag, "Sending sticker message: id=${stickerItem.id}, url=${stickerItem.url}")
                 
                 val result = messageRepository.sendMessage(
                     chatId = currentChatId,
@@ -1968,7 +2005,7 @@ class ChatViewModel @Inject constructor(
                 result.fold(
                     onSuccess = { success ->
                         if (success) {
-                            Log.d(tag, "Sticker message sent successfully")
+                            // Log.d(tag, "Sticker message sent successfully")
                             loadMessages(refresh = true)
                         }
                     },
@@ -1999,7 +2036,7 @@ class ChatViewModel @Inject constructor(
                     lastDraftSentTime = System.currentTimeMillis()
                     
                     webSocketManager.sendDraftInput(currentChatId, inputText)
-                    Log.d(tag, "📤 发送草稿输入: chatId=$currentChatId, length=${inputText.length}")
+                    // Log.d(tag, "📤 发送草稿输入: chatId=$currentChatId, length=${inputText.length}")
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to send draft input", e)
                 }
@@ -2018,7 +2055,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "📷 +1发送图片: url=$imageUrl, size=${width}x${height}")
+                // Log.d(tag, "📷 +1发送图片: url=$imageUrl, size=${width}x${height}")
                 
                 // 从URL提取图片key（假设URL格式为 https://chat-img.jwznb.com/xxx）
                 val imageKey = imageUrl.substringAfterLast("/").substringBefore("?")
@@ -2050,7 +2087,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = { 
-                        Log.d(tag, "✅ +1图片消息发送成功")
+                        // Log.d(tag, "✅ +1图片消息发送成功")
                         loadMessages(refresh = true)
                     },
                     onFailure = { exception ->
@@ -2076,7 +2113,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "📁 +1发送文件: name=$fileName, url=$fileUrl")
+                // Log.d(tag, "📁 +1发送文件: name=$fileName, url=$fileUrl")
                 
                 // 从URL提取文件key
                 val fileKey = fileUrl.substringAfterLast("/").substringBefore("?")
@@ -2094,7 +2131,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = { 
-                        Log.d(tag, "✅ +1文件消息发送成功")
+                        // Log.d(tag, "✅ +1文件消息发送成功")
                         loadMessages(refresh = true)
                     },
                     onFailure = { exception ->
@@ -2120,7 +2157,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "🎬 +1发送视频: url=$videoUrl")
+                // Log.d(tag, "🎬 +1发送视频: url=$videoUrl")
                 
                 // 从URL提取视频key
                 val videoKey = videoUrl.substringAfterLast("/").substringBefore("?")
@@ -2142,7 +2179,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = { 
-                        Log.d(tag, "✅ +1视频消息发送成功")
+                        // Log.d(tag, "✅ +1视频消息发送成功")
                         loadMessages(refresh = true)
                     },
                     onFailure = { exception ->
@@ -2168,7 +2205,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "🎤 +1发送语音: url=$audioUrl, duration=${audioDuration}s")
+                // Log.d(tag, "🎤 +1发送语音: url=$audioUrl, duration=${audioDuration}s")
                 
                 // 从URL提取音频key
                 val audioKey = audioUrl.substringAfterLast("/").substringBefore("?")
@@ -2191,7 +2228,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = { 
-                        Log.d(tag, "✅ +1语音消息发送成功")
+                        // Log.d(tag, "✅ +1语音消息发送成功")
                         loadMessages(refresh = true)
                     },
                     onFailure = { exception ->
@@ -2217,7 +2254,7 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                Log.d(tag, "📄 +1发送文章: id=$postId, title=$postTitle")
+                // Log.d(tag, "📄 +1发送文章: id=$postId, title=$postTitle")
                 
                 val result = messageRepository.sendMessage(
                     chatId = currentChatId,
@@ -2233,7 +2270,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = { 
-                        Log.d(tag, "✅ +1文章消息发送成功")
+                        // Log.d(tag, "✅ +1文章消息发送成功")
                         loadMessages(refresh = true)
                     },
                     onFailure = { exception ->
@@ -2252,13 +2289,13 @@ class ChatViewModel @Inject constructor(
      * 添加新收到的消息（通过WebSocket）
      */
     fun addNewMessage(message: ChatMessage) {
-        Log.d(tag, "Adding new message: ${message.msgId}")
+        // Log.d(tag, "Adding new message: ${message.msgId}")
         
         // 检查黑名单
         viewModelScope.launch {
             val isBlocked = blocklistRepository.isUserBlocked(message.sender.chatId)
             if (isBlocked) {
-                Log.d(tag, "Message from blocked user ${message.sender.chatId}, ignored")
+                // Log.d(tag, "Message from blocked user ${message.sender.chatId}, ignored")
                 return@launch
             }
             
@@ -2267,12 +2304,12 @@ class ChatViewModel @Inject constructor(
             if (existingIndex != -1) {
                 // 消息已存在，更新它
                 _messages[existingIndex] = message
-                Log.d(tag, "Updated existing message: ${message.msgId}")
+                // Log.d(tag, "Updated existing message: ${message.msgId}")
             } else {
                 // 新消息，按时间排序插入
                 val insertIndex = _messages.indexOfLast { it.sendTime <= message.sendTime } + 1
                 _messages.add(insertIndex, message)
-                Log.d(tag, "Inserted new message at index: $insertIndex")
+                // Log.d(tag, "Inserted new message at index: $insertIndex")
             }
         }
     }
@@ -2284,7 +2321,7 @@ class ChatViewModel @Inject constructor(
         val index = _messages.indexOfFirst { it.msgId == message.msgId }
         if (index != -1) {
             _messages[index] = message
-            Log.d(tag, "Updated message: ${message.msgId}")
+            // Log.d(tag, "Updated message: ${message.msgId}")
         }
     }
     
@@ -2295,7 +2332,7 @@ class ChatViewModel @Inject constructor(
         val index = _messages.indexOfFirst { it.msgId == msgId }
         if (index != -1) {
             _messages.removeAt(index)
-            Log.d(tag, "Removed message: $msgId")
+            // Log.d(tag, "Removed message: $msgId")
         }
     }
     
@@ -2305,7 +2342,7 @@ class ChatViewModel @Inject constructor(
     fun recallMessage(msgId: String) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "开始撤回消息: $msgId")
+                // Log.d(tag, "开始撤回消息: $msgId")
                 
                 val result = messageRepository.recallMessage(
                     chatId = currentChatId,
@@ -2315,7 +2352,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "消息撤回成功: $msgId")
+                        // Log.d(tag, "消息撤回成功: $msgId")
                         // 找到并更新消息，将其标记为已撤回
                         val index = _messages.indexOfFirst { it.msgId == msgId }
                         if (index != -1) {
@@ -2323,7 +2360,7 @@ class ChatViewModel @Inject constructor(
                             _messages[index] = message.copy(
                                 msgDeleteTime = System.currentTimeMillis()
                             )
-                            Log.d(tag, "更新消息为撤回状态")
+                            // Log.d(tag, "更新消息为撤回状态")
                         }
                     },
                     onFailure = { error ->
@@ -2344,7 +2381,7 @@ class ChatViewModel @Inject constructor(
     fun recallMessagesBatch(msgIds: List<String>) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "开始批量撤回消息: ${msgIds.size} 条")
+                // Log.d(tag, "开始批量撤回消息: ${msgIds.size} 条")
                 
                 val result = messageRepository.recallMessagesBatch(
                     chatId = currentChatId,
@@ -2354,7 +2391,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "批量撤回成功: ${msgIds.size} 条")
+                        // Log.d(tag, "批量撤回成功: ${msgIds.size} 条")
                         // 更新本地消息为已撤回状态
                         val currentTime = System.currentTimeMillis()
                         msgIds.forEach { msgId ->
@@ -2422,7 +2459,7 @@ class ChatViewModel @Inject constructor(
                 
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "消息编辑成功: $msgId")
+                        // Log.d(tag, "消息编辑成功: $msgId")
                         // 找到并更新消息内容
                         val index = _messages.indexOfFirst { it.msgId == msgId }
                         if (index != -1) {
@@ -2437,7 +2474,7 @@ class ChatViewModel @Inject constructor(
                                 contentType = contentType,
                                 editTime = System.currentTimeMillis()
                             )
-                            Log.d(tag, "更新消息内容")
+                            // Log.d(tag, "更新消息内容")
                         }
                     },
                     onFailure = { error ->
@@ -2467,7 +2504,7 @@ class ChatViewModel @Inject constructor(
             botRepository.getBotInfo(botId).fold(
                 onSuccess = { botInfo ->
                     _uiState.value = _uiState.value.copy(botInfo = botInfo)
-                    Log.d(tag, "机器人信息加载成功: ${botInfo.data.name}")
+                    // Log.d(tag, "机器人信息加载成功: ${botInfo.data.name}")
                 },
                 onFailure = { error ->
                     Log.e(tag, "加载机器人信息失败", error)
@@ -2512,7 +2549,7 @@ class ChatViewModel @Inject constructor(
                         val backgroundUrl = specificBg?.imgUrl ?: globalBg?.imgUrl
                         
                         _uiState.value = _uiState.value.copy(chatBackgroundUrl = backgroundUrl)
-                        Log.d(tag, "聊天背景加载成功: $backgroundUrl")
+                        // Log.d(tag, "聊天背景加载成功: $backgroundUrl")
                     },
                     onFailure = { error ->
                         Log.e(tag, "加载聊天背景失败", error)
@@ -2541,7 +2578,7 @@ class ChatViewModel @Inject constructor(
                 msgId = latestMessage.msgId,
                 msgSeq = latestMessage.msgSeq!!
             )
-            Log.d(tag, "Saved read position: msgId=${latestMessage.msgId}, msgSeq=${latestMessage.msgSeq}")
+            // Log.d(tag, "Saved read position: msgId=${latestMessage.msgId}, msgSeq=${latestMessage.msgSeq}")
         }
     }
     
@@ -2572,7 +2609,7 @@ class ChatViewModel @Inject constructor(
      * 刷新消息
      */
     fun refreshMessages() {
-        Log.d(tag, "Refreshing messages")
+        // Log.d(tag, "Refreshing messages")
         oldestMsgSeq = 0
         oldestMsgId = null
         hasMoreMessages = true
@@ -2602,7 +2639,7 @@ class ChatViewModel @Inject constructor(
 
                 result.fold(
                     onSuccess = { newMessages ->
-                        Log.d(tag, "Refreshed ${newMessages.size} latest messages")
+                        // Log.d(tag, "Refreshed ${newMessages.size} latest messages")
                         
                         val filteredMessages = newMessages.filter { message ->
                             val isBlocked = kotlin.runCatching {
@@ -2619,7 +2656,7 @@ class ChatViewModel @Inject constructor(
                             if (uniqueNewMessages.isNotEmpty()) {
                                 // 添加不重复的新消息
                                 _messages.addAll(uniqueNewMessages.sortedBy { it.sendTime })
-                                Log.d(tag, "Added ${uniqueNewMessages.size} new messages")
+                                // Log.d(tag, "Added ${uniqueNewMessages.size} new messages")
                             }
                             
                             // 按发送时间重新排序所有消息
@@ -2689,7 +2726,7 @@ class ChatViewModel @Inject constructor(
     fun clearStreamingMessage(msgId: String) {
         streamingMessages.remove(msgId)
         streamingMessageContentTypes.remove(msgId)
-        Log.d(tag, "Cleared streaming message: $msgId")
+        // Log.d(tag, "Cleared streaming message: $msgId")
     }
 
     private fun normalizeMessageOwnership(message: ChatMessage): ChatMessage {
@@ -2764,14 +2801,14 @@ class ChatViewModel @Inject constructor(
             val normalizedLatestMessage = normalizeMessageOwnership(latestMessage)
             val latestIndex = _messages.indexOfFirst { it.msgId == normalizedLatestMessage.msgId }
             if (latestIndex == -1) {
-                Log.d(tag, "Edited message refreshed from API but not present in UI list: ${normalizedLatestMessage.msgId}")
+                // Log.d(tag, "Edited message refreshed from API but not present in UI list: ${normalizedLatestMessage.msgId}")
                 return@launch
             }
 
             _messages[latestIndex] = normalizedLatestMessage
             streamingMessages.remove(normalizedLatestMessage.msgId)
             streamingMessageContentTypes.remove(normalizedLatestMessage.msgId)
-            Log.d(
+            // Log.d(
                 tag,
                 "Replaced edited message with API payload: msgId=${normalizedLatestMessage.msgId}, " +
                     "text=${normalizedLatestMessage.content.text?.take(80)}, " +
@@ -2800,7 +2837,7 @@ class ChatViewModel @Inject constructor(
                     userId = userId,
                     buttonValue = buttonValue
                 )
-                Log.d(tag, "Button click reported successfully: msgId=$msgId, value=$buttonValue")
+                // Log.d(tag, "Button click reported successfully: msgId=$msgId, value=$buttonValue")
             } catch (e: Exception) {
                 Log.e(tag, "Failed to report button click", e)
             }
@@ -2820,14 +2857,14 @@ class ChatViewModel @Inject constructor(
                     userName = userName,
                     avatarUrl = avatarUrl
                 )
-                Log.d(tag, "Blocked user: $userId ($userName)")
+                // Log.d(tag, "Blocked user: $userId ($userName)")
                 
                 // 从当前消息列表中移除该用户的所有消息
                 val beforeSize = _messages.size
                 _messages.removeAll { it.sender.chatId == userId }
                 val removedCount = beforeSize - _messages.size
                 if (removedCount > 0) {
-                    Log.d(tag, "Removed $removedCount messages from blocked user: $userId")
+                    // Log.d(tag, "Removed $removedCount messages from blocked user: $userId")
                 }
             } catch (e: Exception) {
                 Log.e(tag, "Failed to block user", e)
@@ -2844,7 +2881,7 @@ class ChatViewModel @Inject constructor(
         super.onCleared()
         // 保存当前读取位置，防止用户从后台直接结束应用
         saveCurrentReadPosition()
-        Log.d(tag, "ChatViewModel cleared, read position saved")
+        // Log.d(tag, "ChatViewModel cleared, read position saved")
     }
 }
 

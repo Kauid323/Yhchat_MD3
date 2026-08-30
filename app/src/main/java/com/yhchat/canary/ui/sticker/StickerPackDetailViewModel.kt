@@ -41,7 +41,7 @@ class StickerPackDetailViewModel @Inject constructor(
                 val result = stickerRepository.getStickerPackDetail(stickerPackId.toLong())
                 result.fold(
                     onSuccess = { stickerPack ->
-                        Log.d(tag, "Successfully loaded sticker pack: ${stickerPack.stickerPack.name}")
+                        // Log.d(tag, "Successfully loaded sticker pack: ${stickerPack.stickerPack.name}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             stickerPack = stickerPack,
@@ -75,7 +75,7 @@ class StickerPackDetailViewModel @Inject constructor(
                 val result = stickerRepository.addStickerPack(stickerPackId.toLong())
                 result.fold(
                     onSuccess = {
-                        Log.d(tag, "Successfully added sticker pack: $stickerPackId")
+                        // Log.d(tag, "Successfully added sticker pack: $stickerPackId")
                         // 可以在这里显示成功提示
                     },
                     onFailure = { error ->

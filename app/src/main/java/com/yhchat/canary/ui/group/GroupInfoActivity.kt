@@ -44,7 +44,7 @@ class GroupInfoActivity : BaseActivity() {
         
         val groupName = intent.getStringExtra(EXTRA_GROUP_NAME) ?: "群聊"
         
-        android.util.Log.d("GroupInfoActivity", "Opening group info: id=$groupId, name=$groupName")
+        android.util.// Log.d("GroupInfoActivity", "Opening group info: id=$groupId, name=$groupName")
         
         setContent {
             YhchatCanaryTheme {

@@ -49,12 +49,12 @@ class GroupInfoViewModel @Inject constructor(
      */
     fun loadGroupInfo(groupId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Starting to load group info for: $groupId")
+            // Log.d(tag, "Starting to load group info for: $groupId")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             groupRepository.getGroupInfo(groupId).fold(
                 onSuccess = { groupInfo ->
-                    Log.d(tag, "✅ Group info loaded successfully: ${groupInfo.name}, members: ${groupInfo.memberCount}")
+                    // Log.d(tag, "✅ Group info loaded successfully: ${groupInfo.name}, members: ${groupInfo.memberCount}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         groupInfo = groupInfo
@@ -96,7 +96,7 @@ class GroupInfoViewModel @Inject constructor(
                         currentPage = 1,
                         hasMoreMembers = members.size >= 50 // 如果返回50个，可能还有更多
                     )
-                    Log.d(tag, "Group members loaded: ${members.size}, hasMore: ${members.size >= 50}")
+                    // Log.d(tag, "Group members loaded: ${members.size}, hasMore: ${members.size >= 50}")
                 },
                 onFailure = { error ->
                     Log.e(tag, "Failed to load group members", error)
@@ -115,16 +115,16 @@ class GroupInfoViewModel @Inject constructor(
     fun loadMoreMembers(groupId: String) {
         val currentState = _uiState.value
         
-        Log.d(tag, "📋 loadMoreMembers called - isLoadingMore: ${currentState.isLoadingMoreMembers}, hasMore: ${currentState.hasMoreMembers}, currentPage: ${currentState.currentPage}")
+        // Log.d(tag, "📋 loadMoreMembers called - isLoadingMore: ${currentState.isLoadingMoreMembers}, hasMore: ${currentState.hasMoreMembers}, currentPage: ${currentState.currentPage}")
         
         // 如果正在加载或没有更多数据，则不执行
         if (currentState.isLoadingMoreMembers) {
-            Log.d(tag, "⏸️ Already loading more members, skipping...")
+            // Log.d(tag, "⏸️ Already loading more members, skipping...")
             return
         }
         
         if (!currentState.hasMoreMembers) {
-            Log.d(tag, "⏸️ No more members to load, skipping...")
+            // Log.d(tag, "⏸️ No more members to load, skipping...")
             return
         }
         
@@ -132,7 +132,7 @@ class GroupInfoViewModel @Inject constructor(
             val nextPage = currentState.currentPage + 1
             _uiState.value = _uiState.value.copy(isLoadingMoreMembers = true)
             
-            Log.d(tag, "📥 Loading more members for group: $groupId, page: $nextPage")
+            // Log.d(tag, "📥 Loading more members for group: $groupId, page: $nextPage")
             
             groupRepository.getGroupMembers(groupId, size = 50, page = nextPage).fold(
                 onSuccess = { newMembers ->
@@ -146,7 +146,7 @@ class GroupInfoViewModel @Inject constructor(
                         hasMoreMembers = hasMore
                     )
                     
-                    Log.d(tag, "✅ Page $nextPage loaded: ${newMembers.size} new members, total: ${allMembers.size}, hasMore: $hasMore")
+                    // Log.d(tag, "✅ Page $nextPage loaded: ${newMembers.size} new members, total: ${allMembers.size}, hasMore: $hasMore")
                 },
                 onFailure = { error ->
                     Log.e(tag, "❌ Failed to load page $nextPage", error)
@@ -263,11 +263,11 @@ class GroupInfoViewModel @Inject constructor(
      */
     fun removeMember(groupId: String, userId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Removing member: groupId=$groupId, userId=$userId")
+            // Log.d(tag, "Removing member: groupId=$groupId, userId=$userId")
             
             groupRepository.removeMember(groupId, userId).fold(
                 onSuccess = {
-                    Log.d(tag, "✅ Member removed successfully")
+                    // Log.d(tag, "✅ Member removed successfully")
                     _uiState.value = _uiState.value.copy(
                         successMessage = "已踢出该成员"
                     )
@@ -289,7 +289,7 @@ class GroupInfoViewModel @Inject constructor(
      */
     fun gagMember(groupId: String, userId: String, gagTime: Int) {
         viewModelScope.launch {
-            Log.d(tag, "Gagging member: groupId=$groupId, userId=$userId, gagTime=$gagTime")
+            // Log.d(tag, "Gagging member: groupId=$groupId, userId=$userId, gagTime=$gagTime")
             
             groupRepository.gagMember(groupId, userId, gagTime).fold(
                 onSuccess = {
@@ -302,7 +302,7 @@ class GroupInfoViewModel @Inject constructor(
                         1 -> "已永久禁言"
                         else -> "禁言设置成功"
                     }
-                    Log.d(tag, "✅ Member gagged successfully: $message")
+                    // Log.d(tag, "✅ Member gagged successfully: $message")
                     _uiState.value = _uiState.value.copy(
                         successMessage = message
                     )
@@ -324,7 +324,7 @@ class GroupInfoViewModel @Inject constructor(
      */
     fun setMemberRole(groupId: String, userId: String, userLevel: Int) {
         viewModelScope.launch {
-            Log.d(tag, "Setting member role: groupId=$groupId, userId=$userId, userLevel=$userLevel")
+            // Log.d(tag, "Setting member role: groupId=$groupId, userId=$userId, userLevel=$userLevel")
             
             groupRepository.setMemberRole(groupId, userId, userLevel).fold(
                 onSuccess = {
@@ -333,7 +333,7 @@ class GroupInfoViewModel @Inject constructor(
                         2 -> "已设为管理员"
                         else -> "角色设置成功"
                     }
-                    Log.d(tag, "✅ Member role set successfully: $message")
+                    // Log.d(tag, "✅ Member role set successfully: $message")
                     _uiState.value = _uiState.value.copy(
                         successMessage = message
                     )
@@ -355,11 +355,11 @@ class GroupInfoViewModel @Inject constructor(
      */
     fun transferGroupOwner(groupId: String, userId: String) {
         viewModelScope.launch {
-            Log.d(tag, "Transferring group owner: groupId=$groupId, userId=$userId")
+            // Log.d(tag, "Transferring group owner: groupId=$groupId, userId=$userId")
 
             groupRepository.transferGroupOwner(groupId, userId).fold(
                 onSuccess = {
-                    Log.d(tag, "✅ Group owner transferred successfully")
+                    // Log.d(tag, "✅ Group owner transferred successfully")
                     _uiState.value = _uiState.value.copy(
                         successMessage = "已转让群主"
                     )

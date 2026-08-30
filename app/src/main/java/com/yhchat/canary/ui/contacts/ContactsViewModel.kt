@@ -135,22 +135,22 @@ class ContactsViewModel @Inject constructor(
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
                 
-                Log.d(tag, "开始加载通讯录...")
+                // Log.d(tag, "开始加载通讯录...")
                 
                 val result = friendRepository.getAddressBookList()
                 
                 result.fold(
                     onSuccess = { data ->
-                        Log.d(tag, "✅ 通讯录加载成功，总分组数: ${data.dataCount}")
+                        // Log.d(tag, "✅ 通讯录加载成功，总分组数: ${data.dataCount}")
                         
                         // 解析protobuf数据
                         val friends = mutableListOf<Contact>()
                         val groups = mutableListOf<Contact>()
                         val bots = mutableListOf<Contact>()
                         
-                        Log.d(tag, "开始解析分组数据...")
+                        // Log.d(tag, "开始解析分组数据...")
                         data.dataList.forEachIndexed { index, group ->
-                            Log.d(tag, "处理分组[$index]: ${group.listName}, 成员数: ${group.dataCount}")
+                            // Log.d(tag, "处理分组[$index]: ${group.listName}, 成员数: ${group.dataCount}")
                         }
                         
                         data.dataList.forEach { group ->
@@ -203,7 +203,7 @@ class ContactsViewModel @Inject constructor(
                         val blockedSet = blocklistRepository.getBlockedUserIdsSet()
                         val filteredFriends = if (blockedSet.isEmpty()) friends else friends.filter { it.chatId !in blockedSet }
                         
-                        Log.d(tag, "好友数量: ${filteredFriends.size}, 群聊数量: ${groups.size}, 机器人数量: ${bots.size}")
+                        // Log.d(tag, "好友数量: ${filteredFriends.size}, 群聊数量: ${groups.size}, 机器人数量: ${bots.size}")
                         
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -382,13 +382,13 @@ class ContactsViewModel @Inject constructor(
     private fun loadMyBots() {
         viewModelScope.launch {
             try {
-                Log.d(tag, "开始加载我创建的机器人列表...")
+                // Log.d(tag, "开始加载我创建的机器人列表...")
                 
                 val result = botRepository.getMyBotList()
                 
                 result.fold(
                     onSuccess = { botList ->
-                        Log.d(tag, "✅ 我创建的机器人列表加载成功，共 ${botList.size} 个")
+                        // Log.d(tag, "✅ 我创建的机器人列表加载成功，共 ${botList.size} 个")
                         
                         val myBots = botList.map { bot ->
                             Contact(

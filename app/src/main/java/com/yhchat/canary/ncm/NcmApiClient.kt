@@ -337,7 +337,7 @@ object NcmApiClient {
             httpClient.newCall(request).execute().use { response ->
                 val respBytes = response.body?.bytes() ?: return@withContext Result.success(null)
                 val decryptedJsonStr = NcmCrypto.decryptEApi(respBytes)
-                Log.d(TAG, "EAPI 识曲解密响应: $decryptedJsonStr")
+                // Log.d(TAG, "EAPI 识曲解密响应: $decryptedJsonStr")
 
                 if (decryptedJsonStr.isBlank()) {
                     return@withContext Result.success(null)
@@ -473,7 +473,7 @@ object NcmApiClient {
             val userAgent = "NeteaseMusic/8.10.60.230824122627(8010060);Dalvik/2.1.0 (Linux; U; ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL} Build/${android.os.Build.ID})"
 
             val request = Request.Builder()
-                .url("https://interface3.music.163.com/eapi/activity/bonus/playpage/time/query")
+                .url("https://interface3.music.163.com/eapi/activity/attract/artist/song/listened")
                 .post(formBody)
                 .addHeader("cm_no_encrypt_native_tag_20220105", "false")
                 .addHeader("x-music-loc-site", "300_st.music.163.com/c/poplayer")
@@ -483,12 +483,12 @@ object NcmApiClient {
                 .addHeader("Cookie", cookieHeader)
                 .build()
 
-            Log.d(TAG, "开始调用网易云打卡接口(+1): songId=$songId, artistIds=$artistIdsFormatted")
+            // Log.d(TAG, "开始调用网易云打卡接口(+1): songId=$songId, artistIds=$artistIdsFormatted")
 
             httpClient.newCall(request).execute().use { response ->
                 val respBytes = response.body?.bytes() ?: return@withContext Result.failure(Exception("响应体为空"))
                 val decryptedJsonStr = NcmCrypto.decryptEApi(respBytes)
-                Log.d(TAG, "网易云打卡(+1)解密响应: $decryptedJsonStr")
+                // Log.d(TAG, "网易云打卡(+1)解密响应: $decryptedJsonStr")
 
                 if (decryptedJsonStr.isBlank()) {
                     return@withContext Result.failure(Exception("解密响应为空"))
@@ -499,7 +499,7 @@ object NcmApiClient {
                 val data = json.optBoolean("data", false)
 
                 if (code == 200 && data) {
-                    Log.d(TAG, "🎉 网易云打卡(+1)成功: songId=$songId")
+                    // Log.d(TAG, "🎉 网易云打卡(+1)成功: songId=$songId")
                     Result.success(true)
                 } else {
                     val msg = json.optString("msg", "打卡返回数据不符合成功预期")

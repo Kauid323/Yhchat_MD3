@@ -63,16 +63,16 @@ object NcmAudioMatcher {
             }
 
             // 3. 请求网易云听歌识曲匹配接口 (algorithmCode=shazam_v2)
-            Log.d(TAG, "正在发起网易云听歌识曲识别: duration=${durationSec}s, fpLength=${rawFingerprint.length}")
+            // Log.d(TAG, "正在发起网易云听歌识曲识别: duration=${durationSec}s, fpLength=${rawFingerprint.length}")
             val matchResult = NcmApiClient.matchAudioFingerprint(durationSec, rawFingerprint).getOrNull()
             
             if (matchResult != null && matchResult.songs.isNotEmpty()) {
                 // 识别到结果，大于等于1个直接取第1个
                 val finalSong = matchResult.songs.first()
-                Log.d(TAG, "听歌识曲识别成功: ${finalSong.name} - ${finalSong.artist}")
+                // Log.d(TAG, "听歌识曲识别成功: ${finalSong.name} - ${finalSong.artist}")
                 return@withContext finalSong
             } else {
-                Log.d(TAG, "网易云听歌识曲未识别到匹配歌曲: ${audioFile.name}")
+                // Log.d(TAG, "网易云听歌识曲未识别到匹配歌曲: ${audioFile.name}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "听歌识曲过程发生异常: ${audioFile.name}", e)

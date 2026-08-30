@@ -51,7 +51,7 @@ class ChatActivity : BaseActivity() {
     ) { uris ->
         val selected = uris.filterNotNull()
         if (selected.isNotEmpty()) {
-            android.util.Log.d("ChatActivity", "图片已选择(多选): count=${selected.size}")
+            android.util.// Log.d("ChatActivity", "图片已选择(多选): count=${selected.size}")
             pendingImageUrisToSend = selected
             imageUriToSend = selected.firstOrNull()
         }
@@ -62,7 +62,7 @@ class ChatActivity : BaseActivity() {
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { selectedUri ->
-            android.util.Log.d("ChatActivity", "📁 文件已选择: $selectedUri")
+            android.util.// Log.d("ChatActivity", "📁 文件已选择: $selectedUri")
             fileUriToSend = selectedUri
         }
     }
@@ -72,7 +72,7 @@ class ChatActivity : BaseActivity() {
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { selectedUri ->
-            android.util.Log.d("ChatActivity", "📹 视频已选择: $selectedUri")
+            android.util.// Log.d("ChatActivity", "📹 视频已选择: $selectedUri")
             videoUriToSend = selectedUri
         }
     }
@@ -84,7 +84,7 @@ class ChatActivity : BaseActivity() {
     ) { success ->
         if (success) {
             cameraImageUri?.let { uri ->
-                android.util.Log.d("ChatActivity", "拍照成功: $uri")
+                android.util.// Log.d("ChatActivity", "拍照成功: $uri")
                 imageUriToSend = uri
             }
         }
@@ -186,11 +186,11 @@ class ChatActivity : BaseActivity() {
                                 }
                             },
                             onFilePickerClick = {
-                                android.util.Log.d("ChatActivity", "📁 启动文件选择器")
+                                android.util.// Log.d("ChatActivity", "📁 启动文件选择器")
                                 filePickerLauncher.launch("*/*")
                             },
                             onVideoPickerClick = {
-                                android.util.Log.d("ChatActivity", "📹 启动视频选择器")
+                                android.util.// Log.d("ChatActivity", "📹 启动视频选择器")
                                 videoPickerLauncher.launch("video/*")
                             },
                             imageUriToSend = imageUriToSend,
@@ -211,11 +211,11 @@ class ChatActivity : BaseActivity() {
                                 }
                             },
                             onFileSent = {
-                                android.util.Log.d("ChatActivity", "📁 文件发送完成，清空URI")
+                                android.util.// Log.d("ChatActivity", "📁 文件发送完成，清空URI")
                                 fileUriToSend = null
                             },
                             onVideoSent = {
-                                android.util.Log.d("ChatActivity", "📹 视频发送完成，清空URI")
+                                android.util.// Log.d("ChatActivity", "📹 视频发送完成，清空URI")
                                 videoUriToSend = null
                             },
                             searchTargetMsgId = searchTargetMsgId,
@@ -230,7 +230,7 @@ class ChatActivity : BaseActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // 当Activity被复用时，更新参数
-        android.util.Log.d("ChatActivity", "onNewIntent called, updating chat params")
+        android.util.// Log.d("ChatActivity", "onNewIntent called, updating chat params")
         updateChatParams(intent)
         // 更新当前Intent
         setIntent(intent)
@@ -249,7 +249,7 @@ class ChatActivity : BaseActivity() {
             if (it == -1L) null else it 
         }
         
-        android.util.Log.d("ChatActivity", "Updating chat params: chatId=$newChatId, chatType=$newChatType, chatName=$newChatName, searchTargetMsgId=$newSearchTargetMsgId, searchTargetMsgSeq=$newSearchTargetMsgSeq")
+        android.util.// Log.d("ChatActivity", "Updating chat params: chatId=$newChatId, chatType=$newChatType, chatName=$newChatName, searchTargetMsgId=$newSearchTargetMsgId, searchTargetMsgSeq=$newSearchTargetMsgSeq")
         
         chatId = newChatId
         chatType = newChatType

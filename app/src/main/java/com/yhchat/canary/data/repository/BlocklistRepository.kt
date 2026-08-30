@@ -42,7 +42,6 @@ class BlocklistRepository(private val context: Context) {
      */
     fun setBlocklistEnabled(enabled: Boolean) {
         getPrefs().edit().putBoolean("blocklist_enabled", enabled).apply()
-        Log.d(tag, "Blocklist enabled: $enabled")
     }
     
     /**
@@ -108,10 +107,8 @@ class BlocklistRepository(private val context: Context) {
                 avatarUrl = avatarUrl
             )
             blockedUserDao.insertBlockedUser(blockedUser)
-            Log.d(tag, "Blocked user: $userId ($userName)")
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(tag, "Error blocking user", e)
             Result.failure(e)
         }
     }
@@ -122,7 +119,6 @@ class BlocklistRepository(private val context: Context) {
     suspend fun updateBlockedUser(user: BlockedUser): Result<Unit> {
         return try {
             blockedUserDao.updateBlockedUser(user)
-            Log.d(tag, "Updated blocked user: ${user.userId}")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(tag, "Error updating blocked user", e)
@@ -136,7 +132,6 @@ class BlocklistRepository(private val context: Context) {
     suspend fun unblockUser(userId: String): Result<Unit> {
         return try {
             blockedUserDao.deleteBlockedUserById(userId)
-            Log.d(tag, "Unblocked user: $userId")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(tag, "Error unblocking user", e)
@@ -150,10 +145,8 @@ class BlocklistRepository(private val context: Context) {
     suspend fun clearBlocklist(): Result<Unit> {
         return try {
             blockedUserDao.clearAllBlockedUsers()
-            Log.d(tag, "Cleared all blocked users")
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(tag, "Error clearing blocklist", e)
             Result.failure(e)
         }
     }
@@ -222,7 +215,6 @@ class BlocklistRepository(private val context: Context) {
             }
             
             blockedUserDao.insertBlockedUsers(importedUsers)
-            Log.d(tag, "Imported ${importedUsers.size} blocked users (merge=$mergeMode)")
             Result.success(importedUsers.size)
         } catch (e: Exception) {
             Log.e(tag, "Error importing blocklist from JSON", e)

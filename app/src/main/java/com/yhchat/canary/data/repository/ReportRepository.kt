@@ -47,14 +47,14 @@ class ReportRepository @Inject constructor(
                 reason = reason
             )
             
-            Log.d(TAG, "提交举报: chatId=$chatId, chatType=$chatType, content=$content, reason=$reason")
+            // Log.d(TAG, "提交举报: chatId=$chatId, chatType=$chatType, content=$content, reason=$reason")
             
             val response = apiService.submitReport(token, request)
             
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 举报提交成功")
+                    // Log.d(TAG, "✅ 举报提交成功")
                     Result.success(true)
                 } else {
                     val error = "举报提交失败: ${body?.message ?: "未知错误"}"

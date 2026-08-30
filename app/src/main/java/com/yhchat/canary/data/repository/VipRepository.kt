@@ -41,7 +41,7 @@ class VipRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 获取VIP价格列表成功: ${body.data.list.size}个套餐")
+                    // Log.d(TAG, "✅ 获取VIP价格列表成功: ${body.data.list.size}个套餐")
                     Result.success(body.data)
                 } else {
                     val error = "获取VIP价格列表失败: ${body?.msg}"
@@ -75,7 +75,7 @@ class VipRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    Log.d(TAG, "✅ 获取VIP特权列表成功: ${body.data.list.size}个特权")
+                    // Log.d(TAG, "✅ 获取VIP特权列表成功: ${body.data.list.size}个特权")
                     Result.success(body.data.list.sortedBy { it.sort })
                 } else {
                     val error = "获取VIP特权列表失败: ${body?.msg}"

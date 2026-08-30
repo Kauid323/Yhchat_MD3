@@ -32,7 +32,7 @@ object WebSocketMessageParser {
             val cmd = tempMsg.info.cmd
             val seq = tempMsg.info.seq
 
-            Log.d(TAG, "Parsing message - cmd: $cmd, seq: $seq")
+            // Log.d(TAG, "Parsing message - cmd: $cmd, seq: $seq")
 
             when (cmd) {
                 "heartbeat_ack" -> {

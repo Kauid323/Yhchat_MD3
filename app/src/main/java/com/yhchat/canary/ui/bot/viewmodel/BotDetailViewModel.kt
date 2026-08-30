@@ -55,13 +55,13 @@ class BotDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 error = null
             )
             
-            Log.d(TAG, "开始加载机器人详细信息: $botId")
+            // Log.d(TAG, "开始加载机器人详细信息: $botId")
             
             val result = botRepository.getBotInfo(botId)
             
             result.fold(
                 onSuccess = { botInfo ->
-                    Log.d(TAG, "✅ 机器人信息加载成功")
+                    // Log.d(TAG, "✅ 机器人信息加载成功")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         botInfo = botInfo,
@@ -89,13 +89,13 @@ class BotDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 boardError = null
             )
             
-            Log.d(TAG, "开始加载看板信息: chatId=$chatId, chatType=$chatType")
+            // Log.d(TAG, "开始加载看板信息: chatId=$chatId, chatType=$chatType")
             
             val result = botRepository.getBotBoard(chatId, chatType)
             
             result.fold(
                 onSuccess = { board ->
-                    Log.d(TAG, "✅ 看板信息加载成功")
+                    // Log.d(TAG, "✅ 看板信息加载成功")
                     _uiState.value = _uiState.value.copy(
                         isBoardLoading = false,
                         boardInfo = board,

@@ -64,7 +64,7 @@ object LivePhotoUtil {
                             }
                         }
                     }
-                    Log.d(TAG, "成功提取 Live Photo 视频: offset=$videoOffset, size=$videoLength, file=${cachedVideoFile.absolutePath}")
+                    // Log.d(TAG, "成功提取 Live Photo 视频: offset=$videoOffset, size=$videoLength, file=${cachedVideoFile.absolutePath}")
                     return@withContext cachedVideoFile
                 }
             }

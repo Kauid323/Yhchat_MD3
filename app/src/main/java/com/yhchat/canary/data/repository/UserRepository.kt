@@ -67,10 +67,10 @@ class UserRepository @Inject constructor(
                 val cachedData = database.cachedProfileDataDao().getCachedData()
                 if (cachedData != null && isCacheValid(cachedData.timestamp)) {
                     val profile = gson.fromJson(cachedData.profileJson, UserProfile::class.java)
-                    Log.d(TAG, "从缓存加载用户资料成功")
+                    // Log.d(TAG, "从缓存加载用户资料成功")
                     profile
                 } else {
-                    Log.d(TAG, "用户资料缓存无效或已过期")
+                    // Log.d(TAG, "用户资料缓存无效或已过期")
                     null
                 }
             }
@@ -124,7 +124,7 @@ class UserRepository @Inject constructor(
                     timestamp = System.currentTimeMillis()
                 )
                 database.cachedProfileDataDao().insertCachedData(cachedData)
-                Log.d(TAG, "保存用户资料到缓存成功")
+                // Log.d(TAG, "保存用户资料到缓存成功")
             }
         } catch (e: Exception) {
             Log.e(TAG, "保存用户资料到缓存失败", e)

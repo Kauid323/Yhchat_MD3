@@ -46,7 +46,7 @@ class VoiceMessageViewModel(
     fun startRecording(context: Context) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "startRecording")
+                // Log.d(tag, "startRecording")
                 _voiceState.value = _voiceState.value.copy(isRecording = true, recordingTime = System.currentTimeMillis())
                 recordingFile = AudioUtils.startRecording(context)
                 if (recordingFile == null) {
@@ -75,7 +75,7 @@ class VoiceMessageViewModel(
     ) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "stopRecordingAndUpload chatId=$chatId chatType=$chatType")
+                // Log.d(tag, "stopRecordingAndUpload chatId=$chatId chatType=$chatType")
                 _voiceState.value = _voiceState.value.copy(isRecording = false, isProcessing = true)
                 
                 val file = AudioUtils.stopRecording()
@@ -89,7 +89,7 @@ class VoiceMessageViewModel(
                 
                 // 检查录音时长
                 val duration = AudioUtils.getAudioDuration(file)
-                Log.d(tag, "record duration=$duration sec file=${file.absolutePath}")
+                // Log.d(tag, "record duration=$duration sec file=${file.absolutePath}")
                 if (duration < 1) {
                     _voiceState.value = _voiceState.value.copy(
                         isProcessing = false,
@@ -110,7 +110,7 @@ class VoiceMessageViewModel(
                     return@launch
                 }
 
-                Log.d(tag, "renamed file=${renamedFile.name}")
+                // Log.d(tag, "renamed file=${renamedFile.name}")
                 
                 // 上传并发送
                 uploadAndSendVoice(renamedFile, chatId, chatType, duration, onSuccess)
@@ -142,7 +142,7 @@ class VoiceMessageViewModel(
     fun stopRecordingOnly(context: Context, onResult: (File?) -> Unit) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "stopRecordingOnly")
+                // Log.d(tag, "stopRecordingOnly")
                 _voiceState.value = _voiceState.value.copy(isRecording = false, isProcessing = true)
                 
                 val file = AudioUtils.stopRecording()
@@ -154,7 +154,7 @@ class VoiceMessageViewModel(
                 
                 // 检查录音时长
                 val duration = AudioUtils.getAudioDuration(file)
-                Log.d(tag, "record duration=$duration sec file=${file.absolutePath}")
+                // Log.d(tag, "record duration=$duration sec file=${file.absolutePath}")
                 if (duration < 1) {
                     _voiceState.value = _voiceState.value.copy(isProcessing = false)
                     file.delete()
@@ -186,7 +186,7 @@ class VoiceMessageViewModel(
     ) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "uploadVoiceFile file=${file.name} chatId=$chatId chatType=$chatType")
+                // Log.d(tag, "uploadVoiceFile file=${file.name} chatId=$chatId chatType=$chatType")
                 _voiceState.value = _voiceState.value.copy(isProcessing = true)
                 
                 val duration = AudioUtils.getAudioDuration(file)
@@ -202,7 +202,7 @@ class VoiceMessageViewModel(
                     return@launch
                 }
                 
-                Log.d(tag, "renamed file=${renamedFile.name}")
+                // Log.d(tag, "renamed file=${renamedFile.name}")
                 
                 // 上传并发送
                 uploadAndSendVoice(renamedFile, chatId, chatType, duration, onSuccess)
@@ -229,7 +229,7 @@ class VoiceMessageViewModel(
     ) {
         viewModelScope.launch {
             try {
-                Log.d(tag, "selectAudioFromStorage uri=$uri chatId=$chatId chatType=$chatType")
+                // Log.d(tag, "selectAudioFromStorage uri=$uri chatId=$chatId chatType=$chatType")
                 _voiceState.value = _voiceState.value.copy(isProcessing = true)
                 
                 val file = AudioUtils.copyAndRenameFile(context, uri)
@@ -242,7 +242,7 @@ class VoiceMessageViewModel(
                 }
                 
                 val duration = AudioUtils.getAudioDuration(file)
-                Log.d(tag, "picked duration=$duration sec file=${file.absolutePath}")
+                // Log.d(tag, "picked duration=$duration sec file=${file.absolutePath}")
                 if (duration < 1) {
                     _voiceState.value = _voiceState.value.copy(
                         isProcessing = false,
@@ -276,7 +276,7 @@ class VoiceMessageViewModel(
         onSuccess: (String, String, Long, Long) -> Unit
     ) {
         try {
-            Log.d(tag, "uploadAndSendVoice file=${file.name} size=${file.length()} duration=$duration")
+            // Log.d(tag, "uploadAndSendVoice file=${file.name} size=${file.length()} duration=$duration")
             _voiceState.value = _voiceState.value.copy(isUploading = true)
             
             val token = tokenRepository.getTokenSync()
@@ -303,7 +303,7 @@ class VoiceMessageViewModel(
             }
             
             val qiniuToken = tokenResponse.body()!!.data.token
-            Log.d(tag, "qiniuToken prefix=${qiniuToken.split(":").firstOrNull()}")
+            // Log.d(tag, "qiniuToken prefix=${qiniuToken.split(":").firstOrNull()}")
             
             // 2. 获取上传域名 (从 token 提取 ak 并请求查询)
             val accessKey = qiniuToken.split(":").firstOrNull()
@@ -343,7 +343,7 @@ class VoiceMessageViewModel(
             }
             
             // 4. 发送语音消息
-            Log.d(tag, "upload ok key=${uploadResponse.key} hash=${uploadResponse.hash} size=${uploadResponse.fsize}")
+            // Log.d(tag, "upload ok key=${uploadResponse.key} hash=${uploadResponse.hash} size=${uploadResponse.fsize}")
             sendVoiceMessage(
                 chatId = chatId,
                 chatType = chatType,
@@ -419,7 +419,7 @@ class VoiceMessageViewModel(
 
             val requestBody = sendMessage.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            Log.d(tag, "Sending voice message: chatId=$chatId, key=$fileKey, msgId=$msgId")
+            // Log.d(tag, "Sending voice message: chatId=$chatId, key=$fileKey, msgId=$msgId")
             val response = apiService.sendMessage(token, requestBody)
             
             if (!response.isSuccessful) {
@@ -438,9 +438,9 @@ class VoiceMessageViewModel(
 
             val status = sendResp?.status
             if (status != null) {
-                Log.d(tag, "Response status: code=${status.code}, msg=${status.msg}")
+                // Log.d(tag, "Response status: code=${status.code}, msg=${status.msg}")
                 if (status.code == 1) {
-                    Log.d(tag, "Voice message sent successfully")
+                    // Log.d(tag, "Voice message sent successfully")
                     _voiceState.value = _voiceState.value.copy(isUploading = false, isProcessing = false)
                     onSuccess(fileKey, fileHash, fileSize, duration)
                 } else {
