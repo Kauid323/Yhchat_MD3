@@ -1179,6 +1179,9 @@ fun formatTimestamp(timestamp: Long): String {
     val date = Date(timestamp)
     val now = Date()
 
+    val nowCalendar = Calendar.getInstance().apply { time = now }
+    val msgCalendar = Calendar.getInstance().apply { time = date }
+
     val todayCalendar = Calendar.getInstance().apply {
         time = now
         set(Calendar.HOUR_OF_DAY, 0)
@@ -1187,10 +1190,13 @@ fun formatTimestamp(timestamp: Long): String {
         set(Calendar.MILLISECOND, 0)
     }
 
+    val isSameYear = nowCalendar.get(Calendar.YEAR) == msgCalendar.get(Calendar.YEAR)
+
     return when {
         date.after(todayCalendar.time) -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
         date.after(Date(todayCalendar.timeInMillis - 86400000)) -> "昨天 " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
-        else -> SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(date)
+        isSameYear -> SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(date)
+        else -> SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(date)
     }
 }
 

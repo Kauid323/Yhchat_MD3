@@ -52,6 +52,7 @@ import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -351,10 +352,15 @@ private fun formatTime(timestamp: Long): String {
     val diffInMillis = now.time - date.time
     val diffInHours = diffInMillis / (1000 * 60 * 60)
     
+    val nowCal = Calendar.getInstance()
+    val msgCal = Calendar.getInstance().apply { time = date }
+    val isSameYear = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
+
     return when {
         diffInHours < 1 -> "刚刚"
-        diffInHours < 24 -> "${diffInHours}小时"
+        diffInHours < 24 -> "${diffInHours}小时前"
         diffInHours < 24 * 7 -> "${diffInHours / 24}天前"
-        else -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(date)
+        isSameYear -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(date)
+        else -> SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
     }
 }

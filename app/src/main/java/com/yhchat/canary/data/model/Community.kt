@@ -2,6 +2,7 @@ package com.yhchat.canary.data.model
 
 import com.google.gson.annotations.SerializedName
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -148,11 +149,16 @@ private fun formatCommunityTimeText(createTimeText: String, createTime: Long): S
     val diffMillis = now.time - date.time
     val diffHours = diffMillis / (1000L * 60L * 60L)
 
+    val nowCal = Calendar.getInstance()
+    val msgCal = Calendar.getInstance().apply { time = date }
+    val isSameYear = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
+
     return when {
         diffHours < 1L -> "刚刚"
-        diffHours < 24L -> "${diffHours}小时"
+        diffHours < 24L -> "${diffHours}小时前"
         diffHours < 24L * 7L -> "${diffHours / 24L}天前"
-        else -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(date)
+        isSameYear -> SimpleDateFormat("MM-dd", Locale.getDefault()).format(date)
+        else -> SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
     }
 }
 

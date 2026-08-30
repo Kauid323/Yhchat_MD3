@@ -68,6 +68,7 @@ import com.yhchat.canary.ui.adaptive.YhText as Text
 import com.yhchat.canary.ui.adaptive.YhTopBar
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -629,8 +630,13 @@ fun highlightSearchQuery(text: String, query: String): String {
 }
 
 fun formatTime(timestamp: Long): String {
-    val sdf = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
+    val date = Date(timestamp)
+    val nowCal = Calendar.getInstance()
+    val msgCal = Calendar.getInstance().apply { time = date }
+    val isSameYear = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
+    val pattern = if (isSameYear) "MM-dd HH:mm" else "yyyy-MM-dd HH:mm"
+    val sdf = SimpleDateFormat(pattern, Locale.getDefault())
+    return sdf.format(date)
 }
 
 fun getMessageTypeName(type: String): String {

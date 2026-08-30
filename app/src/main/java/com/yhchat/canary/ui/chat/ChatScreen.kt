@@ -278,12 +278,12 @@ fun ChatScreen(
     )
     
     // 处理搜索跳转：当有搜索目标消息ID时，自动跳转到该消息
-    LaunchedEffect(searchTargetMsgId) {
+    LaunchedEffect(searchTargetMsgId, searchTargetMsgSeq) {
         if (!searchTargetMsgId.isNullOrEmpty()) {
             android.util.Log.d("ChatScreen", "🔍 搜索跳转：尝试定位到消息 $searchTargetMsgId (seq: $searchTargetMsgSeq)")
             // 延迟一下确保聊天已初始化
             kotlinx.coroutines.delay(500)
-            viewModel.loadMessageByIdAndScroll(searchTargetMsgId)
+            viewModel.loadMessageByIdAndScroll(searchTargetMsgId, searchTargetMsgSeq)
         }
     }
     
@@ -1025,7 +1025,7 @@ fun ChatScreen(
                                 if (!existing) {
                                     Toast.makeText(context, "正在查找引用消息...", Toast.LENGTH_SHORT).show()
                                 }
-                                viewModel.loadMessageByIdAndScroll(quoteMsgId)
+                                viewModel.loadMessageByIdAndScroll(quoteMsgId, targetMsgSeq = -1L)
                             },
                             memberPermission = memberPermission,
                             groupOwnerId = groupOwnerId,

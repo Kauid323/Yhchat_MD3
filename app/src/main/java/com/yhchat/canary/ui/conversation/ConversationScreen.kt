@@ -126,6 +126,7 @@ import com.yhchat.canary.utils.QRCodeUtil
 import com.yhchat.canary.utils.UnifiedLinkHandler
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -1192,13 +1193,30 @@ fun ConversationItem(
 
     // 性能优化：remember时间格式化对象和结果，避免每次重组都创建新对象
     val timeText = remember(conversation.timestampMs) {
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("MM-dd", Locale.getDefault())
-        val now = System.currentTimeMillis()
-        if (now - conversation.timestampMs < 24 * 60 * 60 * 1000) {
-            timeFormat.format(Date(conversation.timestampMs))
-        } else {
-            dateFormat.format(Date(conversation.timestampMs))
+        val nowCal = Calendar.getInstance()
+        val msgCal = Calendar.getInstance().apply { timeInMillis = conversation.timestampMs }
+        val isSameYear = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
+
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        when {
+            conversation.timestampMs >= todayStart -> {
+                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(conversation.timestampMs))
+            }
+            conversation.timestampMs >= todayStart - 86400000 -> {
+                "昨天"
+            }
+            isSameYear -> {
+                SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(conversation.timestampMs))
+            }
+            else -> {
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(conversation.timestampMs))
+            }
         }
     }
     

@@ -3,7 +3,10 @@ package com.yhchat.canary.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import com.yhchat.canary.data.api.QiniuUploadResponse
 import com.yhchat.canary.utils.upload.ProgressRequestBody
@@ -49,7 +52,7 @@ object ImageUploadUtil {
     )
     
     /**
-     * 压缩图片为WebP格式并落到临时文件，避免大字节数组常驻内存
+     * 压缩图片为WebP格式并落到临时文件，避免大字节数组常驻内存（自动校正EXIF方向）
      */
     private suspend fun prepareCompressedWebP(
         context: Context,
@@ -58,15 +61,36 @@ object ImageUploadUtil {
     ): PreparedImageUpload = withContext(Dispatchers.IO) {
         Log.d(TAG, "🗜️ 开始压缩图片为WebP格式，质量: $quality%")
 
+        val rotation = getExifRotationDegrees(context, imageUri)
+        if (rotation != 0) {
+            Log.d(TAG, "🧭 检测到图片EXIF旋转: $rotation°，将自动校正方向")
+        }
+
+        // 先获取图片尺寸，按需下采样避免超大图OOM
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(imageUri)?.use {
+            BitmapFactory.decodeStream(it, null, boundsOptions)
+        }
+        val maxDim = 4096
+        var sampleSize = 1
+        while (boundsOptions.outWidth / sampleSize > maxDim || boundsOptions.outHeight / sampleSize > maxDim) {
+            sampleSize *= 2
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
         val inputStream = context.contentResolver.openInputStream(imageUri)
             ?: throw Exception("无法读取图片")
-        val originalBitmap = inputStream.use { BitmapFactory.decodeStream(it) }
+        val decodedBitmap = inputStream.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
 
-        if (originalBitmap == null) {
+        if (decodedBitmap == null) {
             throw Exception("无法解码图片")
         }
 
-        Log.d(TAG, "✅ 原始图片尺寸: ${originalBitmap.width}x${originalBitmap.height}")
+        val finalBitmap = rotateBitmapIfRequired(decodedBitmap, rotation)
+
+        Log.d(TAG, "✅ 纠正方向后的图片尺寸: ${finalBitmap.width}x${finalBitmap.height}")
 
         val tempFile = File(
             context.cacheDir,
@@ -74,7 +98,7 @@ object ImageUploadUtil {
         )
         try {
             val success = FileOutputStream(tempFile).use { outputStream ->
-                originalBitmap.compress(Bitmap.CompressFormat.WEBP, quality, outputStream)
+                finalBitmap.compress(Bitmap.CompressFormat.WEBP, quality, outputStream)
             }
             if (!success) {
                 throw Exception("WebP压缩失败")
@@ -86,15 +110,15 @@ object ImageUploadUtil {
             PreparedImageUpload(
                 tempFile = tempFile,
                 mimeType = "image/webp",
-                width = originalBitmap.width,
-                height = originalBitmap.height,
+                width = finalBitmap.width,
+                height = finalBitmap.height,
                 md5 = md5
             )
         } catch (e: Exception) {
             tempFile.delete()
             throw e
         } finally {
-            originalBitmap.recycle()
+            finalBitmap.recycle()
         }
     }
 
@@ -402,7 +426,81 @@ object ImageUploadUtil {
         FileInputStream(file).use { input ->
             BitmapFactory.decodeStream(input, null, options)
         }
-        return options.outWidth to options.outHeight
+        val rotation = getExifRotationDegrees(file)
+        return if (rotation == 90 || rotation == 270) {
+            options.outHeight to options.outWidth
+        } else {
+            options.outWidth to options.outHeight
+        }
+    }
+
+    private fun getExifRotationDegrees(context: Context, uri: Uri): Int {
+        return try {
+            val orientation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val exif = ExifInterface(inputStream)
+                    exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                } ?: ExifInterface.ORIENTATION_NORMAL
+            } else {
+                if (uri.scheme == "file" && uri.path != null) {
+                    val exif = ExifInterface(uri.path!!)
+                    exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                } else {
+                    ExifInterface.ORIENTATION_NORMAL
+                }
+            }
+
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ 读取EXIF旋转角度失败: ${e.message}")
+            0
+        }
+    }
+
+    private fun getExifRotationDegrees(file: File): Int {
+        return try {
+            val exif = ExifInterface(file.absolutePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    private fun rotateBitmapIfRequired(bitmap: Bitmap, degrees: Int): Bitmap {
+        if (degrees == 0) return bitmap
+        return try {
+            val matrix = Matrix().apply {
+                postRotate(degrees.toFloat())
+            }
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) {
+                bitmap.recycle()
+            }
+            rotated
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ 旋转Bitmap失败: ${e.message}", e)
+            bitmap
+        }
     }
 
     private fun calculateMD5(file: File): String {

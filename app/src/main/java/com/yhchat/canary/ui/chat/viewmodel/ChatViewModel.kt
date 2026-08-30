@@ -1486,10 +1486,12 @@ class ChatViewModel @Inject constructor(
     }
     
     /**
-     * 通过消息ID加载消息（用于跳转到引用消息）
-     * 使用 list-message-by-mid-seq API 精确定位并加载引用的消息
+     * 通过消息ID加载消息（用于跳转到引用消息或搜索结果定位）
+     * 使用 list-message-by-mid-seq API 精确定位并加载消息
+     * @param quoteMsgId 目标消息ID
+     * @param targetMsgSeq 消息序列号，未指定或点击引用消息时默认为 64 位无符号整数（uint64）的最大值 (-1L / 0xFFFFFFFFFFFFFFFFL)
      */
-    fun loadMessageByIdAndScroll(quoteMsgId: String) {
+    fun loadMessageByIdAndScroll(quoteMsgId: String, targetMsgSeq: Long? = null) {
         if (currentChatId.isEmpty()) {
             Log.w(tag, "⚠️ 聊天未初始化，无法加载消息")
             return
@@ -1497,7 +1499,9 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                Log.d(tag, "📍 开始通过 msgId 加载引用消息: $quoteMsgId")
+                // 点击被引用消息时传入的 seq 默认为 64 位无符号整数（uint64）的最大值 (即 -1L)
+                val seqToUse = targetMsgSeq ?: -1L
+                Log.d(tag, "📍 开始通过 msgId 加载引用/搜索消息: $quoteMsgId, targetMsgSeq=$seqToUse")
                 Log.d(tag, "📊 当前聊天: chatId=$currentChatId, chatType=$currentChatType")
                 
                 // 步骤1: 先在已加载的消息列表中通过msgId精确查找
@@ -1535,7 +1539,7 @@ class ChatViewModel @Inject constructor(
                     
                     // 步骤3: 使用 list-message-by-mid-seq API 加载消息（包含该消息及其前后文）
                     Log.d(tag, "📡 步骤3: 调用 list-message-by-mid-seq API")
-                    Log.d(tag, "   参数: chatId=$currentChatId, chatType=$currentChatType, msgId=$quoteMsgId, msgCount=30")
+                    Log.d(tag, "   参数: chatId=$currentChatId, chatType=$currentChatType, msgId=$quoteMsgId, msgCount=30, msgSeq=$seqToUse")
                     
                     // 直接在当前协程中处理 list-message-by-mid-seq 的结果
                     val result = messageRepository.getMessagesByMsgId(
@@ -1543,7 +1547,7 @@ class ChatViewModel @Inject constructor(
                         chatType = currentChatType,
                         msgId = quoteMsgId,
                         msgCount = 30,
-                        msgSeq = 0L
+                        msgSeq = seqToUse
                     )
                     
                     result.fold(

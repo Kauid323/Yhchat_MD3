@@ -36,6 +36,7 @@ import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.base.SystemBarUtils
 import com.yhchat.canary.ui.components.ImageUtils
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -211,6 +212,11 @@ fun LiveRoomsBottomSheet(
 
 private fun formatLiveRoomTime(timestampSeconds: Long): String {
     if (timestampSeconds <= 0L) return "刚刚"
-    val formatter = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-    return formatter.format(Date(timestampSeconds * 1000))
+    val date = Date(timestampSeconds * 1000)
+    val nowCal = Calendar.getInstance()
+    val msgCal = Calendar.getInstance().apply { time = date }
+    val isSameYear = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)
+    val pattern = if (isSameYear) "MM-dd HH:mm" else "yyyy-MM-dd HH:mm"
+    val formatter = SimpleDateFormat(pattern, Locale.getDefault())
+    return formatter.format(date)
 }

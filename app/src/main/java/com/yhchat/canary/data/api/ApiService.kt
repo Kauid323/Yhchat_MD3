@@ -1574,6 +1574,9 @@ data class ListMessageByMidSeqRequest(
     @SerializedName("request_id")
     val requestId: Long? = null,
     
+    @SerializedName("msg_seq")
+    val msgSeq: Long = 0L,
+    
     @SerializedName("chat_type")
     val chatType: Int,
     

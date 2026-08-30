@@ -110,7 +110,7 @@ message list_message { // 其实可以和 list-message-by-seq共用的。
 
 // 列出包含请求 msg_id 消息
 message list_message_by_mid_seq_send {
-    int64 msg_seq = 3; // 开始消息的seq
+    uint64 msg_seq = 3; // 开始消息的seq
     int64 chat_type = 4;
     string chat_id = 5;
     int64 unknown = 6; // 不知道干啥的

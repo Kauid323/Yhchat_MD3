@@ -820,8 +820,8 @@ class MessageRepository @Inject constructor(
     /**
      * 通过消息ID从API获取单条消息详情（使用 list-message-by-mid-seq）
      */
-    suspend fun getMessageByIdFromApi(messageId: String, chatId: String, chatType: Int): ChatMessage? {
-        val messages = getMessagesByMsgId(chatId, chatType, messageId, msgCount = 1).getOrNull()
+    suspend fun getMessageByIdFromApi(messageId: String, chatId: String, chatType: Int, msgSeq: Long = -1L): ChatMessage? {
+        val messages = getMessagesByMsgId(chatId, chatType, messageId, msgCount = 1, msgSeq = msgSeq).getOrNull()
         return messages?.find { it.msgId == messageId } ?: messages?.lastOrNull()
     }
     
@@ -831,7 +831,7 @@ class MessageRepository @Inject constructor(
      * @param chatType 会话类型
      * @param msgId 目标消息ID
      * @param msgCount 获取的消息数量（包含目标消息在内，实际返回 msgCount + 1 条）
-     * @param msgSeq 消息序列号（默认0）
+     * @param msgSeq 消息序列号（默认为uint64最大值 -1L / 0xFFFFFFFFFFFFFFFFL）
      * @return 包含目标消息及其前后文的消息列表
      */
     suspend fun getMessagesByMsgId(
@@ -839,7 +839,7 @@ class MessageRepository @Inject constructor(
         chatType: Int,
         msgId: String,
         msgCount: Int = 30,
-        msgSeq: Long = 0L
+        msgSeq: Long = -1L
     ): Result<List<ChatMessage>> {
         return try {
             val tokenFlow = tokenRepository.getToken()
