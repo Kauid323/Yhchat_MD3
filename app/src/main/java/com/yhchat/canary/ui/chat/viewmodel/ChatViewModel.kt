@@ -1514,135 +1514,111 @@ class ChatViewModel @Inject constructor(
                     return@launch
                 }
                 
-                Log.d(tag, "⚠️ 消息不在列表中，准备从服务器加载")
-
-                // 步骤2: 先尝试从本地缓存获取目标消息
-                Log.d(tag, "📡 步骤2: 先从本地缓存获取目标消息")
-                val cachedMessage = messageRepository.getMessageById(quoteMsgId)
+                Log.d(tag, "⚠️ 消息不在已加载列表中，使用 list-message-by-mid-seq 进行上下文及链式加载")
                 
-                if (cachedMessage != null) {
-                    Log.d(tag, "✅ 从缓存获取到目标消息，msgSeq=${cachedMessage.msgSeq}")
-                    val existingIndex = _messages.indexOfFirst { it.msgId == cachedMessage.msgId }
-                    if (existingIndex == -1) {
-                        val insertIndex = _messages.indexOfLast { it.sendTime <= cachedMessage.sendTime } + 1
-                        _messages.add(insertIndex, cachedMessage)
-                        handleAutoCollapseForMessages(listOf(cachedMessage))
-                        Log.d(tag, "🎉 目标消息已成功插入列表位置: $insertIndex, sendTime: ${cachedMessage.sendTime}")
+                // 记录调用前已有消息中最旧消息的时间戳（用于判断区间断层）
+                val minExistingSendTime = _messages.minOfOrNull { it.sendTime }
+                val timeGapThresholdMs = 4 * 60 * 60 * 1000L // 4小时时间差阈值
+                val maxChainIterations = 10 // 最多连续向后抓取10次，防止无消息死循环
+                
+                val accumulatedMessages = mutableListOf<ChatMessage>()
+                val fetchedMsgIds = mutableSetOf<String>()
+                
+                var nextQueryMsgId: String? = quoteMsgId
+                var nextQueryMsgSeq: Long = seqToUse
+                var iteration = 0
+                
+                while (nextQueryMsgId != null && iteration < maxChainIterations) {
+                    iteration++
+                    Log.d(tag, "📡 步骤2.${iteration}: 调用 list-message-by-mid-seq API, msgId=$nextQueryMsgId, msgSeq=$nextQueryMsgSeq")
+                    
+                    val result = messageRepository.getMessagesByMsgId(
+                        chatId = currentChatId,
+                        chatType = currentChatType,
+                        msgId = nextQueryMsgId,
+                        msgCount = 30,
+                        msgSeq = nextQueryMsgSeq
+                    )
+                    
+                    val fetchedList = result.getOrNull()
+                    if (fetchedList.isNullOrEmpty()) {
+                        Log.d(tag, "📡 第 $iteration 次请求未获取到消息，停止向后连接")
+                        break
                     }
-                    _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
-                    return@launch
-                } else {
-                    Log.w(tag, "⚠️ 本地缓存中未找到消息，尝试使用 list-message-by-mid-seq 进行链式加载")
                     
-                    // 记录调用前已有消息中最旧消息的时间戳（用于判断区间断层）
-                    val minExistingSendTime = _messages.minOfOrNull { it.sendTime }
-                    val timeGapThresholdMs = 4 * 60 * 60 * 1000L // 4小时时间差阈值
-                    val maxChainIterations = 10 // 最多连续向后抓取10次，防止无消息死循环
-                    
-                    val accumulatedMessages = mutableListOf<ChatMessage>()
-                    val fetchedMsgIds = mutableSetOf<String>()
-                    
-                    var nextQueryMsgId: String? = quoteMsgId
-                    var nextQueryMsgSeq: Long = seqToUse
-                    var iteration = 0
-                    
-                    while (nextQueryMsgId != null && iteration < maxChainIterations) {
-                        iteration++
-                        Log.d(tag, "📡 步骤3.${iteration}: 调用 list-message-by-mid-seq API, msgId=$nextQueryMsgId, msgSeq=$nextQueryMsgSeq")
-                        
-                        val result = messageRepository.getMessagesByMsgId(
-                            chatId = currentChatId,
-                            chatType = currentChatType,
-                            msgId = nextQueryMsgId,
-                            msgCount = 30,
-                            msgSeq = nextQueryMsgSeq
-                        )
-                        
-                        val fetchedList = result.getOrNull()
-                        if (fetchedList.isNullOrEmpty()) {
-                            Log.d(tag, "📡 第 $iteration 次请求未获取到消息，停止向后连接")
-                            break
-                        }
-                        
-                        // 过滤被屏蔽用户的消息
-                        val validMessages = fetchedList.filter { message ->
-                            val isBlocked = kotlin.runCatching {
-                                blocklistRepository.isUserBlocked(message.sender.chatId)
-                            }.getOrElse { false }
-                            !isBlocked
-                        }
-                        
-                        val freshMsgs = validMessages.filter { it.msgId !in fetchedMsgIds }
-                        if (freshMsgs.isEmpty()) {
-                            Log.d(tag, "📡 第 $iteration 次请求没有返回更多新消息，停止向后连接")
-                            break
-                        }
-                        
-                        for (m in freshMsgs) {
-                            fetchedMsgIds.add(m.msgId)
-                            accumulatedMessages.add(m)
-                        }
-                        
-                        // 获取当前累积获取到的消息中时间戳最大的一条消息
-                        val maxNewMessage = accumulatedMessages.maxByOrNull { it.sendTime }
-                        if (minExistingSendTime == null || maxNewMessage == null) {
-                            // 原本列表为空，无需与旧消息对比时间差
-                            break
-                        }
-                        
-                        val timeDiff = minExistingSendTime - maxNewMessage.sendTime
-                        Log.d(tag, "⏱️ 时间戳对比: 抓取最新=${maxNewMessage.sendTime}, 原有最旧=$minExistingSendTime, 差值=${timeDiff / 1000}秒 (${timeDiff / (3600 * 1000)}小时)")
-                        
-                        // 如果获取到的最新消息时间已接近（相差在4小时以内）或已超过原有最旧消息，说明已经成功衔接
-                        if (timeDiff <= timeGapThresholdMs) {
-                            Log.d(tag, "✅ 时间戳相差在4小时以内或已衔接上，无需继续向后请求")
-                            break
-                        }
-                        
-                        // 避免相同的 msgId 重复死循环
-                        if (maxNewMessage.msgId == nextQueryMsgId) {
-                            Log.w(tag, "⚠️ 消息ID未向前推进，停止链式请求")
-                            break
-                        }
-                        
-                        nextQueryMsgId = maxNewMessage.msgId
-                        nextQueryMsgSeq = maxNewMessage.msgSeq?.takeIf { it > 0L } ?: -1L
-                        Log.d(tag, "⏳ 时间差超过 4 小时，以最新消息 ($nextQueryMsgId) 再次请求 by-mid-seq...")
+                    // 过滤被屏蔽用户的消息
+                    val validMessages = fetchedList.filter { message ->
+                        val isBlocked = kotlin.runCatching {
+                            blocklistRepository.isUserBlocked(message.sender.chatId)
+                        }.getOrElse { false }
+                        !isBlocked
                     }
-                            
-                    // 去重并按发送时间升序排列
-                    val newMsgs = accumulatedMessages.filter { newMsg ->
-                        _messages.none { it.msgId == newMsg.msgId }
-                    }.sortedBy { it.sendTime }
-                    Log.d(tag, "➕ 准备按时间戳插入 ${newMsgs.size} 条新消息（去重后）")
                     
-                    if (newMsgs.isNotEmpty()) {
-                        for (newMsg in newMsgs) {
-                            val insertIndex = _messages.indexOfLast { it.sendTime <= newMsg.sendTime } + 1
-                            _messages.add(insertIndex, newMsg)
-                        }
-                        handleAutoCollapseForMessages(newMsgs)
-                        
-                        // 更新最旧消息的序列号和ID
-                        val oldest = _messages.minByOrNull { it.sendTime }
-                        if (oldest != null) {
-                            oldestMsgId = oldest.msgId
-                            oldestMsgSeq = oldest.msgSeq ?: 0L
-                        }
-                        Log.d(tag, "✅ 成功按时间戳插入，当前共 ${_messages.size} 条消息")
-                        
-                        // 确认目标消息是否在最终列表中
-                        val finalCheck = _messages.find { it.msgId == quoteMsgId }
-                        if (finalCheck != null) {
-                            Log.d(tag, "🎉 目标消息 msgId: $quoteMsgId 已成功加入消息列表")
-                        } else {
-                            Log.e(tag, "❌ 目标消息 msgId: $quoteMsgId 未能加入消息列表")
-                        }
-                    } else {
-                        Log.d(tag, "ℹ️ 没有新消息需要添加（可能都已存在）")
+                    val freshMsgs = validMessages.filter { it.msgId !in fetchedMsgIds }
+                    if (freshMsgs.isEmpty()) {
+                        Log.d(tag, "📡 第 $iteration 次请求没有返回更多新消息，停止向后连接")
+                        break
                     }
-                    _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
+                    
+                    for (m in freshMsgs) {
+                        fetchedMsgIds.add(m.msgId)
+                        accumulatedMessages.add(m)
+                    }
+                    
+                    // 获取当前累积获取到的消息中时间戳最大的一条消息
+                    val maxNewMessage = accumulatedMessages.maxByOrNull { it.sendTime }
+                    if (minExistingSendTime == null || maxNewMessage == null) {
+                        // 原本列表为空，无需与旧消息对比时间差
+                        break
+                    }
+                    
+                    val timeDiff = minExistingSendTime - maxNewMessage.sendTime
+                    Log.d(tag, "⏱️ 时间戳对比: 抓取最新=${maxNewMessage.sendTime}, 原有最旧=$minExistingSendTime, 差值=${timeDiff / 1000}秒 (${timeDiff / (3600 * 1000)}小时)")
+                    
+                    // 如果获取到的最新消息时间已接近（相差在4小时以内）或已超过原有最旧消息，说明已经成功衔接
+                    if (timeDiff <= timeGapThresholdMs) {
+                        Log.d(tag, "✅ 时间戳相差在4小时以内或已衔接上，无需继续向后请求")
+                        break
+                    }
+                    
+                    // 避免相同的 msgId 重复死循环
+                    if (maxNewMessage.msgId == nextQueryMsgId) {
+                        Log.w(tag, "⚠️ 消息ID未向前推进，停止链式请求")
+                        break
+                    }
+                    
+                    nextQueryMsgId = maxNewMessage.msgId
+                    nextQueryMsgSeq = maxNewMessage.msgSeq?.takeIf { it > 0L } ?: -1L
+                    Log.d(tag, "⏳ 时间差超过 4 小时，以最新消息 ($nextQueryMsgId) 再次请求 by-mid-seq...")
                 }
+                        
+                if (accumulatedMessages.isNotEmpty()) {
+                    val combinedMessages = (_messages + accumulatedMessages)
+                        .distinctBy { it.msgId }
+                        .sortedBy { it.sendTime }
+                    _messages.clear()
+                    _messages.addAll(combinedMessages)
+                    handleAutoCollapseForMessages(accumulatedMessages)
+                    
+                    // 更新最旧消息的序列号和ID
+                    val oldest = _messages.minByOrNull { it.sendTime }
+                    if (oldest != null) {
+                        oldestMsgId = oldest.msgId
+                        oldestMsgSeq = oldest.msgSeq ?: 0L
+                    }
+                    Log.d(tag, "✅ 成功按时间戳合并消息，当前共 ${_messages.size} 条消息")
+                    
+                    // 确认目标消息是否在最终列表中
+                    val finalCheck = _messages.find { it.msgId == quoteMsgId }
+                    if (finalCheck != null) {
+                        Log.d(tag, "🎉 目标消息 msgId: $quoteMsgId 已成功加入消息列表")
+                    } else {
+                        Log.e(tag, "❌ 目标消息 msgId: $quoteMsgId 未能加入消息列表")
+                    }
+                } else {
+                    Log.d(tag, "ℹ️ 没有新消息需要添加（可能都已存在）")
+                }
+                _uiState.value = _uiState.value.copy(scrollToMsgId = quoteMsgId)
             } catch (e: Exception) {
                 Log.e(tag, "❌ 加载消息异常 msgId: $quoteMsgId", e)
                 _uiState.value = _uiState.value.copy(error = "加载引用消息异常")
@@ -1710,19 +1686,21 @@ class ChatViewModel @Inject constructor(
                             _messages.addAll(sortedMessages)
                             handleAutoCollapseForMessages(sortedMessages)
                         } else {
-                            // 加载更多时添加到现有消息前面
-                            val sortedNewMessages = filteredMessages.sortedBy { it.sendTime }
-                            _messages.addAll(0, sortedNewMessages)
-                            handleAutoCollapseForMessages(sortedNewMessages)
+                            // 加载更多时与现有消息合并去重并严格按发送时间升序排列
+                            val combined = (filteredMessages + _messages)
+                                .distinctBy { it.msgId }
+                                .sortedBy { it.sendTime }
+                            _messages.clear()
+                            _messages.addAll(combined)
+                            handleAutoCollapseForMessages(filteredMessages)
                         }
 
                         // 更新最旧消息的序列号和ID
-                        if (newMessages.isNotEmpty()) {
-                            oldestMsgSeq = newMessages.minOfOrNull { it.msgSeq ?: 0L } ?: oldestMsgSeq
-                            // 找到发送时间最早的消息ID作为oldestMsgId
-                            val oldestMessage = newMessages.minByOrNull { it.sendTime }
+                        if (_messages.isNotEmpty()) {
+                            val oldestMessage = _messages.minByOrNull { it.sendTime }
                             if (oldestMessage != null) {
                                 oldestMsgId = oldestMessage.msgId
+                                oldestMsgSeq = oldestMessage.msgSeq ?: 0L
                                 Log.d(tag, "Updated oldestMsgId to: $oldestMsgId, sendTime: ${oldestMessage.sendTime}")
                             }
                         }
