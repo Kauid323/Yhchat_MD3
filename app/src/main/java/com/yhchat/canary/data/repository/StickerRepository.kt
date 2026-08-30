@@ -264,7 +264,7 @@ class StickerRepository @Inject constructor(
                 Log.d(TAG, "✅ 重命名表情包成功: $newName")
                 Result.success(true)
             } else {
-                val error = response.body()?.msg ?: "重命名表情包失败: ${response.code()}"
+                val error = response.body()?.message ?: "重命名表情包失败: ${response.code()}"
                 Log.e(TAG, error)
                 Result.failure(Exception(error))
             }
@@ -285,7 +285,7 @@ class StickerRepository @Inject constructor(
                 Log.d(TAG, "✅ 删除表情包成功: id=$packId")
                 Result.success(true)
             } else {
-                val error = response.body()?.msg ?: "删除表情包失败: ${response.code()}"
+                val error = response.body()?.message ?: "删除表情包失败: ${response.code()}"
                 Log.e(TAG, error)
                 Result.failure(Exception(error))
             }
@@ -306,7 +306,7 @@ class StickerRepository @Inject constructor(
                 Log.d(TAG, "✅ 重命名表情成功: id=$stickerId, name=$newName")
                 Result.success(true)
             } else {
-                val error = response.body()?.msg ?: "重命名表情失败: ${response.code()}"
+                val error = response.body()?.message ?: "重命名表情失败: ${response.code()}"
                 Log.e(TAG, error)
                 Result.failure(Exception(error))
             }
@@ -327,7 +327,7 @@ class StickerRepository @Inject constructor(
                 Log.d(TAG, "✅ 删除表情成功: id=$stickerId")
                 Result.success(true)
             } else {
-                val error = response.body()?.msg ?: "删除表情失败: ${response.code()}"
+                val error = response.body()?.message ?: "删除表情失败: ${response.code()}"
                 Log.e(TAG, error)
                 Result.failure(Exception(error))
             }
@@ -467,7 +467,7 @@ class StickerRepository @Inject constructor(
                 Log.d(TAG, "✅ 成功添加表情至表情包: $fileKey")
                 Result.success(true)
             } else {
-                val errorMsg = addResp.body()?.msg ?: "添加表情至表情包失败: ${addResp.code()}"
+                val errorMsg = addResp.body()?.message ?: "添加表情至表情包失败: ${addResp.code()}"
                 Log.e(TAG, errorMsg)
                 Result.failure(Exception(errorMsg))
             }
