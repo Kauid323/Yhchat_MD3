@@ -124,6 +124,12 @@ android {
         }
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+        isCoreLibraryDesugaringEnabled = true
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -167,6 +173,7 @@ protobuf {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     add("playerImplementation", project(":player"))
     add("playermiuixImplementation", project(":player"))
     add("liveImplementation", project(":live"))

@@ -26,8 +26,10 @@ calvinReorderable = "3.1.0"
 ksoupHtml = "0.6.0"
 mikepenzMarkdown = "0.41.0"
 latex = "1.4.5-kt2.1.0"
+desugarJdkLibs = "2.1.5"
 
 [libraries]
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

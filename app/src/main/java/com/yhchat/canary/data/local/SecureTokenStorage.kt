@@ -52,9 +52,9 @@ class SecureTokenStorage(context: Context) {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // 如果创建加密SharedPreferences失败，回退到普通SharedPreferences
-            // 这种情况通常发生在较老的设备上（如Android 4.x或某些定制ROM）
+            // 这种情况通常发生在较老的设备上（如Android 6.0/7.0或某些定制ROM）
             android.util.Log.w("SecureTokenStorage", "加密SharedPreferences创建失败，回退到普通存储: ${e.message}")
             encrypted = false
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

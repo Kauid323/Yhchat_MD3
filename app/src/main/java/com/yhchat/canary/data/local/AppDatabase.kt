@@ -51,16 +51,23 @@ abstract class AppDatabase : RoomDatabase() {
                 ?: SecureTokenStorage.getInstance(appContext).getUserId()?.takeIf { it.isNotBlank() }
                 ?: "default"
                 
-            return INSTANCES.computeIfAbsent(resolvedUserId) { uid ->
-                val dbName = if (uid == "default") "yhchat_database" else "yhchat_database_$uid"
-                
-                Room.databaseBuilder(
-                    appContext,
-                    AppDatabase::class.java,
-                    dbName
-                )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
-                    .build()
+            val existing = INSTANCES[resolvedUserId]
+            if (existing != null) {
+                return existing
+            }
+            return synchronized(INSTANCES) {
+                INSTANCES[resolvedUserId] ?: run {
+                    val dbName = if (resolvedUserId == "default") "yhchat_database" else "yhchat_database_$resolvedUserId"
+                    val db = Room.databaseBuilder(
+                        appContext,
+                        AppDatabase::class.java,
+                        dbName
+                    )
+                        .fallbackToDestructiveMigration(dropAllTables = true)
+                        .build()
+                    INSTANCES[resolvedUserId] = db
+                    db
+                }
             }
         }
         

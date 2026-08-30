@@ -44,9 +44,16 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Security crypto / websocket
+# Security crypto / websocket / tink
+-keep class androidx.security.crypto.** { *; }
 -dontwarn androidx.security.crypto.**
+-dontwarn com.google.crypto.tink.**
 -dontwarn org.java_websocket.**
+
+# Compose Multiplatform / Miuix / Resources
+-dontwarn org.jetbrains.compose.**
+-keep class org.jetbrains.compose.** { *; }
+-keep class top.yukonga.miuix.** { *; }
 
 # Coil / media stack optional warnings
 -dontwarn coil.**
