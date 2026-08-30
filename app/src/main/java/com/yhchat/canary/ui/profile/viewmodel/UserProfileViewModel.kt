@@ -290,7 +290,7 @@ class UserProfileViewModel @Inject constructor(
      */
     fun loadGroupInfoAndMemberInfo(groupId: String, targetUserId: String) {
         viewModelScope.launch {
-            android.util.// Log.d("UserProfileViewModel", "Loading group info for: $groupId")
+            android.util.Log.d("UserProfileViewModel", "Loading group info for: $groupId")
             
             // 加载群信息
             groupRepository.getGroupInfo(groupId).fold(
@@ -299,7 +299,7 @@ class UserProfileViewModel @Inject constructor(
                     val currentUserId = tokenRepository.getUserIdSync()
                     val isOwner = groupInfo.ownerId == currentUserId || groupInfo.permissionLevel.toInt() == 100
                     
-                    android.util.// Log.d("UserProfileViewModel", "Group info loaded. CurrentUser: $currentUserId, Owner: ${groupInfo.ownerId}, Permission: ${groupInfo.permissionLevel}, IsOwner: $isOwner")
+                    android.util.Log.d("UserProfileViewModel", "Group info loaded. CurrentUser: $currentUserId, Owner: ${groupInfo.ownerId}, Permission: ${groupInfo.permissionLevel}, IsOwner: $isOwner")
                     
                     // 加载群成员信息
                     loadGroupMembersAndUpdatePermission(groupId, targetUserId, isOwner)
@@ -339,7 +339,7 @@ class UserProfileViewModel @Inject constructor(
             // 获取目标用户权限
             val targetPermission = allMembers.find { it.userId == targetUserId }?.permissionLevel ?: 0
             
-            android.util.// Log.d("UserProfileViewModel", "Target user permission: $targetPermission, IsOwner: $isOwner")
+            android.util.Log.d("UserProfileViewModel", "Target user permission: $targetPermission, IsOwner: $isOwner")
             
             // 更新UI状态
             _uiState.value = _uiState.value.copy(

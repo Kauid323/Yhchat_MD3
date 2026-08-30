@@ -61,7 +61,7 @@ class FriendRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
             
-            // Log.d(tag, "📤 ========== 获取通讯录 ==========")
+            Log.d(tag, "📤 ========== 获取通讯录 ==========")
             
             // 构建protobuf请求
             val request = address_book_list_send.newBuilder()
@@ -70,31 +70,31 @@ class FriendRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            // Log.d(tag, "📤 发送请求...")
+            Log.d(tag, "📤 发送请求...")
             
             val response = apiService.getAddressBookList(token, requestBody)
             
-            // Log.d(tag, "📥 服务器响应码: ${response.code()}")
+            Log.d(tag, "📥 服务器响应码: ${response.code()}")
             
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
                     val addressBook = address_book_list.parseFrom(bytes)
                     
-                    // Log.d(tag, "📥 响应状态码: ${addressBook.status.code}")
-                    // Log.d(tag, "📥 响应消息: ${addressBook.status.msg}")
-                    // Log.d(tag, "📥 分组数量: ${addressBook.dataCount}")
+                    Log.d(tag, "📥 响应状态码: ${addressBook.status.code}")
+                    Log.d(tag, "📥 响应消息: ${addressBook.status.msg}")
+                    Log.d(tag, "📥 分组数量: ${addressBook.dataCount}")
                     
                     // 详细日志：打印每个分组的数据
                     addressBook.dataList.forEachIndexed { index, group ->
-                        // Log.d(tag, "📥 分组[$index] 名称: ${group.listName}, 成员数量: ${group.dataCount}")
+                        Log.d(tag, "📥 分组[$index] 名称: ${group.listName}, 成员数量: ${group.dataCount}")
                         group.dataList.forEachIndexed { itemIndex, item ->
-                            // Log.d(tag, "  ↳ 成员[$itemIndex] ID: ${item.chatId}, 名称: ${item.name}")
+                            Log.d(tag, "  ↳ 成员[$itemIndex] ID: ${item.chatId}, 名称: ${item.name}")
                         }
                     }
                     
                     if (addressBook.status.code == 1) {
-                        // Log.d(tag, "✅ ========== 通讯录获取成功！ ==========")
+                        Log.d(tag, "✅ ========== 通讯录获取成功！ ==========")
                         Result.success(addressBook)
                     } else {
                         Log.e(tag, "❌ 获取失败: ${addressBook.status.msg}")

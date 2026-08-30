@@ -175,7 +175,7 @@ fun handleButtonClick(
                 3 -> "机器人"
                 else -> "未知"
             }
-            android.util.// Log.d("ButtonClick", "点击按钮: 类型=$chatTypeText, chatId=$chatId, 按钮值=$value")
+            android.util.Log.d("ButtonClick", "点击按钮: 类型=$chatTypeText, chatId=$chatId, 按钮值=$value")
             Toast.makeText(context, "已点击：$buttonText", Toast.LENGTH_SHORT).show()
         }
         else -> {

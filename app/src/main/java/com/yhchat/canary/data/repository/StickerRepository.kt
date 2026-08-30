@@ -41,7 +41,7 @@ class StickerRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取贴纸包列表成功: ${body.data.stickerPacks.size}个贴纸包")
+                    Log.d(TAG, "✅ 获取贴纸包列表成功: ${body.data.stickerPacks.size}个贴纸包")
                     Result.success(body.data.stickerPacks)
                 } else {
                     val error = "获取贴纸包列表失败: ${response.code().toString()}"
@@ -76,7 +76,7 @@ class StickerRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取贴纸包详情成功")
+                    Log.d(TAG, "✅ 获取贴纸包详情成功")
                     Result.success(body.data)
                         } else {
                     val error = "获取贴纸包详情失败: ${response.code().toString()}"
@@ -111,7 +111,7 @@ class StickerRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 添加贴纸包成功")
+                    Log.d(TAG, "✅ 添加贴纸包成功")
                     Result.success(true)
                     } else {
                     val error = body?.message ?: "添加贴纸包失败: ${response.code()}"
@@ -146,7 +146,7 @@ class StickerRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 移除贴纸包成功")
+                    Log.d(TAG, "✅ 移除贴纸包成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "移除贴纸包失败: ${response.code()}"
@@ -192,7 +192,7 @@ class StickerRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 贴纸包排序成功")
+                    Log.d(TAG, "✅ 贴纸包排序成功")
                     Result.success(true)
                 } else {
                     val error = body?.message ?: "贴纸包排序失败: ${response.code()}"

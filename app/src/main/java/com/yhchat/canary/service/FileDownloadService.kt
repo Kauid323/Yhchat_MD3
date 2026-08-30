@@ -133,7 +133,7 @@ class FileDownloadService : Service() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
-        // Log.d(TAG, "FileDownloadService created")
+        Log.d(TAG, "FileDownloadService created")
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -179,7 +179,7 @@ class FileDownloadService : Service() {
     }
     
     private fun cancelDownload(downloadId: String) {
-        // Log.d(TAG, "Cancelling download: $downloadId")
+        Log.d(TAG, "Cancelling download: $downloadId")
         cancelledDownloads.add(downloadId)
         activeDownloads[downloadId]?.cancel()
         activeDownloads.remove(downloadId)
@@ -198,7 +198,7 @@ class FileDownloadService : Service() {
         autoOpen: Boolean,
         downloadId: String
     ) {
-        // Log.d(TAG, "Starting download: $fileName from $fileUrl (autoOpen=$autoOpen, msgId=$msgId)")
+        Log.d(TAG, "Starting download: $fileName from $fileUrl (autoOpen=$autoOpen, msgId=$msgId)")
 
         val downloadTarget = createDownloadTarget(fileName)
         if (downloadTarget == null) {
@@ -231,7 +231,7 @@ class FileDownloadService : Service() {
 
                 // 检查是否已取消
                 if (cancelledDownloads.contains(downloadId)) {
-                    // Log.d(TAG, "Download cancelled before start: $downloadId")
+                    Log.d(TAG, "Download cancelled before start: $downloadId")
                     return@launch
                 }
                 
@@ -245,7 +245,7 @@ class FileDownloadService : Service() {
                         val downloadDir = downloadTarget.file.parentFile ?: downloadTarget.file
                         val targetFile = File(downloadDir, fileName)
                         downloadFileWithProgress(fileUrl, targetFile, fileName, fileSize, downloadId)
-                        // Log.d(TAG, "Download completed: ${targetFile.absolutePath}")
+                        Log.d(TAG, "Download completed: ${targetFile.absolutePath}")
 
                         serviceScope.launch(Dispatchers.Main) {
                             updateNotification(fileName, "下载完成 - ${targetFile.name}", 100, 100, true)
@@ -379,7 +379,7 @@ class FileDownloadService : Service() {
             val responseBody = response.body ?: throw Exception("Empty response body")
             val totalBytes = responseBody.contentLength().takeIf { it > 0 } ?: expectedSize
 
-            // Log.d(TAG, "Downloading ${fileName}, total size: $totalBytes bytes")
+            Log.d(TAG, "Downloading ${fileName}, total size: $totalBytes bytes")
 
             responseBody.byteStream().use { inputStream ->
                 val outputStream = contentResolver.openOutputStream(targetUri)
@@ -408,7 +408,7 @@ class FileDownloadService : Service() {
 
         while (true) {
             if (cancelledDownloads.contains(downloadId)) {
-                // Log.d(TAG, "Download cancelled during progress: $downloadId")
+                Log.d(TAG, "Download cancelled during progress: $downloadId")
                 throw Exception("Download cancelled")
             }
 
@@ -458,7 +458,7 @@ class FileDownloadService : Service() {
             val responseBody = response.body ?: throw Exception("Empty response body")
             val totalBytes = responseBody.contentLength().takeIf { it > 0 } ?: expectedSize
             
-            // Log.d(TAG, "Downloading ${targetFile.name}, total size: $totalBytes bytes")
+            Log.d(TAG, "Downloading ${targetFile.name}, total size: $totalBytes bytes")
             
             responseBody.byteStream().use { inputStream ->
                 FileOutputStream(targetFile).use { outputStream ->
@@ -473,7 +473,7 @@ class FileDownloadService : Service() {
                     while (true) {
                         // 检查是否已取消
                         if (cancelledDownloads.contains(downloadId)) {
-                            // Log.d(TAG, "Download cancelled during progress: $downloadId")
+                            Log.d(TAG, "Download cancelled during progress: $downloadId")
                             throw Exception("Download cancelled")
                         }
                         
@@ -510,7 +510,7 @@ class FileDownloadService : Service() {
                 }
             }
             
-            // Log.d(TAG, "Download to temp file completed: ${targetFile.absolutePath}")
+            Log.d(TAG, "Download to temp file completed: ${targetFile.absolutePath}")
         }
     }
     
@@ -574,14 +574,14 @@ class FileDownloadService : Service() {
             val packageManager = packageManager
             if (intent.resolveActivity(packageManager) != null) {
                 startActivity(intent)
-                // Log.d(TAG, "Opened file with external app: ${file.name}")
+                Log.d(TAG, "Opened file with external app: ${file.name}")
             } else {
                 // 没有应用可以打开，尝试使用选择器
                 val chooserIntent = Intent.createChooser(intent, "选择应用打开").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(chooserIntent)
-                // Log.d(TAG, "Opened file chooser for: ${file.name}")
+                Log.d(TAG, "Opened file chooser for: ${file.name}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open file: ${file.name}", e)
@@ -626,13 +626,13 @@ class FileDownloadService : Service() {
             val packageManager = packageManager
             if (intent.resolveActivity(packageManager) != null) {
                 startActivity(intent)
-                // Log.d(TAG, "Opened file uri with external app: $uri")
+                Log.d(TAG, "Opened file uri with external app: $uri")
             } else {
                 val chooserIntent = Intent.createChooser(intent, "选择应用打开").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(chooserIntent)
-                // Log.d(TAG, "Opened file chooser for uri: $uri")
+                Log.d(TAG, "Opened file chooser for uri: $uri")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open file uri: $uri", e)
@@ -691,6 +691,6 @@ class FileDownloadService : Service() {
     
     override fun onDestroy() {
         super.onDestroy()
-        // Log.d(TAG, "FileDownloadService destroyed")
+        Log.d(TAG, "FileDownloadService destroyed")
     }
 }

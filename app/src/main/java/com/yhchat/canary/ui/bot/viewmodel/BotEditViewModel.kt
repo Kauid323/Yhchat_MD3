@@ -49,7 +49,7 @@ class BotEditViewModel(application: Application) : AndroidViewModel(application)
                         introduction = botInfo.data.introduction,
                         isPrivate = botInfo.data.private == 1L
                     )
-                    // Log.d(TAG, "✅ 机器人信息加载成功")
+                    Log.d(TAG, "✅ 机器人信息加载成功")
                 },
                 onFailure = { error ->
                     _uiState.value = _uiState.value.copy(
@@ -83,7 +83,7 @@ class BotEditViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
 
-                // Log.d(TAG, "📤 开始上传头像...")
+                Log.d(TAG, "📤 开始上传头像...")
 
                 // 2. 获取七牛云上传token
                 val retrofit = Retrofit.Builder()
@@ -111,7 +111,7 @@ class BotEditViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
                 
-                // Log.d(TAG, "✅ 获取七牛token成功")
+                Log.d(TAG, "✅ 获取七牛token成功")
 
                 // 3. 上传图片到七牛云
                 val uploadResult = ImageUploadUtil.uploadImage(
@@ -130,7 +130,7 @@ class BotEditViewModel(application: Application) : AndroidViewModel(application)
                             avatarUrl = avatarUrl
                         )
                         
-                        // Log.d(TAG, "✅ 头像上传成功: $avatarUrl")
+                        Log.d(TAG, "✅ 头像上传成功: $avatarUrl")
                     },
                     onFailure = { error ->
                         _uiState.value = _uiState.value.copy(
@@ -175,7 +175,7 @@ class BotEditViewModel(application: Application) : AndroidViewModel(application)
                             isSaving = false,
                             saveSuccess = true
                         )
-                        // Log.d(TAG, "✅ 机器人信息保存成功")
+                        Log.d(TAG, "✅ 机器人信息保存成功")
                     },
                     onFailure = { error ->
                         _uiState.value = _uiState.value.copy(

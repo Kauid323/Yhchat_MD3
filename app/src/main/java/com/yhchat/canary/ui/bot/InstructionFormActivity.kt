@@ -526,10 +526,10 @@ suspend fun sendFormMessage(
             val messageRepository = RepositoryFactory.getMessageRepository(context)
             val formJson = buildFormDataJson(formData)
             
-            android.util.// Log.d("InstructionForm", "📤 发送表单消息:")
-            android.util.// Log.d("InstructionForm", "   chatId=$chatId, chatType=$chatType")
-            android.util.// Log.d("InstructionForm", "   commandId=$commandId")
-            android.util.// Log.d("InstructionForm", "   formJson=$formJson")
+            android.util.Log.d("InstructionForm", "📤 发送表单消息:")
+            android.util.Log.d("InstructionForm", "   chatId=$chatId, chatType=$chatType")
+            android.util.Log.d("InstructionForm", "   commandId=$commandId")
+            android.util.Log.d("InstructionForm", "   formJson=$formJson")
             
             val result = messageRepository.sendMessage(
                 chatId = chatId,

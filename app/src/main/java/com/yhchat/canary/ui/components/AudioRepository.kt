@@ -82,7 +82,7 @@ class AudioRepository(private val context: Context) {
                 }
             }
             
-            // Log.d("AudioRepository", "加载了 ${audioList.size} 个音频文件")
+            Log.d("AudioRepository", "加载了 ${audioList.size} 个音频文件")
         } catch (e: Exception) {
             Log.e("AudioRepository", "加载音频文件失败", e)
         }

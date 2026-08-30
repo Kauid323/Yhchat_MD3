@@ -46,7 +46,7 @@ object WebDAVClient {
                 defaultPath
             }.replace("//", "/").replace("http:/", "http://").replace("https:/", "https://")
             
-            // Log.d(TAG, "WebDAV PROPFIND: $url")
+            Log.d(TAG, "WebDAV PROPFIND: $url")
             
             // 创建 PROPFIND 请求
             val requestBody = """<?xml version="1.0" encoding="utf-8"?>

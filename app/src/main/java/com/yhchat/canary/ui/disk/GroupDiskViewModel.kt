@@ -74,9 +74,9 @@ class GroupDiskViewModel : ViewModel() {
 
             try {
                 val tag = "GroupDiskUpload"
-                android.util.// Log.d(tag, "📤 ========== 开始群网盘文件上传 ==========")
-                android.util.// Log.d(tag, "📤 群组ID: $groupId")
-                android.util.// Log.d(tag, "📤 当前文件夹ID: ${_uiState.value.currentFolderId}")
+                android.util.Log.d(tag, "📤 ========== 开始群网盘文件上传 ==========")
+                android.util.Log.d(tag, "📤 群组ID: $groupId")
+                android.util.Log.d(tag, "📤 当前文件夹ID: ${_uiState.value.currentFolderId}")
 
                 val tokenRepo = RepositoryFactory.getTokenRepository(context)
                 val userToken = tokenRepo.getTokenSync()
@@ -84,7 +84,7 @@ class GroupDiskViewModel : ViewModel() {
                     throw Exception("用户未登录")
                 }
 
-                android.util.// Log.d(tag, "📤 获取七牛上传token...")
+                android.util.Log.d(tag, "📤 获取七牛上传token...")
                 val tokenResponse = apiService.getQiniuFileToken(userToken)
                 if (!tokenResponse.isSuccessful || tokenResponse.body()?.code != 1) {
                     throw Exception("获取上传token失败: ${tokenResponse.body()?.msg}")
@@ -92,12 +92,12 @@ class GroupDiskViewModel : ViewModel() {
 
                 val qiniuToken = tokenResponse.body()?.data?.token
                     ?: throw Exception("上传token为空")
-                android.util.// Log.d(tag, "✅ 七牛Token获取成功")
+                android.util.Log.d(tag, "✅ 七牛Token获取成功")
 
                 val fileName = getFileNameFromUri(context, fileUri) ?: "未命名文件"
-                android.util.// Log.d(tag, "📤 文件名: $fileName")
+                android.util.Log.d(tag, "📤 文件名: $fileName")
 
-                android.util.// Log.d(tag, "📤 开始上传文件到七牛云...")
+                android.util.Log.d(tag, "📤 开始上传文件到七牛云...")
                 val uploadResult = com.yhchat.canary.utils.FileUploadUtil.uploadFile(
                     context = context,
                     fileUri = fileUri,
@@ -106,15 +106,15 @@ class GroupDiskViewModel : ViewModel() {
 
                 uploadResult.fold(
                     onSuccess = { uploadResponse ->
-                        android.util.// Log.d(tag, "✅ 七牛云上传成功！")
-                        android.util.// Log.d(tag, "   key: ${uploadResponse.key}")
-                        android.util.// Log.d(tag, "   hash: ${uploadResponse.hash}")
-                        android.util.// Log.d(tag, "   size: ${uploadResponse.fsize}")
+                        android.util.Log.d(tag, "✅ 七牛云上传成功！")
+                        android.util.Log.d(tag, "   key: ${uploadResponse.key}")
+                        android.util.Log.d(tag, "   hash: ${uploadResponse.hash}")
+                        android.util.Log.d(tag, "   size: ${uploadResponse.fsize}")
 
                         val fileMd5 = uploadResponse.key.substringAfter("disk/").substringBefore(".")
-                        android.util.// Log.d(tag, "✅ 文件MD5: $fileMd5")
+                        android.util.Log.d(tag, "✅ 文件MD5: $fileMd5")
 
-                        android.util.// Log.d(tag, "📤 记录文件上传信息...")
+                        android.util.Log.d(tag, "📤 记录文件上传信息...")
                         val uploadFileRequest = com.yhchat.canary.data.model.UploadFileRequest(
                             chatId = groupId,
                             chatType = 2,
@@ -128,8 +128,8 @@ class GroupDiskViewModel : ViewModel() {
 
                         val recordResponse = apiService.uploadFileToDisk(userToken, uploadFileRequest)
                         if (recordResponse.isSuccessful && recordResponse.body()?.code == 1) {
-                            android.util.// Log.d(tag, "✅ 文件上传记录成功！")
-                            android.util.// Log.d(tag, "✅ ========== 群网盘文件上传完成 ==========")
+                            android.util.Log.d(tag, "✅ 文件上传记录成功！")
+                            android.util.Log.d(tag, "✅ ========== 群网盘文件上传完成 ==========")
 
                             _uiState.value = _uiState.value.copy(
                                 isUploading = false,

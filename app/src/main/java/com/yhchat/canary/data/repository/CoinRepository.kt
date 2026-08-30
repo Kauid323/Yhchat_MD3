@@ -49,7 +49,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取商品列表成功: ${body.data.list.size}个商品")
+                    Log.d(TAG, "✅ 获取商品列表成功: ${body.data.list.size}个商品")
                     Result.success(body.data)
                 } else {
                     val error = "获取商品列表失败: ${body?.msg}"
@@ -83,7 +83,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取金币任务信息成功")
+                    Log.d(TAG, "✅ 获取金币任务信息成功")
                     Result.success(body.data)
                 } else {
                     val error = "获取金币任务信息失败: ${body?.msg}"
@@ -118,7 +118,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取商品详情成功")
+                    Log.d(TAG, "✅ 获取商品详情成功")
                     Result.success(body.data.product)
                 } else {
                     val error = "获取商品详情失败: ${body?.msg}"
@@ -153,7 +153,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 购买商品成功: 订单ID=${body.data.id}")
+                    Log.d(TAG, "✅ 购买商品成功: 订单ID=${body.data.id}")
                     Result.success(body.data.id)
                 } else {
                     val error = body?.msg ?: "购买失败"
@@ -191,7 +191,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取金币增减记录成功: ${body.data.goldCoinRecord.size}条记录")
+                    Log.d(TAG, "✅ 获取金币增减记录成功: ${body.data.goldCoinRecord.size}条记录")
                     Result.success(body.data.goldCoinRecord)
                 } else {
                     val error = "获取金币增减记录失败: ${body?.msg}"
@@ -230,7 +230,7 @@ class CoinRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取${if (type == "post") "文章" else "评论"}打赏记录成功: ${body.data.rewards.size}条记录")
+                    Log.d(TAG, "✅ 获取${if (type == "post") "文章" else "评论"}打赏记录成功: ${body.data.rewards.size}条记录")
                     Result.success(body.data.rewards)
                 } else {
                     val error = "获取打赏记录失败: ${body?.msg}"

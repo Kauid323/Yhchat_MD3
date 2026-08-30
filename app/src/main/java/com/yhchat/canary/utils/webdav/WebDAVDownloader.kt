@@ -65,7 +65,7 @@ object WebDAVDownloader {
         onError: (error: String) -> Unit
     ) = withContext(Dispatchers.IO) {
         try {
-            // Log.d(TAG, "开始下载文件: ${file.name}")
+            Log.d(TAG, "开始下载文件: ${file.name}")
             
             // 创建下载目录
             val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "yhchat")
@@ -78,7 +78,7 @@ object WebDAVDownloader {
             
             // 构建下载URL
             val downloadUrl = buildDownloadUrl(file)
-            // Log.d(TAG, "下载URL: $downloadUrl")
+            Log.d(TAG, "下载URL: $downloadUrl")
             
             // 创建HTTP客户端
             val client = OkHttpClient()
@@ -89,10 +89,10 @@ object WebDAVDownloader {
                 file.mountSetting.webdavPassword
             )
             
-            // Log.d(TAG, "WebDAV认证信息:")
-            // Log.d(TAG, "用户名: ${file.mountSetting.webdavUserName}")
-            // Log.d(TAG, "密码长度: ${file.mountSetting.webdavPassword.length}")
-            // Log.d(TAG, "Authorization头: $authHeader")
+            Log.d(TAG, "WebDAV认证信息:")
+            Log.d(TAG, "用户名: ${file.mountSetting.webdavUserName}")
+            Log.d(TAG, "密码长度: ${file.mountSetting.webdavPassword.length}")
+            Log.d(TAG, "Authorization头: $authHeader")
             
             val request = Request.Builder()
                 .url(downloadUrl)
@@ -100,9 +100,9 @@ object WebDAVDownloader {
                 .build()
             
             // 执行下载
-            // Log.d(TAG, "发送下载请求...")
+            Log.d(TAG, "发送下载请求...")
             val response = client.newCall(request).execute()
-            // Log.d(TAG, "收到响应: ${response.code} ${response.message}")
+            Log.d(TAG, "收到响应: ${response.code} ${response.message}")
             
             if (!response.isSuccessful) {
                 Log.e(TAG, "下载请求失败: HTTP ${response.code} ${response.message}")
@@ -123,7 +123,7 @@ object WebDAVDownloader {
             
             val totalBytes = responseBody.contentLength()
             var downloadedBytes = 0L
-            // Log.d(TAG, "开始下载，文件大小: $totalBytes 字节")
+            Log.d(TAG, "开始下载，文件大小: $totalBytes 字节")
             
             // 写入本地文件
             FileOutputStream(localFile).use { output ->
@@ -146,7 +146,7 @@ object WebDAVDownloader {
                 }
             }
             
-            // Log.d(TAG, "文件下载完成: ${localFile.absolutePath}")
+            Log.d(TAG, "文件下载完成: ${localFile.absolutePath}")
             
             // 下载成功
             withContext(Dispatchers.Main) {
@@ -154,7 +154,7 @@ object WebDAVDownloader {
             }
             
         } catch (e: CancellationException) {
-            // Log.d(TAG, "下载被取消: ${file.name}")
+            Log.d(TAG, "下载被取消: ${file.name}")
             // 协程取消时不调用错误回调，直接重新抛出异常
             throw e
         } catch (e: IOException) {
@@ -188,9 +188,9 @@ object WebDAVDownloader {
         }
         
         val fullUrl = "$baseUrl/$encodedPath".replace("//", "/").replace("http:/", "http://").replace("https:/", "https://")
-        // Log.d(TAG, "编码前路径: $filePath")
-        // Log.d(TAG, "编码后路径: $encodedPath")
-        // Log.d(TAG, "最终URL: $fullUrl")
+        Log.d(TAG, "编码前路径: $filePath")
+        Log.d(TAG, "编码后路径: $encodedPath")
+        Log.d(TAG, "最终URL: $fullUrl")
         
         return fullUrl
     }

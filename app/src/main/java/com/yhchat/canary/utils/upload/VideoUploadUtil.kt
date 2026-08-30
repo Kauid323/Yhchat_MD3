@@ -52,9 +52,9 @@ object VideoUploadUtil {
         onProgress: (Float) -> Unit = {}
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         try {
-            // Log.d(TAG, "📹 ========== 开始上传视频 ==========")
-            // Log.d(TAG, "📹 视频URI: $videoUri")
-            // Log.d(TAG, "📹 上传Token: ${uploadToken.take(30)}...")
+            Log.d(TAG, "📹 ========== 开始上传视频 ==========")
+            Log.d(TAG, "📹 视频URI: $videoUri")
+            Log.d(TAG, "📹 上传Token: ${uploadToken.take(30)}...")
             
             // 1. 获取文件信息
             val originalFileName = getFileName(context, videoUri) ?: "video_${System.currentTimeMillis()}.mp4"
@@ -62,7 +62,7 @@ object VideoUploadUtil {
             
             // 2. 获取文件大小
             val fileSizeBytes = getFileSize(context, videoUri)
-            // Log.d(TAG, "✅ 视频文件大小: $fileSizeBytes bytes (${fileSizeBytes / 1024 / 1024}MB)")
+            Log.d(TAG, "✅ 视频文件大小: $fileSizeBytes bytes (${fileSizeBytes / 1024 / 1024}MB)")
             
             // 3. 检查文件大小限制（建议不超过500MB）
             if (fileSizeBytes > 500 * 1024 * 1024) {
@@ -75,7 +75,7 @@ object VideoUploadUtil {
             val tempFile = File(cacheDir, tempFileName)
             
             val md5 = calculateMD5AndCopyFile(context, videoUri, tempFile)
-            // Log.d(TAG, "✅ MD5计算完成: $md5")
+            Log.d(TAG, "✅ MD5计算完成: $md5")
             
             // 5. 重命名临时文件为最终文件名
             val finalTempFile = File(cacheDir, "$md5.$extension")
@@ -86,22 +86,22 @@ object VideoUploadUtil {
             
             // 视频key = MD5.扩展名
             val videoKey = "$md5.$extension"
-            // Log.d(TAG, "✅ 原始文件名: $originalFileName")
-            // Log.d(TAG, "✅ 文件扩展名: $extension")
-            // Log.d(TAG, "✅ 视频key: $videoKey")
+            Log.d(TAG, "✅ 原始文件名: $originalFileName")
+            Log.d(TAG, "✅ 文件扩展名: $extension")
+            Log.d(TAG, "✅ 视频key: $videoKey")
             
             // 6. 获取MIME类型
             val mimeType = context.contentResolver.getType(videoUri) 
                 ?: getMimeTypeFromExtension(extension)
                 ?: "video/mp4"
-            // Log.d(TAG, "✅ MIME类型: $mimeType")
-            // Log.d(TAG, "✅ 临时文件: ${finalTempFile.absolutePath}")
+            Log.d(TAG, "✅ MIME类型: $mimeType")
+            Log.d(TAG, "✅ 临时文件: ${finalTempFile.absolutePath}")
             
             // 6. 查询正确的上传host
-            // Log.d(TAG, "📹 查询上传区域...")
+            Log.d(TAG, "📹 查询上传区域...")
             val ak = uploadToken.split(":")[0]
             val queryUrl = "https://api.qiniu.com/v4/query?ak=$ak&bucket=$VIDEO_BUCKET"
-            // Log.d(TAG, "📹 查询URL: $queryUrl")
+            Log.d(TAG, "📹 查询URL: $queryUrl")
             
             val queryRequest = Request.Builder()
                 .url(queryUrl)
@@ -112,18 +112,18 @@ object VideoUploadUtil {
                 if (!queryResponse.isSuccessful) return@use null
                 
                 val queryJson = JSONObject(queryResponse.body?.string() ?: "{}")
-                // Log.d(TAG, "📥 区域查询响应: $queryJson")
+                Log.d(TAG, "📥 区域查询响应: $queryJson")
                 val hosts = queryJson.getJSONArray("hosts")
                 val host = hosts.getJSONObject(0)
                 val up = host.getJSONObject("up")
                 val domains = up.getJSONArray("domains")
                 val resultHost = domains.getString(0)
-                // Log.d(TAG, "✅ 上传host: $resultHost")
+                Log.d(TAG, "✅ 上传host: $resultHost")
                 resultHost
             } ?: "upload-cn-east-2.qiniup.com"
             
             // 7. 构建multipart/form-data请求
-            // Log.d(TAG, "📹 构建multipart/form-data请求体...")
+            Log.d(TAG, "📹 构建multipart/form-data请求体...")
             
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -138,10 +138,10 @@ object VideoUploadUtil {
             
             val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
-            // Log.d(TAG, "✅ 请求体构建完成")
+            Log.d(TAG, "✅ 请求体构建完成")
             
             val uploadUrl = "https://$uploadHost/"
-            // Log.d(TAG, "📹 上传URL: $uploadUrl")
+            Log.d(TAG, "📹 上传URL: $uploadUrl")
             
             val request = Request.Builder()
                 .url(uploadUrl)
@@ -150,20 +150,20 @@ object VideoUploadUtil {
                 .post(requestBody)
                 .build()
             
-            // Log.d(TAG, "📹 开始上传到七牛云...")
-            // Log.d(TAG, "📹 请求头:")
+            Log.d(TAG, "📹 开始上传到七牛云...")
+            Log.d(TAG, "📹 请求头:")
             request.headers.forEach {
-                // Log.d(TAG, "   ${it.first}: ${it.second}")
+                Log.d(TAG, "   ${it.first}: ${it.second}")
             }
             
             // 8. 执行上传
             val response = client.newCall(request).execute()
             
-            // Log.d(TAG, "📥 七牛云响应码: ${response.code}")
+            Log.d(TAG, "📥 七牛云响应码: ${response.code}")
             
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
-                // Log.d(TAG, "✅ 上传成功！响应: $responseBody")
+                Log.d(TAG, "✅ 上传成功！响应: $responseBody")
                 
                 if (responseBody != null) {
                     val json = JSONObject(responseBody)
@@ -185,11 +185,11 @@ object VideoUploadUtil {
                         }
                     )
                     
-                    // Log.d(TAG, "✅ ========== 视频上传完成 ==========")
-                    // Log.d(TAG, "✅ key: ${uploadResponse.key}")
-                    // Log.d(TAG, "✅ hash: ${uploadResponse.hash}")
-                    // Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
-                    // Log.d(TAG, "✅ 视频尺寸: ${uploadResponse.avinfo?.video?.width}x${uploadResponse.avinfo?.video?.height}")
+                    Log.d(TAG, "✅ ========== 视频上传完成 ==========")
+                    Log.d(TAG, "✅ key: ${uploadResponse.key}")
+                    Log.d(TAG, "✅ hash: ${uploadResponse.hash}")
+                    Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
+                    Log.d(TAG, "✅ 视频尺寸: ${uploadResponse.avinfo?.video?.width}x${uploadResponse.avinfo?.video?.height}")
                     
                     // 清理临时文件
                     finalTempFile.delete()

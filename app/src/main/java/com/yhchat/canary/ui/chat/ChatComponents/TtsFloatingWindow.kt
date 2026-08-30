@@ -35,7 +35,7 @@ fun TtsFloatingWindow(
             onClose = onClose,
             onSendAudio = { audioUri ->
                 // 发送合成的音频
-                android.util.// Log.d("TtsFloatingWindow", "发送TTS合成的音频: $audioUri")
+                android.util.Log.d("TtsFloatingWindow", "发送TTS合成的音频: $audioUri")
                 
                 // 调用 ViewModel 上传并发送音频
                 coroutineScope.launch {

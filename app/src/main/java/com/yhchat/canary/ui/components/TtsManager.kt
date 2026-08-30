@@ -163,11 +163,11 @@ class TtsManager(private val context: Context) {
             
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
-                    // Log.d(TAG, "开始合成音频")
+                    Log.d(TAG, "开始合成音频")
                 }
                 
                 override fun onDone(utteranceId: String?) {
-                    // Log.d(TAG, "音频合成完成")
+                    Log.d(TAG, "音频合成完成")
                     if (outputFile.exists()) {
                         onSuccess(Uri.fromFile(outputFile))
                     } else {

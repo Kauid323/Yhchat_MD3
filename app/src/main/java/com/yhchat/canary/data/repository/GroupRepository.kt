@@ -52,7 +52,7 @@ class GroupRepository @Inject constructor(
         groupInfo: GroupDetail,
         hide: Boolean
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "🙈 Setting hideGroupMembers for group: ${groupInfo.groupId} => $hide")
+        Log.d(tag, "🙈 Setting hideGroupMembers for group: ${groupInfo.groupId} => $hide")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             return@withContext Result.failure(Exception("未登录"))
@@ -107,7 +107,7 @@ class GroupRepository @Inject constructor(
         groupId: String,
         deny: Boolean
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "📁 Setting denyMembersUploadToGroupDisk for group: $groupId => $deny")
+        Log.d(tag, "📁 Setting denyMembersUploadToGroupDisk for group: $groupId => $deny")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             return@withContext Result.failure(Exception("未登录"))
@@ -183,7 +183,7 @@ class GroupRepository @Inject constructor(
                                 form = item.botSettingsJson
                             )
                         }
-                        // Log.d(tag, "✅ 从ProtoBuf获取到机器人指令 ${instructions.size} 条")
+                        Log.d(tag, "✅ 从ProtoBuf获取到机器人指令 ${instructions.size} 条")
                         Result.success(instructions)
                     } else {
                         Result.failure(Exception(parsed.status.msg))
@@ -239,14 +239,14 @@ class GroupRepository @Inject constructor(
      * 获取群聊信息
      */
     suspend fun getGroupInfo(groupId: String): Result<GroupDetail> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "🔍 Getting group info for: $groupId")
+        Log.d(tag, "🔍 Getting group info for: $groupId")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
             return@withContext Result.failure(Exception("未登录"))
         }
 
-        // Log.d(tag, "Token available, length: ${token.length}")
+        Log.d(tag, "Token available, length: ${token.length}")
 
         return@withContext try {
             // 构建protobuf请求
@@ -254,7 +254,7 @@ class GroupRepository @Inject constructor(
                 .setGroupId(groupId)
                 .build()
 
-            // Log.d(tag, "Request protobuf built, groupId: $groupId")
+            Log.d(tag, "Request protobuf built, groupId: $groupId")
 
             val requestBody = request.toByteArray()
                 .toRequestBody("application/x-protobuf".toMediaTypeOrNull())
@@ -265,13 +265,13 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "Sending request to: $baseUrl/v1/group/info")
+            Log.d(tag, "Sending request to: $baseUrl/v1/group/info")
 
             val response = client.newCall(httpRequest).execute()
 
-            // Log.d(tag, "✅ Response code: ${response.code}")
-            // Log.d(tag, "Response message: ${response.message}")
-            // Log.d(tag, "Response headers: ${response.headers}")
+            Log.d(tag, "✅ Response code: ${response.code}")
+            Log.d(tag, "Response message: ${response.message}")
+            Log.d(tag, "Response headers: ${response.headers}")
 
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string() ?: "No error body"
@@ -285,13 +285,13 @@ class GroupRepository @Inject constructor(
                 return@withContext Result.failure(IOException("响应为空"))
             }
 
-            // Log.d(tag, "✅ Response body size: ${responseBody.size} bytes")
+            Log.d(tag, "✅ Response body size: ${responseBody.size} bytes")
 
             // 解析protobuf响应
-            // Log.d(tag, "Parsing protobuf response, size: ${responseBody.size} bytes")
+            Log.d(tag, "Parsing protobuf response, size: ${responseBody.size} bytes")
             val infoResponse = info.parseFrom(responseBody)
 
-            // Log.d(
+            Log.d(
                 tag,
                 "Protobuf parsed. Status code: ${infoResponse.status.code}, msg: ${infoResponse.status.msg}"
             )
@@ -302,7 +302,7 @@ class GroupRepository @Inject constructor(
             }
 
             val data = infoResponse.data
-            // Log.d(
+            Log.d(
                 tag,
                 "Group data: groupId=${data.groupId}, name=${data.name}, members=${data.member}"
             )
@@ -338,7 +338,7 @@ class GroupRepository @Inject constructor(
                 banReason = data.banReason.takeIf { it.isNotBlank() }
             )
 
-            // Log.d(
+            Log.d(
                 tag,
                 "✅ Group info successfully created: ${groupInfo.name}, members: ${groupInfo.memberCount}"
             )
@@ -429,7 +429,7 @@ class GroupRepository @Inject constructor(
                 )
             }
 
-            // Log.d(tag, "Group members loaded: ${members.size}")
+            Log.d(tag, "Group members loaded: ${members.size}")
             Result.success(members)
 
         } catch (e: InvalidProtocolBufferException) {
@@ -471,7 +471,7 @@ class GroupRepository @Inject constructor(
         categoryId: Long,
         isPrivate: Boolean
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "✏️ Editing group info for: $groupId")
+        Log.d(tag, "✏️ Editing group info for: $groupId")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -501,7 +501,7 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending edit group request...")
+            Log.d(tag, "📤 Sending edit group request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
@@ -509,7 +509,7 @@ class GroupRepository @Inject constructor(
                 if (responseData != null) {
                     val editResponse = edit_group.parseFrom(responseData)
                     if (editResponse.status.code == 1) {
-                        // Log.d(tag, "✅ Group info edited successfully")
+                        Log.d(tag, "✅ Group info edited successfully")
                         Result.success(true)
                     } else {
                         Log.e(tag, "❌ Edit failed: ${editResponse.status.msg}")
@@ -543,7 +543,7 @@ class GroupRepository @Inject constructor(
         groupId: String,
         messageTypes: String  // 例如: "1,2,3,4"
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "🚫 Setting message type limit for group: $groupId, types: $messageTypes")
+        Log.d(tag, "🚫 Setting message type limit for group: $groupId, types: $messageTypes")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -560,12 +560,12 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending message type limit request...")
+            Log.d(tag, "📤 Sending message type limit request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
                 val responseText = response.body?.string()
-                // Log.d(tag, "✅ Message type limit set successfully: $responseText")
+                Log.d(tag, "✅ Message type limit set successfully: $responseText")
                 Result.success(true)
             } else {
                 Log.e(tag, "❌ HTTP error: ${response.code}")
@@ -588,7 +588,7 @@ class GroupRepository @Inject constructor(
         groupId: String,
         userId: String
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "👢 Removing member from group: $groupId, userId: $userId")
+        Log.d(tag, "👢 Removing member from group: $groupId, userId: $userId")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -605,12 +605,12 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending remove member request...")
+            Log.d(tag, "📤 Sending remove member request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
                 val responseText = response.body?.string()
-                // Log.d(tag, "✅ Member removed successfully: $responseText")
+                Log.d(tag, "✅ Member removed successfully: $responseText")
                 Result.success(true)
             } else {
                 Log.e(tag, "❌ HTTP error: ${response.code}")
@@ -633,7 +633,7 @@ class GroupRepository @Inject constructor(
         groupId: String,
         userId: String
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "👑 Transferring group owner: groupId=$groupId, userId=$userId")
+        Log.d(tag, "👑 Transferring group owner: groupId=$groupId, userId=$userId")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -650,12 +650,12 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending transfer group owner request...")
+            Log.d(tag, "📤 Sending transfer group owner request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
                 val responseText = response.body?.string()
-                // Log.d(tag, "✅ Group owner transferred successfully: $responseText")
+                Log.d(tag, "✅ Group owner transferred successfully: $responseText")
                 Result.success(true)
             } else {
                 Log.e(tag, "❌ HTTP error: ${response.code}")
@@ -681,7 +681,7 @@ class GroupRepository @Inject constructor(
         userId: String,
         gagTime: Int
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "🔇 Gagging member in group: $groupId, userId: $userId, gagTime: $gagTime")
+        Log.d(tag, "🔇 Gagging member in group: $groupId, userId: $userId, gagTime: $gagTime")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -698,12 +698,12 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending gag member request...")
+            Log.d(tag, "📤 Sending gag member request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
                 val responseText = response.body?.string()
-                // Log.d(tag, "✅ Member gagged successfully: $responseText")
+                Log.d(tag, "✅ Member gagged successfully: $responseText")
                 Result.success(true)
             } else {
                 Log.e(tag, "❌ HTTP error: ${response.code}")
@@ -728,7 +728,7 @@ class GroupRepository @Inject constructor(
         userId: String,
         userLevel: Int
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        // Log.d(tag, "⚙️ Setting member role in group: $groupId, userId: $userId, userLevel: $userLevel")
+        Log.d(tag, "⚙️ Setting member role in group: $groupId, userId: $userId, userLevel: $userLevel")
         val token = tokenRepository?.getTokenSync()
         if (token.isNullOrEmpty()) {
             Log.e(tag, "❌ No token available")
@@ -745,12 +745,12 @@ class GroupRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            // Log.d(tag, "📤 Sending set member role request...")
+            Log.d(tag, "📤 Sending set member role request...")
             val response = client.newCall(request).execute()
 
             if (response.isSuccessful) {
                 val responseText = response.body?.string()
-                // Log.d(tag, "✅ Member role set successfully: $responseText")
+                Log.d(tag, "✅ Member role set successfully: $responseText")
                 Result.success(true)
             } else {
                 Log.e(tag, "❌ HTTP error: ${response.code}")
@@ -808,15 +808,15 @@ class GroupRepository @Inject constructor(
                             )
                         }
                         
-                        // Log.d(tag, "✅ 从ProtoBuf获取到 ${instructions.size} 条指令")
+                        Log.d(tag, "✅ 从ProtoBuf获取到 ${instructions.size} 条指令")
                         
                         // 同时获取机器人列表，供后续使用
                         val bots = botListResponse.botList.map { botData ->
-                            // Log.d(tag, "  机器人: ${botData.name} (${botData.botId})")
+                            Log.d(tag, "  机器人: ${botData.name} (${botData.botId})")
                             botData
                         }
                         
-                        // Log.d(tag, "从ProtoBuf获取到 ${instructions.size} 条指令")
+                        Log.d(tag, "从ProtoBuf获取到 ${instructions.size} 条指令")
                         Result.success(instructions)
                     } else {
                         Result.failure(Exception(botListResponse.status.msg))
@@ -860,7 +860,7 @@ class GroupRepository @Inject constructor(
                     
                     if (botListResponse.status.code == 1) {
                         val bots = botListResponse.botList
-                        // Log.d(tag, "✅ 获取到 ${bots.size} 个群机器人")
+                        Log.d(tag, "✅ 获取到 ${bots.size} 个群机器人")
                         Result.success(bots)
                     } else {
                         Result.failure(Exception(botListResponse.status.msg))
@@ -1021,9 +1021,9 @@ class GroupRepository @Inject constructor(
                             )
                         }
                         
-                        // Log.d(tag, "✅ 获取到 ${menuButtons.size} 个菜单按钮")
+                        Log.d(tag, "✅ 获取到 ${menuButtons.size} 个菜单按钮")
                         menuButtons.forEach { button ->
-                            // Log.d(tag, "  - 按钮: id=${button.id}, name=${button.name}, content=${button.content}, botId=${button.botId}, type=${button.menuType}")
+                            Log.d(tag, "  - 按钮: id=${button.id}, name=${button.name}, content=${button.content}, botId=${button.botId}, type=${button.menuType}")
                         }
                         Result.success(menuButtons)
                     } else {
@@ -1066,7 +1066,7 @@ class GroupRepository @Inject constructor(
             val response = apiService.menuEvent(token, request)
             
             if (response.isSuccessful && response.body()?.code == 1) {
-                // Log.d(tag, "✅ 菜单按钮点击成功")
+                Log.d(tag, "✅ 菜单按钮点击成功")
                 Result.success(true)
             } else {
                 Result.failure(Exception(response.body()?.message ?: "点击失败"))
@@ -1126,7 +1126,7 @@ class GroupRepository @Inject constructor(
             )
             
             if (response.isSuccessful) {
-                // Log.d(tag, "✅ 群昵称修改成功")
+                Log.d(tag, "✅ 群昵称修改成功")
                 Result.success(true)
             } else {
                 Result.failure(Exception("修改群昵称失败: ${response.code()}"))
@@ -1156,7 +1156,7 @@ class GroupRepository @Inject constructor(
             )
             
             if (response.isSuccessful && response.body()?.code == 1) {
-                // Log.d(tag, "✅ 群口令修改成功")
+                Log.d(tag, "✅ 群口令修改成功")
                 Result.success(true)
             } else {
                 Result.failure(Exception("修改群口令失败: ${response.code()}"))
@@ -1195,7 +1195,7 @@ class GroupRepository @Inject constructor(
             val requestBody = request.toByteArray()
                 .toRequestBody("application/x-protobuf".toMediaTypeOrNull())
             
-            // Log.d(tag, "🏗️ 创建群聊: name=$name")
+            Log.d(tag, "🏗️ 创建群聊: name=$name")
             val response = apiService.createGroup(token, requestBody)
             
             if (response.isSuccessful) {
@@ -1205,7 +1205,7 @@ class GroupRepository @Inject constructor(
                     
                     if (createGroupResponse.status.code == 1) {
                         val groupId = createGroupResponse.groupId
-                        // Log.d(tag, "✅ 群聊创建成功: groupId=$groupId")
+                        Log.d(tag, "✅ 群聊创建成功: groupId=$groupId")
                         Result.success(groupId)
                     } else {
                         Result.failure(Exception(createGroupResponse.status.msg))

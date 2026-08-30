@@ -38,7 +38,7 @@ class ChatAddViewModel @Inject constructor(
                     error = null
                 )
                 
-                // Log.d("ChatAddViewModel", "开始加载分享信息: key=$key, ts=$ts")
+                Log.d("ChatAddViewModel", "开始加载分享信息: key=$key, ts=$ts")
                 
                 userRepository.getShareInfo(key, ts).fold(
                     onSuccess = { shareInfo ->
@@ -101,7 +101,7 @@ class ChatAddViewModel @Inject constructor(
                     chatInfo = chatAddInfo
                 )
                 
-                // Log.d("ChatAddViewModel", "开始加载聊天信息: type=${chatAddInfo.type}, id=${chatAddInfo.id}")
+                Log.d("ChatAddViewModel", "开始加载聊天信息: type=${chatAddInfo.type}, id=${chatAddInfo.id}")
                 
                 when (chatAddInfo.type) {
                     ChatAddType.USER -> loadUserInfo(chatAddInfo)
@@ -210,7 +210,7 @@ class ChatAddViewModel @Inject constructor(
             try {
                 val chatInfo = _uiState.value.chatInfo ?: return@launch
                 
-                // Log.d("ChatAddViewModel", "开始添加聊天对象: type=${chatInfo.type}, id=${chatInfo.id}")
+                Log.d("ChatAddViewModel", "开始添加聊天对象: type=${chatInfo.type}, id=${chatInfo.id}")
                 
                 _uiState.value = _uiState.value.copy(
                     isAdding = true,
@@ -224,7 +224,7 @@ class ChatAddViewModel @Inject constructor(
                     remark = "通过分享链接添加"
                 ).fold(
                     onSuccess = {
-                        // Log.d("ChatAddViewModel", "添加成功")
+                        Log.d("ChatAddViewModel", "添加成功")
                         _uiState.value = _uiState.value.copy(
                             isAdding = false,
                             isAddSuccess = true,

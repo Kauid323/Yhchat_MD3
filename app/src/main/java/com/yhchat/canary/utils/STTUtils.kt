@@ -84,7 +84,7 @@ object STTUtils {
                 fos.write(bytes)
             }
             
-            // Log.d(TAG, "音频下载完成: ${audioFile.absolutePath}, 大小: ${bytes.size} bytes")
+            Log.d(TAG, "音频下载完成: ${audioFile.absolutePath}, 大小: ${bytes.size} bytes")
             audioFile
         }.onFailure { e ->
             Log.e(TAG, "下载音频异常", e)
@@ -112,11 +112,11 @@ object STTUtils {
             
             recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
-                    // Log.d(TAG, "准备开始识别")
+                    Log.d(TAG, "准备开始识别")
                 }
                 
                 override fun onBeginningOfSpeech() {
-                    // Log.d(TAG, "开始识别语音")
+                    Log.d(TAG, "开始识别语音")
                 }
                 
                 override fun onRmsChanged(rmsdB: Float) {}
@@ -124,7 +124,7 @@ object STTUtils {
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 
                 override fun onEndOfSpeech() {
-                    // Log.d(TAG, "语音结束")
+                    Log.d(TAG, "语音结束")
                 }
                 
                 override fun onError(error: Int) {
@@ -150,7 +150,7 @@ object STTUtils {
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val result = matches?.firstOrNull()
-                    // Log.d(TAG, "识别结果: $result")
+                    Log.d(TAG, "识别结果: $result")
                     recognizer.destroy()
                     if (continuation.isActive) {
                         continuation.resume(result)
@@ -159,7 +159,7 @@ object STTUtils {
                 
                 override fun onPartialResults(partialResults: Bundle?) {
                     val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    // Log.d(TAG, "部分识别结果: ${matches?.firstOrNull()}")
+                    Log.d(TAG, "部分识别结果: ${matches?.firstOrNull()}")
                 }
                 
                 override fun onEvent(eventType: Int, params: Bundle?) {}

@@ -38,7 +38,7 @@ class AudioCacheManager(private val context: Context) {
         val cacheFile = File(cacheDir, "$urlHash.m4a")
         
         return if (cacheFile.exists() && cacheFile.length() > 0) {
-            // Log.d(TAG, "找到缓存音频文件: ${cacheFile.absolutePath}")
+            Log.d(TAG, "找到缓存音频文件: ${cacheFile.absolutePath}")
             // 更新文件的最后修改时间，用于LRU策略
             cacheFile.setLastModified(System.currentTimeMillis())
             cacheFile
@@ -75,7 +75,7 @@ class AudioCacheManager(private val context: Context) {
                 outputStream.write(dataHash.toByteArray())
             }
             
-            // Log.d(TAG, "音频文件已缓存: ${cacheFile.absolutePath}")
+            Log.d(TAG, "音频文件已缓存: ${cacheFile.absolutePath}")
             return cacheFile
             
         } catch (e: Exception) {
@@ -137,7 +137,7 @@ class AudioCacheManager(private val context: Context) {
             try {
                 val cachedDataHash = calculateSHA256(cacheFile)
                 if (cachedDataHash == dataHash) {
-                    // Log.d(TAG, "找到内容相同的缓存文件: ${cacheFile.name}")
+                    Log.d(TAG, "找到内容相同的缓存文件: ${cacheFile.name}")
                     // 更新最后修改时间
                     cacheFile.setLastModified(System.currentTimeMillis())
                     return cacheFile
@@ -185,7 +185,7 @@ class AudioCacheManager(private val context: Context) {
                     val hashFile = File(cacheDir, "${file.nameWithoutExtension}.hash")
                     file.delete()
                     hashFile.delete()
-                    // Log.d(TAG, "清理缓存文件: ${file.name}")
+                    Log.d(TAG, "清理缓存文件: ${file.name}")
                 } catch (e: Exception) {
                     Log.w(TAG, "删除缓存文件失败: ${file.name}", e)
                 }
@@ -261,7 +261,7 @@ class AudioCacheManager(private val context: Context) {
             cacheDir.listFiles()?.forEach { file ->
                 file.delete()
             }
-            // Log.d(TAG, "已清空所有音频缓存")
+            Log.d(TAG, "已清空所有音频缓存")
         } catch (e: Exception) {
             Log.e(TAG, "清空缓存失败", e)
         }

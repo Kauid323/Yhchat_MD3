@@ -274,11 +274,11 @@ object AudioUtils {
     ): com.yhchat.canary.data.model.QiniuUploadResponse? = withContext(Dispatchers.IO) {
         // 检查TTS是否开启
         if (!TTSUtils.isTTSEnabled(context)) {
-            // Log.d(TAG, "TTS功能未开启")
+            Log.d(TAG, "TTS功能未开启")
             return@withContext null
         }
         
-        // Log.d(TAG, "开始TTS转换: $text")
+        Log.d(TAG, "开始TTS转换: $text")
         
         // 初始化TTS
         if (!TTSUtils.initialize(context)) {
@@ -297,7 +297,7 @@ object AudioUtils {
             return@withContext null
         }
         
-        // Log.d(TAG, "TTS文件生成成功: ${ttsFile.absolutePath}")
+        Log.d(TAG, "TTS文件生成成功: ${ttsFile.absolutePath}")
         
         // 上传到七牛云
         val result = uploadAudioToQiniu(ttsFile, qiniuToken, uploadUrl)

@@ -199,9 +199,9 @@ class MessageRepository @Inject constructor(
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
 
             if (msgId.isNullOrEmpty()) {
-                // Log.d(tag, "📡 获取最新消息: chatId=$chatId, chatType=$chatType, count=$msgCount")
+                Log.d(tag, "📡 获取最新消息: chatId=$chatId, chatType=$chatType, count=$msgCount")
             } else {
-                // Log.d(tag, "📡 通过msgId获取消息: chatId=$chatId, chatType=$chatType, msgId=$msgId, count=$msgCount")
+                Log.d(tag, "📡 通过msgId获取消息: chatId=$chatId, chatType=$chatType, msgId=$msgId, count=$msgCount")
             }
             
             val response = apiService.listMessage(token, requestBody)
@@ -217,13 +217,13 @@ class MessageRepository @Inject constructor(
                         }
                         
                         if (msgId.isNullOrEmpty()) {
-                            // Log.d(tag, "✅ 成功获取 ${messages.size} 条最新消息")
+                            Log.d(tag, "✅ 成功获取 ${messages.size} 条最新消息")
                         } else {
-                            // Log.d(tag, "✅ 成功通过msgId获取 ${messages.size} 条消息")
+                            Log.d(tag, "✅ 成功通过msgId获取 ${messages.size} 条消息")
                             // 验证目标消息是否在结果中
                             val foundTarget = messages.find { it.msgId == msgId }
                             if (foundTarget != null) {
-                                // Log.d(tag, "🎯 确认找到目标消息 msgId: $msgId")
+                                Log.d(tag, "🎯 确认找到目标消息 msgId: $msgId")
                             } else {
                                 Log.w(tag, "⚠️ 未找到目标消息 msgId: $msgId（可能被过滤或不存在）")
                             }
@@ -269,7 +269,7 @@ class MessageRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
 
-            // Log.d(tag, "Getting messages by seq for chat: $chatId, type: $chatType, seq: $msgSeq")
+            Log.d(tag, "Getting messages by seq for chat: $chatId, type: $chatType, seq: $msgSeq")
             
             val response = apiService.listMessageBySeq(token, requestBody)
             
@@ -282,7 +282,7 @@ class MessageRepository @Inject constructor(
                         val messages = messageResponse.msgList.map { protoMsg ->
                             convertProtoToMessage(protoMsg, chatId, chatType)
                         }
-                        // Log.d(tag, "Successfully got ${messages.size} messages by seq")
+                        Log.d(tag, "Successfully got ${messages.size} messages by seq")
                         Result.success(messages)
                 } else {
                         Log.e(tag, "API error: ${messageResponse.status.msg}")
@@ -452,7 +452,7 @@ class MessageRepository @Inject constructor(
                 response.body()?.let { responseBody ->
                     val sendResponse = send_message.parseFrom(responseBody.bytes())
                     if (sendResponse.status.code == 1) {
-                        // Log.d(tag, "Message sent successfully")
+                        Log.d(tag, "Message sent successfully")
                         Result.success(true)
                     } else {
                         Log.e(tag, "Send message error: ${sendResponse.status.msg}")
@@ -511,10 +511,10 @@ class MessageRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
             
-            // Log.d(tag, "📤 ========== 撤回消息 ==========")
-            // Log.d(tag, "📤 msgId: $msgId")
-            // Log.d(tag, "📤 chatId: $chatId")
-            // Log.d(tag, "📤 chatType: $chatType")
+            Log.d(tag, "📤 ========== 撤回消息 ==========")
+            Log.d(tag, "📤 msgId: $msgId")
+            Log.d(tag, "📤 chatId: $chatId")
+            Log.d(tag, "📤 chatType: $chatType")
             
             // 构建protobuf请求
             val request = recall_msg_send.newBuilder()
@@ -525,22 +525,22 @@ class MessageRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            // Log.d(tag, "📤 发送撤回请求...")
+            Log.d(tag, "📤 发送撤回请求...")
             
             val response = apiService.recallMessage(token, requestBody)
             
-            // Log.d(tag, "📥 服务器响应码: ${response.code()}")
+            Log.d(tag, "📥 服务器响应码: ${response.code()}")
             
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
                     val recallResponse = recall_msg.parseFrom(bytes)
                     
-                    // Log.d(tag, "📥 响应状态码: ${recallResponse.status.code}")
-                    // Log.d(tag, "📥 响应消息: ${recallResponse.status.msg}")
+                    Log.d(tag, "📥 响应状态码: ${recallResponse.status.code}")
+                    Log.d(tag, "📥 响应消息: ${recallResponse.status.msg}")
                     
                     if (recallResponse.status.code == 1) {
-                        // Log.d(tag, "✅ ========== 消息撤回成功！ ==========")
+                        Log.d(tag, "✅ ========== 消息撤回成功！ ==========")
                         Result.success(true)
                     } else {
                         Log.e(tag, "❌ 撤回失败: ${recallResponse.status.msg}")
@@ -575,10 +575,10 @@ class MessageRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
             
-            // Log.d(tag, "📤 ========== 批量撤回消息 ==========")
-            // Log.d(tag, "📤 msgIds: $msgIds (共${msgIds.size}条)")
-            // Log.d(tag, "📤 chatId: $chatId")
-            // Log.d(tag, "📤 chatType: $chatType")
+            Log.d(tag, "📤 ========== 批量撤回消息 ==========")
+            Log.d(tag, "📤 msgIds: $msgIds (共${msgIds.size}条)")
+            Log.d(tag, "📤 chatId: $chatId")
+            Log.d(tag, "📤 chatType: $chatType")
             
             // 构建protobuf请求
             val request = recall_msg_batch_send.newBuilder()
@@ -589,22 +589,22 @@ class MessageRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            // Log.d(tag, "📤 发送批量撤回请求...")
+            Log.d(tag, "📤 发送批量撤回请求...")
             
             val response = apiService.recallMessagesBatchProto(token, requestBody)
             
-            // Log.d(tag, "📥 服务器响应码: ${response.code()}")
+            Log.d(tag, "📥 服务器响应码: ${response.code()}")
             
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
                     val recallResponse = recall_msg_batch.parseFrom(bytes)
                     
-                    // Log.d(tag, "📥 响应状态码: ${recallResponse.status.code}")
-                    // Log.d(tag, "📥 响应消息: ${recallResponse.status.msg}")
+                    Log.d(tag, "📥 响应状态码: ${recallResponse.status.code}")
+                    Log.d(tag, "📥 响应消息: ${recallResponse.status.msg}")
                     
                     if (recallResponse.status.code == 1) {
-                        // Log.d(tag, "✅ ========== 批量撤回成功！ ==========")
+                        Log.d(tag, "✅ ========== 批量撤回成功！ ==========")
                         Result.success(true)
                     } else {
                         Log.e(tag, "❌ 批量撤回失败: ${recallResponse.status.msg}")
@@ -649,12 +649,12 @@ class MessageRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
             
-            // Log.d(tag, "📤 ========== 编辑消息 ==========")
-            // Log.d(tag, "📤 msgId: $msgId")
-            // Log.d(tag, "📤 chatId: $chatId")
-            // Log.d(tag, "📤 chatType: $chatType")
-            // Log.d(tag, "📤 contentType: $contentType")
-            // Log.d(tag, "📤 content: ${content.take(100)}...")
+            Log.d(tag, "📤 ========== 编辑消息 ==========")
+            Log.d(tag, "📤 msgId: $msgId")
+            Log.d(tag, "📤 chatId: $chatId")
+            Log.d(tag, "📤 chatType: $chatType")
+            Log.d(tag, "📤 contentType: $contentType")
+            Log.d(tag, "📤 content: ${content.take(100)}...")
             
             // 构建protobuf请求
             val contentBuilder = edit_message_send.Content.newBuilder()
@@ -696,22 +696,22 @@ class MessageRepository @Inject constructor(
             
             val requestBody = request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
             
-            // Log.d(tag, "📤 发送编辑请求...")
+            Log.d(tag, "📤 发送编辑请求...")
             
             val response = apiService.editMessage(token, requestBody)
             
-            // Log.d(tag, "📥 服务器响应码: ${response.code()}")
+            Log.d(tag, "📥 服务器响应码: ${response.code()}")
             
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
                     val editResponse = edit_message.parseFrom(bytes)
                     
-                    // Log.d(tag, "📥 响应状态码: ${editResponse.status.code}")
-                    // Log.d(tag, "📥 响应消息: ${editResponse.status.msg}")
+                    Log.d(tag, "📥 响应状态码: ${editResponse.status.code}")
+                    Log.d(tag, "📥 响应消息: ${editResponse.status.msg}")
                     
                     if (editResponse.status.code == 1) {
-                        // Log.d(tag, "✅ ========== 消息编辑成功！ ==========")
+                        Log.d(tag, "✅ ========== 消息编辑成功！ ==========")
                         Result.success(true)
                     } else {
                         Log.e(tag, "❌ 编辑失败: ${editResponse.status.msg}")
@@ -849,7 +849,7 @@ class MessageRepository @Inject constructor(
                 return Result.failure(Exception("用户未登录"))
             }
 
-            // Log.d(tag, "📡 调用 list-message-by-mid-seq: chatId=$chatId, chatType=$chatType, msgId=$msgId, msgCount=$msgCount, msgSeq=$msgSeq")
+            Log.d(tag, "📡 调用 list-message-by-mid-seq: chatId=$chatId, chatType=$chatType, msgId=$msgId, msgCount=$msgCount, msgSeq=$msgSeq")
             
             val request = list_message_by_mid_seq_send.newBuilder()
                 .setChatId(chatId)
@@ -868,7 +868,7 @@ class MessageRepository @Inject constructor(
                 if (responseBody != null) {
                     val bytes = responseBody.bytes()
                     val messageResponse = list_message_by_mid_seq.parseFrom(bytes)
-                    // Log.d(tag, "✅ list-message-by-mid-seq 返回: code=${messageResponse.status.code}, 消息数=${messageResponse.msgList.size}, total=${messageResponse.total}")
+                    Log.d(tag, "✅ list-message-by-mid-seq 返回: code=${messageResponse.status.code}, 消息数=${messageResponse.msgList.size}, total=${messageResponse.total}")
                     
                     if (messageResponse.status.code == 1) {
                         val messages = messageResponse.msgList.map { protoMsg ->
@@ -900,7 +900,7 @@ class MessageRepository @Inject constructor(
     suspend fun insertMessage(message: ChatMessage) {
         try {
             cacheRepository.cacheMessages(listOf(message))
-            // Log.d(tag, "Inserted message: ${message.msgId}")
+            Log.d(tag, "Inserted message: ${message.msgId}")
         } catch (e: Exception) {
             Log.e(tag, "Error inserting message: ${message.msgId}", e)
         }
@@ -914,7 +914,7 @@ class MessageRepository @Inject constructor(
             // 先删除旧消息，再插入新消息
             cacheRepository.deleteMessage(message.msgId)
             cacheRepository.cacheMessages(listOf(message))
-            // Log.d(tag, "Updated message: ${message.msgId}")
+            Log.d(tag, "Updated message: ${message.msgId}")
         } catch (e: Exception) {
             Log.e(tag, "Error updating message: ${message.msgId}", e)
         }
@@ -926,7 +926,7 @@ class MessageRepository @Inject constructor(
     suspend fun deleteMessage(msgId: String) {
         try {
             cacheRepository.deleteMessage(msgId)
-            // Log.d(tag, "Deleted message: $msgId")
+            Log.d(tag, "Deleted message: $msgId")
         } catch (e: Exception) {
             Log.e(tag, "Error deleting message: $msgId", e)
         }
@@ -979,7 +979,7 @@ class MessageRepository @Inject constructor(
                 3 -> "机器人"
                 else -> "未知类型($chatType)"
             }
-            // Log.d(tag, "Reporting button click: chatType=$chatTypeText, chatId=$chatId, msgId=$msgId, value=$buttonValue")
+            Log.d(tag, "Reporting button click: chatType=$chatTypeText, chatId=$chatId, msgId=$msgId, value=$buttonValue")
             
             val response = apiService.buttonReport(token, requestBody)
             
@@ -989,7 +989,7 @@ class MessageRepository @Inject constructor(
                     val buttonResponse = recall_msg.parseFrom(bytes) // 使用 recall_msg 解析（只有status）
                     
                     if (buttonResponse.status.code == 1) {
-                        // Log.d(tag, "Button click reported successfully")
+                        Log.d(tag, "Button click reported successfully")
                         Result.success(Unit)
                     } else {
                         Log.e(tag, "API error: ${buttonResponse.status.msg}")
@@ -1025,7 +1025,7 @@ class MessageRepository @Inject constructor(
             val expressionIdLong = expressionId.toLongOrNull() ?: return Result.failure(Exception("无效的表情ID"))
             val request = AddExpressionRequest(id = expressionIdLong)
             
-            // Log.d(tag, "Adding expression to favorites: $expressionId")
+            Log.d(tag, "Adding expression to favorites: $expressionId")
             
             val response = apiService.addExpression(token, request)
             
@@ -1033,7 +1033,7 @@ class MessageRepository @Inject constructor(
                 response.body()?.let { body ->
                     val message = body.message
                     if (body.code == 1) {
-                        // Log.d(tag, "Successfully added expression: $expressionId")
+                        Log.d(tag, "Successfully added expression: $expressionId")
                         Result.success(Unit)
                     } else {
                         Log.e(tag, "Failed to add expression: $message")
@@ -1065,7 +1065,7 @@ class MessageRepository @Inject constructor(
                 page = page
             )
             
-            // Log.d(tag, "Getting edit history for message: $msgId")
+            Log.d(tag, "Getting edit history for message: $msgId")
             
             val response = apiService.listMessageEditRecord(token, request)
             
@@ -1089,7 +1089,7 @@ class MessageRepository @Inject constructor(
                             )
                         } ?: emptyList()
                         
-                        // Log.d(tag, "Successfully got ${records.size} edit records")
+                        Log.d(tag, "Successfully got ${records.size} edit records")
                         Result.success(records)
                     } else {
                         Log.e(tag, "API error: $msg")

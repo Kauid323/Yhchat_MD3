@@ -53,9 +53,9 @@ object FileUploadUtil {
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         var tempFile: File? = null
         try {
-            // Log.d(TAG, "📤 ========== 开始上传文件 ==========")
-            // Log.d(TAG, "📤 文件URI: $fileUri")
-            // Log.d(TAG, "📤 上传Token: ${uploadToken.take(30)}...")
+            Log.d(TAG, "📤 ========== 开始上传文件 ==========")
+            Log.d(TAG, "📤 文件URI: $fileUri")
+            Log.d(TAG, "📤 上传Token: ${uploadToken.take(30)}...")
 
             // 1. 获取文件名和后缀
             val originalFileName = getFileName(context, fileUri) ?: "unnamed_file"
@@ -71,27 +71,27 @@ object FileUploadUtil {
 
             val (md5, fileSizeBytes) = copyToTempFileAndCalculateMD5(inputStream, tempFile)
             val preparedTempFile = tempFile
-            // Log.d(TAG, "✅ 文件读取成功，大小: $fileSizeBytes bytes (${fileSizeBytes / 1024}KB)")
-            // Log.d(TAG, "✅ MD5计算完成: $md5")
+            Log.d(TAG, "✅ 文件读取成功，大小: $fileSizeBytes bytes (${fileSizeBytes / 1024}KB)")
+            Log.d(TAG, "✅ MD5计算完成: $md5")
 
             // 文件key = disk/MD5.扩展名（注意这里要加disk/前缀）
             val fileKey = "disk/$md5.$extension"
-            // Log.d(TAG, "✅ 原始文件名: $originalFileName")
-            // Log.d(TAG, "✅ 文件扩展名: $extension")
-            // Log.d(TAG, "✅ 文件key: $fileKey")
+            Log.d(TAG, "✅ 原始文件名: $originalFileName")
+            Log.d(TAG, "✅ 文件扩展名: $extension")
+            Log.d(TAG, "✅ 文件key: $fileKey")
             
             // 4. 获取MIME类型
             val mimeType = context.contentResolver.getType(fileUri) 
                 ?: getMimeTypeFromExtension(extension)
                 ?: "application/octet-stream"
-            // Log.d(TAG, "✅ MIME类型: $mimeType")
-            // Log.d(TAG, "✅ 临时文件: ${preparedTempFile.absolutePath}")
+            Log.d(TAG, "✅ MIME类型: $mimeType")
+            Log.d(TAG, "✅ 临时文件: ${preparedTempFile.absolutePath}")
             
             // 6. 查询正确的上传host（参考Python SDK实现）
-            // Log.d(TAG, "📤 查询上传区域...")
+            Log.d(TAG, "📤 查询上传区域...")
             val ak = uploadToken.split(":")[0]
             val queryUrl = "https://api.qiniu.com/v4/query?ak=$ak&bucket=$FILE_BUCKET"
-            // Log.d(TAG, "📤 查询URL: $queryUrl")
+            Log.d(TAG, "📤 查询URL: $queryUrl")
             
             val queryRequest = Request.Builder()
                 .url(queryUrl)
@@ -101,13 +101,13 @@ object FileUploadUtil {
             val uploadHost = client.newCall(queryRequest).execute().use { queryResponse ->
                 if (queryResponse.isSuccessful) {
                     val queryJson = JSONObject(queryResponse.body?.string() ?: "{}")
-                    // Log.d(TAG, "📥 区域查询响应: $queryJson")
+                    Log.d(TAG, "📥 区域查询响应: $queryJson")
                     val hosts = queryJson.getJSONArray("hosts")
                     val host = hosts.getJSONObject(0)
                     val up = host.getJSONObject("up")
                     val domains = up.getJSONArray("domains")
                     val resultHost = domains.getString(0)
-                    // Log.d(TAG, "✅ 上传host: $resultHost")
+                    Log.d(TAG, "✅ 上传host: $resultHost")
                     resultHost
                 } else {
                     Log.w(TAG, "⚠️ 查询host失败，使用默认: upload-z2.qiniup.com")
@@ -116,7 +116,7 @@ object FileUploadUtil {
             }
             
             // 7. 使用OkHttp的MultipartBody构建请求（自动处理正确的格式）
-            // Log.d(TAG, "📤 构建multipart/form-data请求体...")
+            Log.d(TAG, "📤 构建multipart/form-data请求体...")
             
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -131,10 +131,10 @@ object FileUploadUtil {
                 
             val requestBody = ProgressRequestBody(multipartBody, onProgress)
             
-            // Log.d(TAG, "✅ 请求体构建完成")
+            Log.d(TAG, "✅ 请求体构建完成")
             
             val uploadUrl = "https://$uploadHost/"
-            // Log.d(TAG, "📤 上传URL: $uploadUrl")
+            Log.d(TAG, "📤 上传URL: $uploadUrl")
             
             val request = Request.Builder()
                 .url(uploadUrl)
@@ -143,19 +143,19 @@ object FileUploadUtil {
                 .post(requestBody)
                 .build()
             
-            // Log.d(TAG, "📤 开始上传到七牛云...")
-            // Log.d(TAG, "📤 请求头:")
+            Log.d(TAG, "📤 开始上传到七牛云...")
+            Log.d(TAG, "📤 请求头:")
             request.headers.forEach {
-                // Log.d(TAG, "   ${it.first}: ${it.second}")
+                Log.d(TAG, "   ${it.first}: ${it.second}")
             }
             
             // 9. 执行上传
             client.newCall(request).execute().use { response ->
-                // Log.d(TAG, "📥 七牛云响应码: ${response.code}")
+                Log.d(TAG, "📥 七牛云响应码: ${response.code}")
 
                 if (response.isSuccessful) {
                     val responseBody = response.body?.string()
-                    // Log.d(TAG, "✅ 上传成功！响应: $responseBody")
+                    Log.d(TAG, "✅ 上传成功！响应: $responseBody")
 
                     if (responseBody != null) {
                         val json = JSONObject(responseBody)
@@ -168,10 +168,10 @@ object FileUploadUtil {
                             avinfo = null  // 文件没有avinfo
                         )
 
-                        // Log.d(TAG, "✅ ========== 上传完成 ==========")
-                        // Log.d(TAG, "✅ key: ${uploadResponse.key}")
-                        // Log.d(TAG, "✅ hash (etag): ${uploadResponse.hash}")
-                        // Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
+                        Log.d(TAG, "✅ ========== 上传完成 ==========")
+                        Log.d(TAG, "✅ key: ${uploadResponse.key}")
+                        Log.d(TAG, "✅ hash (etag): ${uploadResponse.hash}")
+                        Log.d(TAG, "✅ size: ${uploadResponse.fsize}")
 
                         Result.success(uploadResponse)
                     } else {

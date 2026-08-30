@@ -51,7 +51,7 @@ object TTSUtils {
                 tts?.setPitch(1.0f)
                 
                 isInitialized = true
-                // Log.d(TAG, "TTS初始化成功")
+                Log.d(TAG, "TTS初始化成功")
                 continuation.resume(true)
             } else {
                 Log.e(TAG, "TTS初始化失败: $status")
@@ -62,7 +62,7 @@ object TTSUtils {
         
         continuation.invokeOnCancellation {
             // 如果协程被取消，不关闭TTS，保留供后续使用
-            // Log.d(TAG, "TTS初始化协程被取消")
+            Log.d(TAG, "TTS初始化协程被取消")
         }
     }
     
@@ -111,11 +111,11 @@ object TTSUtils {
             
             ttsEngine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
-                    // Log.d(TAG, "TTS开始合成: $utteranceId")
+                    Log.d(TAG, "TTS开始合成: $utteranceId")
                 }
                 
                 override fun onDone(utteranceId: String?) {
-                    // Log.d(TAG, "TTS合成完成: $utteranceId")
+                    Log.d(TAG, "TTS合成完成: $utteranceId")
                     if (continuation.isActive) {
                         continuation.resume(true)
                     }
@@ -156,12 +156,12 @@ object TTSUtils {
             
             continuation.invokeOnCancellation {
                 ttsEngine.stop()
-                // Log.d(TAG, "TTS合成被取消")
+                Log.d(TAG, "TTS合成被取消")
             }
         }
         
         if (result && outputFile.exists() && outputFile.length() > 0) {
-            // Log.d(TAG, "TTS文件生成成功: ${outputFile.absolutePath}, 大小: ${outputFile.length()} bytes")
+            Log.d(TAG, "TTS文件生成成功: ${outputFile.absolutePath}, 大小: ${outputFile.length()} bytes")
             outputFile
         } else {
             outputFile.delete()
@@ -226,7 +226,7 @@ object TTSUtils {
         tts?.shutdown()
         tts = null
         isInitialized = false
-        // Log.d(TAG, "TTS资源已释放")
+        Log.d(TAG, "TTS资源已释放")
     }
     
     /**

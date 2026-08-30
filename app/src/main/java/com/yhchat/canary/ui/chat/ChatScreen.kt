@@ -280,7 +280,7 @@ fun ChatScreen(
     // 处理搜索跳转：当有搜索目标消息ID时，自动跳转到该消息
     LaunchedEffect(searchTargetMsgId, searchTargetMsgSeq) {
         if (!searchTargetMsgId.isNullOrEmpty()) {
-            android.util.// Log.d("ChatScreen", "🔍 搜索跳转：尝试定位到消息 $searchTargetMsgId (seq: $searchTargetMsgSeq)")
+            android.util.Log.d("ChatScreen", "🔍 搜索跳转：尝试定位到消息 $searchTargetMsgId (seq: $searchTargetMsgSeq)")
             // 延迟一下确保聊天已初始化
             kotlinx.coroutines.delay(500)
             viewModel.loadMessageByIdAndScroll(searchTargetMsgId, searchTargetMsgSeq)
@@ -293,7 +293,7 @@ fun ChatScreen(
         if (!targetId.isNullOrEmpty() && messages.isNotEmpty()) {
             val targetIndex = reversedMessages.indexOfFirst { it.msgId == targetId }
             if (targetIndex != -1) {
-                android.util.// Log.d("ChatScreen", "🎯 找到跳转目标消息，索引: $targetIndex, msgId: $targetId")
+                android.util.Log.d("ChatScreen", "🎯 找到跳转目标消息，索引: $targetIndex, msgId: $targetId")
                 highlightedMessageId = targetId
                 listState.animateScrollToItem(targetIndex)
                 viewModel.clearScrollToMsgId()
@@ -341,7 +341,7 @@ fun ChatScreen(
     // 处理图片发送
     LaunchedEffect(imageUriToSend) {
         imageUriToSend?.let { uri ->
-            android.util.// Log.d("ChatScreen", "收到待发送的图片URI: $uri")
+            android.util.Log.d("ChatScreen", "收到待发送的图片URI: $uri")
             viewModel.uploadAndSendImage(
                 context = context,
                 imageUri = uri,
@@ -367,7 +367,7 @@ fun ChatScreen(
     // 监听待发送的文件
     LaunchedEffect(fileUriToSend) {
         fileUriToSend?.let { uri ->
-            android.util.// Log.d("ChatScreen", "📁 收到待发送的文件URI: $uri")
+            android.util.Log.d("ChatScreen", "📁 收到待发送的文件URI: $uri")
             viewModel.uploadAndSendFile(
                 context = context,
                 fileUri = uri,
@@ -393,7 +393,7 @@ fun ChatScreen(
     // 监听待发送的视频
     LaunchedEffect(videoUriToSend) {
         videoUriToSend?.let { uri ->
-            android.util.// Log.d("ChatScreen", "📹 收到待发送的视频URI: $uri")
+            android.util.Log.d("ChatScreen", "📹 收到待发送的视频URI: $uri")
             viewModel.uploadAndSendVideo(
                 context = context,
                 videoUri = uri,
@@ -452,7 +452,7 @@ fun ChatScreen(
                 draft != inputText && 
                 (currentTime - lastInputTime > 100)) {
                 
-                android.util.// Log.d("ChatScreen", "🔄 应用远程草稿同步: '${draft.take(50)}${if (draft.length > 50) "..." else ""}'")
+                android.util.Log.d("ChatScreen", "🔄 应用远程草稿同步: '${draft.take(50)}${if (draft.length > 50) "..." else ""}'")
                 inputText = draft
                 lastAppliedDraft = draft
                 
@@ -460,7 +460,7 @@ fun ChatScreen(
                 delay(300)
                 viewModel.clearRemoteDraftInput()
             } else {
-                android.util.// Log.d("ChatScreen", "⏭️ 跳过远程草稿（用户正在输入或内容相同）")
+                android.util.Log.d("ChatScreen", "⏭️ 跳过远程草稿（用户正在输入或内容相同）")
                 viewModel.clearRemoteDraftInput()
             }
         }
@@ -773,7 +773,7 @@ fun ChatScreen(
                             },
                             onAvatarLongClick = { userId, userName ->
                                 // 长按头像@用户
-                                android.util.// Log.d("ChatScreen", "长按头像@用户: userId=$userId, userName=$userName")
+                                android.util.Log.d("ChatScreen", "长按头像@用户: userId=$userId, userName=$userName")
                                 
                                 // 添加@用户到映射表
                                 mentionedUsers = mentionedUsers + (userId to userName)
@@ -813,13 +813,13 @@ fun ChatScreen(
                                             ?.substringAfterLast("/")
                                             ?.substringBefore("?")
                                             ?.takeIf { it.isNotBlank() }
-                                        android.util.// Log.d("ChatScreen", "📷 引用图片消息: url=$quotedImageUrl")
+                                        android.util.Log.d("ChatScreen", "📷 引用图片消息: url=$quotedImageUrl")
                                     }
                                     10 -> {
                                         // 视频消息
                                         quotedVideoUrl = message.content.videoUrl
                                         quotedVideoTime = message.content.audioTime // 视频时长字段
-                                        android.util.// Log.d("ChatScreen", "🎬 引用视频消息: url=$quotedVideoUrl, time=$quotedVideoTime")
+                                        android.util.Log.d("ChatScreen", "🎬 引用视频消息: url=$quotedVideoUrl, time=$quotedVideoTime")
                                     }
                                     else -> {
                                         // 清空媒体引用
@@ -842,7 +842,7 @@ fun ChatScreen(
                             },
                             onRecall = { msgId ->
                                 // 撤回消息 - 执行撤回，动画自动触发
-                                android.util.// Log.d("ChatScreen", "🗑️ 用户点击撤回: msgId=$msgId")
+                                android.util.Log.d("ChatScreen", "🗑️ 用户点击撤回: msgId=$msgId")
                                 viewModel.recallMessage(msgId)
                                 // 动画会在消息状态更新时自动触发
                             },
@@ -884,7 +884,7 @@ fun ChatScreen(
                             },
                             onPlusOne = { msg ->
                                 // +1 发送同样消息
-                                android.util.// Log.d("ChatScreen", "🔄 +1消息: contentType=${msg.contentType}, msgId=${msg.msgId}")
+                                android.util.Log.d("ChatScreen", "🔄 +1消息: contentType=${msg.contentType}, msgId=${msg.msgId}")
                                 
                                 when (msg.contentType) {
                                     1, 3, 8 -> {
@@ -905,7 +905,7 @@ fun ChatScreen(
                                             val height = msg.content.height?.toInt() ?: 0
                                             val fileSize = msg.content.fileSize ?: 0L
                                             
-                                            android.util.// Log.d("ChatScreen", "📷 +1图片: url=$imageUrl, size=${width}x${height}")
+                                            android.util.Log.d("ChatScreen", "📷 +1图片: url=$imageUrl, size=${width}x${height}")
                                             viewModel.sendImageByUrl(imageUrl, width, height, fileSize)
                                             Toast.makeText(context, "+1 图片消息已发送", Toast.LENGTH_SHORT).show()
                                         } ?: Toast.makeText(context, "图片链接为空", Toast.LENGTH_SHORT).show()
@@ -917,7 +917,7 @@ fun ChatScreen(
                                         val fileSize = msg.content.fileSize
                                         
                                         if (!fileName.isNullOrEmpty() && !fileUrl.isNullOrEmpty()) {
-                                            android.util.// Log.d("ChatScreen", "📁 +1文件: name=$fileName, url=$fileUrl")
+                                            android.util.Log.d("ChatScreen", "📁 +1文件: name=$fileName, url=$fileUrl")
                                             viewModel.sendFileByUrl(fileName, fileUrl, fileSize ?: 0L)
                                             Toast.makeText(context, "+1 文件消息已发送", Toast.LENGTH_SHORT).show()
                                         } else {
@@ -932,7 +932,7 @@ fun ChatScreen(
                                         val postContentType = msg.content.postContentType
                                         
                                         if (!postId.isNullOrEmpty()) {
-                                            android.util.// Log.d("ChatScreen", "📄 +1文章: id=$postId, title=$postTitle")
+                                            android.util.Log.d("ChatScreen", "📄 +1文章: id=$postId, title=$postTitle")
                                             viewModel.sendPostMessage(
                                                 postId = postId,
                                                 postTitle = postTitle ?: "",
@@ -954,7 +954,7 @@ fun ChatScreen(
                                         when {
                                             !expressionId.isNullOrEmpty() && expressionId != "0" -> {
                                                 // 个人收藏表情
-                                                android.util.// Log.d("ChatScreen", "😀 +1个人表情: id=$expressionId")
+                                                android.util.Log.d("ChatScreen", "😀 +1个人表情: id=$expressionId")
                                                 if (!imageUrl.isNullOrEmpty()) {
                                                     val expression = com.yhchat.canary.data.model.Expression(
                                                         id = expressionId.toLongOrNull() ?: 0L,
@@ -971,7 +971,7 @@ fun ChatScreen(
                                             }
                                             stickerPackId != null && stickerPackId != 0L && stickerItemId != null && stickerItemId != 0L -> {
                                                 // 表情包贴纸
-                                                android.util.// Log.d("ChatScreen", "🎭 +1表情包: packId=$stickerPackId, itemId=$stickerItemId")
+                                                android.util.Log.d("ChatScreen", "🎭 +1表情包: packId=$stickerPackId, itemId=$stickerItemId")
                                                 if (!imageUrl.isNullOrEmpty()) {
                                                     val stickerUrl = msg.content.stickerUrl ?: imageUrl
                                                     val stickerItem = com.yhchat.canary.data.model.StickerItem(
@@ -996,7 +996,7 @@ fun ChatScreen(
                                     10 -> {
                                         // 视频消息
                                         msg.content.videoUrl?.let { videoUrl ->
-                                            android.util.// Log.d("ChatScreen", "🎬 +1视频: url=$videoUrl")
+                                            android.util.Log.d("ChatScreen", "🎬 +1视频: url=$videoUrl")
                                             viewModel.sendVideoByUrl(videoUrl)
                                             Toast.makeText(context, "+1 视频消息已发送", Toast.LENGTH_SHORT).show()
                                         } ?: Toast.makeText(context, "视频链接为空", Toast.LENGTH_SHORT).show()
@@ -1007,7 +1007,7 @@ fun ChatScreen(
                                         val audioTime = msg.content.audioTime
                                         
                                         if (!audioUrl.isNullOrEmpty() && audioTime != null) {
-                                            android.util.// Log.d("ChatScreen", "🎤 +1语音: url=$audioUrl, duration=${audioTime}s")
+                                            android.util.Log.d("ChatScreen", "🎤 +1语音: url=$audioUrl, duration=${audioTime}s")
                                             viewModel.sendAudioByUrl(audioUrl, audioTime)
                                             Toast.makeText(context, "+1 语音消息已发送", Toast.LENGTH_SHORT).show()
                                         } else {
@@ -1282,9 +1282,9 @@ fun ChatScreen(
                         }
                         
                         if (selectedInstruction != null) {
-                            android.util.// Log.d("ChatScreen", "📤 发送指令消息: /${selectedInstruction?.name}, commandId=${selectedInstruction?.id}, text=$messageText")
+                            android.util.Log.d("ChatScreen", "📤 发送指令消息: /${selectedInstruction?.name}, commandId=${selectedInstruction?.id}, text=$messageText")
                         } else {
-                            android.util.// Log.d("ChatScreen", "📤 发送普通消息: $messageText" + 
+                            android.util.Log.d("ChatScreen", "📤 发送普通消息: $messageText" + 
                                 if (mentionedIdsList.isNotEmpty()) ", @${mentionedIdsList.size}人: $mentionedIdsList" else ""
                             )
                         }
@@ -1413,12 +1413,12 @@ fun ChatScreen(
                     quotedVideoTime = null
                 },
                 onInstructionClick = { instruction ->
-                    android.util.// Log.d("ChatScreen", "🎯 用户点击指令: /${instruction.name} (id=${instruction.id}, type=${instruction.type})")
+                    android.util.Log.d("ChatScreen", "🎯 用户点击指令: /${instruction.name} (id=${instruction.id}, type=${instruction.type})")
                     
                     // 根据指令类型处理
                     when (instruction.type) {
                         1 -> {
-                            android.util.// Log.d("ChatScreen", "📝 普通指令，应用默认文本: ${instruction.defaultText}")
+                            android.util.Log.d("ChatScreen", "📝 普通指令，应用默认文本: ${instruction.defaultText}")
                             // 普通指令：应用默认文本（如果有）
                             selectedInstruction = instruction
                             if (instruction.defaultText.isNotEmpty() && inputText.isBlank()) {
@@ -1426,10 +1426,10 @@ fun ChatScreen(
                             }
                         }
                         2 -> {
-                            android.util.// Log.d("ChatScreen", "⚡ 直发指令，立即发送消息")
+                            android.util.Log.d("ChatScreen", "⚡ 直发指令，立即发送消息")
                             // 直发指令：发送 "/{指令名称}"
                             val textToSend = "/${instruction.name}"
-                            android.util.// Log.d("ChatScreen", "📤 直发指令发送文本: '$textToSend'")
+                            android.util.Log.d("ChatScreen", "📤 直发指令发送文本: '$textToSend'")
                             
                             // 立即发送消息
                             selectedInstruction = instruction
@@ -1455,7 +1455,7 @@ fun ChatScreen(
                             quotedVideoTime = null
                         }
                         5 -> {
-                            android.util.// Log.d("ChatScreen", "📋 表单指令，打开表单填写界面")
+                            android.util.Log.d("ChatScreen", "📋 表单指令，打开表单填写界面")
                             // 表单指令：打开表单填写Activity
                             com.yhchat.canary.ui.bot.InstructionFormActivity.start(
                                 context = context,

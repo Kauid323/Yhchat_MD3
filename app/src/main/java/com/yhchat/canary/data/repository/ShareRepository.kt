@@ -42,14 +42,14 @@ class ShareRepository @Inject constructor(
                 chatName = chatName
             )
             
-            // Log.d(TAG, "创建分享链接: chatId=$chatId, chatType=$chatType")
+            Log.d(TAG, "创建分享链接: chatId=$chatId, chatType=$chatType")
             
             val response = apiService.createShareLink(token, request)
             
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 分享链接创建成功: ${body.data.getFullShareUrl()}")
+                    Log.d(TAG, "✅ 分享链接创建成功: ${body.data.getFullShareUrl()}")
                     Result.success(body.data)
                 } else {
                     val error = "创建分享链接失败: ${body?.msg}"

@@ -233,7 +233,7 @@ fun ChatTopAppBar(
                 }
                 if (chatType == 1) {
                     YhIconButton(onClick = {
-                        android.util.// Log.d("ChatTopAppBar", "Opening user detail: chatId=$chatId, chatName=$chatName")
+                        android.util.Log.d("ChatTopAppBar", "Opening user detail: chatId=$chatId, chatName=$chatName")
                         com.yhchat.canary.ui.user.UserDetailActivity.start(
                             context = context,
                             userId = chatId,
@@ -248,7 +248,7 @@ fun ChatTopAppBar(
                 }
                 if (chatType == 2) {
                     YhIconButton(onClick = {
-                        android.util.// Log.d("ChatTopAppBar", "Opening group info: chatId=$chatId, chatName=$chatName")
+                        android.util.Log.d("ChatTopAppBar", "Opening group info: chatId=$chatId, chatName=$chatName")
                         val intent = Intent(context, com.yhchat.canary.ui.group.GroupInfoActivity::class.java)
                         intent.putExtra(com.yhchat.canary.ui.group.GroupInfoActivity.EXTRA_GROUP_ID, chatId)
                         intent.putExtra(com.yhchat.canary.ui.group.GroupInfoActivity.EXTRA_GROUP_NAME, safeChatName)
@@ -262,7 +262,7 @@ fun ChatTopAppBar(
                 }
                 if (chatType == 3) {
                     YhIconButton(onClick = {
-                        android.util.// Log.d("ChatTopAppBar", "Opening bot detail: chatId=$chatId, chatName=$chatName")
+                        android.util.Log.d("ChatTopAppBar", "Opening bot detail: chatId=$chatId, chatName=$chatName")
                         com.yhchat.canary.ui.bot.BotDetailActivity.start(
                             context = context,
                             botId = chatId,
@@ -376,7 +376,7 @@ fun ChatTopAppBar(
             // 用户详情按钮（只在单聊时显示）
             if (chatType == 1) {
                 YhIconButton(onClick = {
-                    android.util.// Log.d("ChatTopAppBar", "Opening user detail: chatId=$chatId, chatName=$chatName")
+                    android.util.Log.d("ChatTopAppBar", "Opening user detail: chatId=$chatId, chatName=$chatName")
                     com.yhchat.canary.ui.user.UserDetailActivity.start(
                         context = context,
                         userId = chatId,
@@ -392,7 +392,7 @@ fun ChatTopAppBar(
             // 群聊信息菜单（只在群聊时显示）
             if (chatType == 2) {
                 YhIconButton(onClick = {
-                    android.util.// Log.d("ChatTopAppBar", "Opening group info: chatId=$chatId, chatName=$chatName")
+                    android.util.Log.d("ChatTopAppBar", "Opening group info: chatId=$chatId, chatName=$chatName")
                     val intent = Intent(context, com.yhchat.canary.ui.group.GroupInfoActivity::class.java)
                     intent.putExtra(com.yhchat.canary.ui.group.GroupInfoActivity.EXTRA_GROUP_ID, chatId)
                     intent.putExtra(com.yhchat.canary.ui.group.GroupInfoActivity.EXTRA_GROUP_NAME, safeChatName)
@@ -407,7 +407,7 @@ fun ChatTopAppBar(
             // 机器人信息菜单（只在机器人聊天时显示）
             if (chatType == 3) {
                 YhIconButton(onClick = {
-                    android.util.// Log.d("ChatTopAppBar", "Opening bot detail: chatId=$chatId, chatName=$chatName")
+                    android.util.Log.d("ChatTopAppBar", "Opening bot detail: chatId=$chatId, chatName=$chatName")
                     com.yhchat.canary.ui.bot.BotDetailActivity.start(
                         context = context,
                         botId = chatId,

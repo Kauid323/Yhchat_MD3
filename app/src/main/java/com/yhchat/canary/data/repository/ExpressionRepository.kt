@@ -37,7 +37,7 @@ class ExpressionRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {
-                    // Log.d(TAG, "✅ 获取表情列表成功: ${body.data.expression.size}个表情")
+                    Log.d(TAG, "✅ 获取表情列表成功: ${body.data.expression.size}个表情")
                     Result.success(body.data.expression)
                 } else {
                     val error = "获取表情列表失败: ${response.code()}"
@@ -72,7 +72,7 @@ class ExpressionRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && (body.code == 1 || body.code == 200)) {
-                    // Log.d(TAG, "✅ 添加表情成功 (code: ${body.code})")
+                    Log.d(TAG, "✅ 添加表情成功 (code: ${body.code})")
                     Result.success(true)
                 } else {
                     val error = "添加表情失败: code=${body?.code}, msg=${body?.message ?: "未知错误"}"
@@ -107,7 +107,7 @@ class ExpressionRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && (body.code == 1 || body.code == 200)) {
-                    // Log.d(TAG, "✅ 删除表情成功 (code: ${body.code})")
+                    Log.d(TAG, "✅ 删除表情成功 (code: ${body.code})")
                     Result.success(true)
                 } else {
                     val error = "删除表情失败: code=${body?.code}, msg=${body?.message ?: "未知错误"}"
@@ -142,7 +142,7 @@ class ExpressionRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && (body.code == 1 || body.code == 200)) {
-                    // Log.d(TAG, "✅ 置顶表情成功 (code: ${body.code})")
+                    Log.d(TAG, "✅ 置顶表情成功 (code: ${body.code})")
                     Result.success(true)
                 } else {
                     val error = "置顶表情失败: code=${body?.code}, msg=${body?.message ?: "未知错误"}"
@@ -177,7 +177,7 @@ class ExpressionRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && (body.code == 1 || body.code == 200)) {
-                    // Log.d(TAG, "✅ 添加已有表情成功 (code: ${body.code})")
+                    Log.d(TAG, "✅ 添加已有表情成功 (code: ${body.code})")
                     Result.success(true)
                 } else {
                     val error = "添加已有表情失败: code=${body?.code}, msg=${body?.message ?: "未知错误"}"

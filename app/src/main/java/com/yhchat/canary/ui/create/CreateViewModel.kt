@@ -54,7 +54,7 @@ class CreateViewModel : ViewModel() {
                 uploadResult.fold(
                     onSuccess = { response ->
                         val imageUrl = "https://chat-img.jwznb.com/${response.key}"
-                        // Log.d(TAG, "✅ 群聊头像上传成功: $imageUrl")
+                        Log.d(TAG, "✅ 群聊头像上传成功: $imageUrl")
                         onSuccess(imageUrl)
                         _groupUiState.value = _groupUiState.value.copy(isLoading = false)
                     },
@@ -93,7 +93,7 @@ class CreateViewModel : ViewModel() {
                 uploadResult.fold(
                     onSuccess = { response ->
                         val imageUrl = "https://chat-img.jwznb.com/${response.key}"
-                        // Log.d(TAG, "✅ 机器人头像上传成功: $imageUrl")
+                        Log.d(TAG, "✅ 机器人头像上传成功: $imageUrl")
                         onSuccess(imageUrl)
                         _botUiState.value = _botUiState.value.copy(isLoading = false)
                     },
@@ -120,7 +120,7 @@ class CreateViewModel : ViewModel() {
         onSuccess: (String) -> Unit
     ) {
         viewModelScope.launch {
-            // Log.d(TAG, "🏗️ 创建群聊: name=$name, introduction=$introduction, avatarUrl=$avatarUrl, category=$category, categoryId=$categoryId")
+            Log.d(TAG, "🏗️ 创建群聊: name=$name, introduction=$introduction, avatarUrl=$avatarUrl, category=$category, categoryId=$categoryId")
             _groupUiState.value = _groupUiState.value.copy(isLoading = true, error = null)
 
             groupRepository.createGroup(
@@ -131,7 +131,7 @@ class CreateViewModel : ViewModel() {
                 categoryId = categoryId
             ).fold(
                 onSuccess = { groupId ->
-                    // Log.d(TAG, "✅ 群聊创建成功: groupId=$groupId")
+                    Log.d(TAG, "✅ 群聊创建成功: groupId=$groupId")
                     _groupUiState.value = _groupUiState.value.copy(isLoading = false)
                     onSuccess(groupId)
                 },
@@ -154,7 +154,7 @@ class CreateViewModel : ViewModel() {
         onSuccess: (String) -> Unit
     ) {
         viewModelScope.launch {
-            // Log.d(TAG, "🤖 创建机器人: name=$name, introduction=$introduction, avatarUrl=$avatarUrl, isPrivate=$isPrivate")
+            Log.d(TAG, "🤖 创建机器人: name=$name, introduction=$introduction, avatarUrl=$avatarUrl, isPrivate=$isPrivate")
             _botUiState.value = _botUiState.value.copy(isLoading = true, error = null)
 
             botRepository.createBot(
@@ -164,7 +164,7 @@ class CreateViewModel : ViewModel() {
                 isPrivate = isPrivate
             ).fold(
                 onSuccess = { botId ->
-                    // Log.d(TAG, "✅ 机器人创建成功: botId=$botId")
+                    Log.d(TAG, "✅ 机器人创建成功: botId=$botId")
                     _botUiState.value = _botUiState.value.copy(isLoading = false)
                     onSuccess(botId)
                 },

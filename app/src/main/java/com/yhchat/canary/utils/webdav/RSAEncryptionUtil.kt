@@ -48,7 +48,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
      */
     suspend fun getPublicKey(): ByteArray? = withContext(Dispatchers.IO) {
         return@withContext try {
-            android.util.// Log.d("RSAEncryptionUtil", "开始获取公钥: $PUBLIC_KEY_URL")
+            android.util.Log.d("RSAEncryptionUtil", "开始获取公钥: $PUBLIC_KEY_URL")
             
             val client = OkHttpClient()
             val request = Request.Builder()
@@ -58,7 +58,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 val bytes = response.body?.bytes()
-                android.util.// Log.d("RSAEncryptionUtil", "公钥获取成功，大小: ${bytes?.size} 字节")
+                android.util.Log.d("RSAEncryptionUtil", "公钥获取成功，大小: ${bytes?.size} 字节")
                 bytes
             } else {
                 android.util.Log.w("RSAEncryptionUtil", "获取公钥失败: HTTP ${response.code}，使用硬编码公钥")
@@ -83,23 +83,23 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
         return@withContext try {
             // 转换为字符串
             val pemContent = String(publicKeyBytes, Charsets.UTF_8)
-            android.util.// Log.d("RSAEncryptionUtil", "原始公钥内容长度: ${pemContent.length}")
+            android.util.Log.d("RSAEncryptionUtil", "原始公钥内容长度: ${pemContent.length}")
             
             // 解析公钥
             val publicKey = parseRSAPublicKey(pemContent) ?: return@withContext null
             
-            android.util.// Log.d("RSAEncryptionUtil", "公钥创建成功，算法: ${publicKey.algorithm}")
+            android.util.Log.d("RSAEncryptionUtil", "公钥创建成功，算法: ${publicKey.algorithm}")
             
             // 创建加密器，使用 PKCS1Padding 匹配 Python 的 PKCS1v15
             val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
             cipher.init(Cipher.ENCRYPT_MODE, publicKey)
             
-            android.util.// Log.d("RSAEncryptionUtil", "使用加密算法: ${cipher.algorithm}")
+            android.util.Log.d("RSAEncryptionUtil", "使用加密算法: ${cipher.algorithm}")
             
             // 加密数据
             val encryptedData = cipher.doFinal(dataToEncrypt)
             
-            android.util.// Log.d("RSAEncryptionUtil", "加密成功，原始数据长度: ${dataToEncrypt.size}，加密数据长度: ${encryptedData.size}")
+            android.util.Log.d("RSAEncryptionUtil", "加密成功，原始数据长度: ${dataToEncrypt.size}，加密数据长度: ${encryptedData.size}")
             
             // Base64 编码（NO_WRAP 匹配 Python）
             Base64.encodeToString(encryptedData, Base64.NO_WRAP)
@@ -128,7 +128,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
             // 移除所有非Base64字符
             cleanContent = cleanContent.replace(Regex("[^A-Za-z0-9+/=]"), "")
             
-            android.util.// Log.d("RSAEncryptionUtil", "清理后的公钥内容长度: ${cleanContent.length}")
+            android.util.Log.d("RSAEncryptionUtil", "清理后的公钥内容长度: ${cleanContent.length}")
             
             if (cleanContent.isEmpty()) {
                 android.util.Log.e("RSAEncryptionUtil", "公钥内容为空")
@@ -137,19 +137,19 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
             
             // Base64 解码
             val keyBytes = Base64.decode(cleanContent, Base64.DEFAULT)
-            android.util.// Log.d("RSAEncryptionUtil", "解码后的公钥字节长度: ${keyBytes.size}")
+            android.util.Log.d("RSAEncryptionUtil", "解码后的公钥字节长度: ${keyBytes.size}")
             
             // 尝试多个Provider，避免Android Keystore
             val providers = listOf("AndroidOpenSSL", "Conscrypt", "BC")
             
             for (providerName in providers) {
                 try {
-                    android.util.// Log.d("RSAEncryptionUtil", "尝试使用Provider: $providerName")
+                    android.util.Log.d("RSAEncryptionUtil", "尝试使用Provider: $providerName")
                     val keyFactory = KeyFactory.getInstance("RSA", providerName)
                     
                     // 首先尝试 X.509 格式
                     try {
-                        android.util.// Log.d("RSAEncryptionUtil", "尝试X.509格式解析")
+                        android.util.Log.d("RSAEncryptionUtil", "尝试X.509格式解析")
                         val x509KeySpec = X509EncodedKeySpec(keyBytes)
                         return keyFactory.generatePublic(x509KeySpec)
                     } catch (e: Exception) {
@@ -158,7 +158,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
                     
                     // 尝试 PKCS#1 格式转换为 X.509
                     try {
-                        android.util.// Log.d("RSAEncryptionUtil", "尝试PKCS#1格式解析")
+                        android.util.Log.d("RSAEncryptionUtil", "尝试PKCS#1格式解析")
                         val x509Bytes = convertPkcs1ToX509(keyBytes)
                         val x509KeySpec = X509EncodedKeySpec(x509Bytes)
                         return keyFactory.generatePublic(x509KeySpec)
@@ -183,7 +183,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
      * 将PKCS#1格式转换为X.509格式
      */
     private fun convertPkcs1ToX509(pkcs1Bytes: ByteArray): ByteArray {
-        android.util.// Log.d("RSAEncryptionUtil", "开始PKCS#1到X.509转换，输入长度: ${pkcs1Bytes.size}")
+        android.util.Log.d("RSAEncryptionUtil", "开始PKCS#1到X.509转换，输入长度: ${pkcs1Bytes.size}")
         
         // RSA公钥的OID序列: 1.2.840.113549.1.1.1 (RSA加密)
         val rsaOidSequence = byteArrayOf(
@@ -229,7 +229,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
         // PKCS#1公钥数据
         System.arraycopy(pkcs1Bytes, 0, x509Bytes, offset, pkcs1Bytes.size)
         
-        android.util.// Log.d("RSAEncryptionUtil", "X.509转换完成，输出长度: ${x509Bytes.size}")
+        android.util.Log.d("RSAEncryptionUtil", "X.509转换完成，输出长度: ${x509Bytes.size}")
         return x509Bytes
     }
     
@@ -264,7 +264,7 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
      */
     suspend fun prepareEncryptionParams(): Triple<String, String, Pair<ByteArray, ByteArray>>? = withContext(Dispatchers.IO) {
         return@withContext try {
-            android.util.// Log.d("RSAEncryptionUtil", "开始准备加密参数")
+            android.util.Log.d("RSAEncryptionUtil", "开始准备加密参数")
             
             // 1. 获取公钥
             val publicKeyBytes = getPublicKey() ?: return@withContext null
@@ -273,17 +273,17 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
             val encryptKeyRaw = generateRandomBytes(16)
             val encryptIvRaw = generateRandomBytes(16)
             
-            android.util.// Log.d("RSAEncryptionUtil", "生成的密钥长度: ${encryptKeyRaw.size}, IV长度: ${encryptIvRaw.size}")
-            android.util.// Log.d("RSAEncryptionUtil", "密钥: ${Base64.encodeToString(encryptKeyRaw, Base64.NO_WRAP)}")
-            android.util.// Log.d("RSAEncryptionUtil", "IV: ${Base64.encodeToString(encryptIvRaw, Base64.NO_WRAP)}")
+            android.util.Log.d("RSAEncryptionUtil", "生成的密钥长度: ${encryptKeyRaw.size}, IV长度: ${encryptIvRaw.size}")
+            android.util.Log.d("RSAEncryptionUtil", "密钥: ${Base64.encodeToString(encryptKeyRaw, Base64.NO_WRAP)}")
+            android.util.Log.d("RSAEncryptionUtil", "IV: ${Base64.encodeToString(encryptIvRaw, Base64.NO_WRAP)}")
             
             // 3. 使用公钥加密
             val encryptKey = rsaEncrypt(publicKeyBytes, encryptKeyRaw) ?: return@withContext null
             val encryptIv = rsaEncrypt(publicKeyBytes, encryptIvRaw) ?: return@withContext null
             
-            android.util.// Log.d("RSAEncryptionUtil", "加密参数准备成功")
-            android.util.// Log.d("RSAEncryptionUtil", "加密后密钥长度: ${encryptKey.length}")
-            android.util.// Log.d("RSAEncryptionUtil", "加密后IV长度: ${encryptIv.length}")
+            android.util.Log.d("RSAEncryptionUtil", "加密参数准备成功")
+            android.util.Log.d("RSAEncryptionUtil", "加密后密钥长度: ${encryptKey.length}")
+            android.util.Log.d("RSAEncryptionUtil", "加密后IV长度: ${encryptIv.length}")
             
             // 4. 返回加密后的参数和原始密钥对
             Triple(encryptKey, encryptIv, Pair(encryptKeyRaw, encryptIvRaw))
@@ -308,17 +308,17 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
     ): String? = withContext(Dispatchers.Default) {
         return@withContext try {
             if (encryptedPassword.isEmpty()) {
-                android.util.// Log.d("RSAEncryptionUtil", "密码为空，返回空字符串")
+                android.util.Log.d("RSAEncryptionUtil", "密码为空，返回空字符串")
                 return@withContext ""
             }
             
-            android.util.// Log.d("RSAEncryptionUtil", "开始解密WebDAV密码")
-            android.util.// Log.d("RSAEncryptionUtil", "加密密码长度: ${encryptedPassword.length}")
-            android.util.// Log.d("RSAEncryptionUtil", "密钥长度: ${key.size}, IV长度: ${iv.size}")
+            android.util.Log.d("RSAEncryptionUtil", "开始解密WebDAV密码")
+            android.util.Log.d("RSAEncryptionUtil", "加密密码长度: ${encryptedPassword.length}")
+            android.util.Log.d("RSAEncryptionUtil", "密钥长度: ${key.size}, IV长度: ${iv.size}")
             
             // 1. Base64解码
             val ciphertext = Base64.decode(encryptedPassword, Base64.DEFAULT)
-            android.util.// Log.d("RSAEncryptionUtil", "解码后密文长度: ${ciphertext.size}")
+            android.util.Log.d("RSAEncryptionUtil", "解码后密文长度: ${ciphertext.size}")
             
             // 2. 创建AES解密器，使用CBC模式和PKCS5Padding (等同于PKCS7)
             val keySpec = SecretKeySpec(key, "AES")
@@ -328,11 +328,11 @@ yQGy3WJ+xqP1aUJardDi1g5VPLp0jQcg7k0QP98NfxhdOb2jiH0ClkcCAwEAAQ==
             
             // 3. 解密
             val decrypted = cipher.doFinal(ciphertext)
-            android.util.// Log.d("RSAEncryptionUtil", "解密后数据长度: ${decrypted.size}")
+            android.util.Log.d("RSAEncryptionUtil", "解密后数据长度: ${decrypted.size}")
             
             // 4. 转换为字符串
             val password = String(decrypted, Charsets.UTF_8)
-            android.util.// Log.d("RSAEncryptionUtil", "解密成功，密码长度: ${password.length}")
+            android.util.Log.d("RSAEncryptionUtil", "解密成功，密码长度: ${password.length}")
             
             password
         } catch (e: Exception) {

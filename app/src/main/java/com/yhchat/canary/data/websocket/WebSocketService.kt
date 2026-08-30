@@ -141,11 +141,11 @@ class WebSocketService @Inject constructor(
         currentPlatform = platform
 
         if (isConnected && webSocket != null) {
-            // Log.d(tag, "Already connected")
+            Log.d(tag, "Already connected")
             return
         }
         if (isConnecting) {
-            // Log.d(tag, "Connect already in progress, skip duplicate request")
+            Log.d(tag, "Connect already in progress, skip duplicate request")
             return
         }
 
@@ -155,7 +155,7 @@ class WebSocketService @Inject constructor(
         
         // 确保完全清理旧连接
         webSocket?.let { oldSocket ->
-            // Log.d(tag, "Cleaning up old WebSocket connection")
+            Log.d(tag, "Cleaning up old WebSocket connection")
             cleanup()
             oldSocket.close(1000, "Reconnecting")
             webSocket = null
@@ -173,7 +173,7 @@ class WebSocketService @Inject constructor(
         }
         
         try {
-            // Log.d(tag, "Connecting to WebSocket...")
+            Log.d(tag, "Connecting to WebSocket...")
             _connectionState.emit(ConnectionState.Connecting)
             
             val request = Request.Builder()
@@ -186,7 +186,7 @@ class WebSocketService @Inject constructor(
                         Log.w(tag, "Ignore onOpen from stale socket")
                         return
                     }
-                    // Log.d(tag, "WebSocket opened")
+                    Log.d(tag, "WebSocket opened")
                     isConnected = true
                     isConnecting = false
                     reconnectAttempts = 0
@@ -206,7 +206,7 @@ class WebSocketService @Inject constructor(
                     }
                     
                     val loginJson = gson.toJson(loginData)
-                    // Log.d(tag, "Sending login: $loginJson")
+                    Log.d(tag, "Sending login: $loginJson")
                     webSocket.send(loginJson)
                     
                     scope.launch {
@@ -223,7 +223,7 @@ class WebSocketService @Inject constructor(
                         return
                     }
                     try {
-                        // Log.d(tag, "📩 Received binary message (${bytes.size} bytes)")
+                        Log.d(tag, "📩 Received binary message (${bytes.size} bytes)")
                         handleBinaryMessage(bytes.toByteArray())
                     } catch (e: Exception) {
                         Log.e(tag, "❌ Error handling binary message", e)
@@ -237,7 +237,7 @@ class WebSocketService @Inject constructor(
                         return
                     }
                     try {
-                        // Log.d(tag, "Received text message (unexpected): $text")
+                        Log.d(tag, "Received text message (unexpected): $text")
                         // WebSocket 应该只返回二进制 protobuf 消息，不应该有文本消息
                         // 如果收到文本消息，可能是服务器错误或连接问题
                     } catch (e: Exception) {
@@ -250,7 +250,7 @@ class WebSocketService @Inject constructor(
                         Log.w(tag, "Ignore onClosing from stale socket")
                         return
                     }
-                    // Log.d(tag, "WebSocket closing: $code $reason")
+                    Log.d(tag, "WebSocket closing: $code $reason")
                 }
                 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -258,7 +258,7 @@ class WebSocketService @Inject constructor(
                         Log.w(tag, "Ignore onClosed from stale socket")
                         return
                     }
-                    // Log.d(tag, "WebSocket closed: $code $reason")
+                    Log.d(tag, "WebSocket closed: $code $reason")
                     cleanup()
                     this@WebSocketService.webSocket = null
                     isConnecting = false
@@ -303,7 +303,7 @@ class WebSocketService @Inject constructor(
 
     private fun scheduleReconnect(reason: String) {
         if (!shouldReconnect) {
-            // Log.d(tag, "Reconnect disabled, skip. reason=$reason")
+            Log.d(tag, "Reconnect disabled, skip. reason=$reason")
             return
         }
 
@@ -314,12 +314,12 @@ class WebSocketService @Inject constructor(
         }
 
         if (isConnected) {
-            // Log.d(tag, "Already connected, skip reconnect scheduling")
+            Log.d(tag, "Already connected, skip reconnect scheduling")
             return
         }
 
         if (reconnectJob?.isActive == true) {
-            // Log.d(tag, "Reconnect already scheduled, skip duplicate. reason=$reason")
+            Log.d(tag, "Reconnect already scheduled, skip duplicate. reason=$reason")
             return
         }
 
@@ -330,11 +330,11 @@ class WebSocketService @Inject constructor(
         val delayMs = (backoffDelay + jitter).coerceAtMost(30000L)
 
         reconnectJob = scope.launch {
-            // Log.d(tag, "Scheduling reconnect in ${delayMs}ms (attempt=$attempt, reason=$reason)")
+            Log.d(tag, "Scheduling reconnect in ${delayMs}ms (attempt=$attempt, reason=$reason)")
             delay(delayMs)
 
             if (!shouldReconnect || isConnected) {
-                // Log.d(tag, "Reconnect canceled by state change")
+                Log.d(tag, "Reconnect canceled by state change")
                 return@launch
             }
 
@@ -370,7 +370,7 @@ class WebSocketService @Inject constructor(
             }
             
             val draftJson = gson.toJson(draftData)
-            // Log.d(tag, "Sending draft input: $draftJson")
+            Log.d(tag, "Sending draft input: $draftJson")
             webSocket?.send(draftJson)
             
         } catch (e: Exception) {
@@ -382,7 +382,7 @@ class WebSocketService @Inject constructor(
      * 断开连接
      */
     fun disconnect() {
-        // Log.d(tag, "Disconnecting WebSocket")
+        Log.d(tag, "Disconnecting WebSocket")
         shouldReconnect = false
         reconnectJob?.cancel()
         reconnectJob = null
@@ -409,7 +409,7 @@ class WebSocketService @Inject constructor(
                     }
                     
                     val heartbeatJson = gson.toJson(heartbeatData)
-                    // Log.d(tag, "Sending heartbeat")
+                    Log.d(tag, "Sending heartbeat")
                     webSocket.send(heartbeatJson)
                     
                 } catch (e: Exception) {
@@ -430,16 +430,16 @@ class WebSocketService @Inject constructor(
             val cmd = tempMsg.info.cmd
             val seq = tempMsg.info.seq
             
-            // Log.d(tag, "Message command: $cmd, seq: $seq")
+            Log.d(tag, "Message command: $cmd, seq: $seq")
             
             when (cmd) {
                 "login_ack" -> {
-                    // Log.d(tag, "✅ Received login_ack (binary protobuf)")
+                    Log.d(tag, "✅ Received login_ack (binary protobuf)")
                     // 登录响应，连接已完全建立（如果服务器有发送的话）
                 }
                 
                 "heartbeat_ack" -> {
-                    // Log.d(tag, "✅ Received heartbeat_ack")
+                    Log.d(tag, "✅ Received heartbeat_ack")
                     // 心跳响应，连接正常
                 }
                 
@@ -451,17 +451,17 @@ class WebSocketService @Inject constructor(
                         val chatMessage = convertWsMsgToMessage(protoMsg)
                         
                         // 详细日志用于调试
-                        // Log.d(tag, "Push message details:")
-                        // Log.d(tag, "  - Message ID: ${chatMessage.msgId}")
-                        // Log.d(tag, "  - Sender: ${chatMessage.sender.chatId} (type: ${chatMessage.sender.chatType})")
-                        // Log.d(tag, "  - Target Chat: ${chatMessage.chatId} (type: ${chatMessage.chatType})")
-                        // Log.d(tag, "  - Receiver: ${chatMessage.recvId}")
-                        // Log.d(tag, "  - Content: ${chatMessage.content.text?.take(50) ?: "[非文本消息]"}")
+                        Log.d(tag, "Push message details:")
+                        Log.d(tag, "  - Message ID: ${chatMessage.msgId}")
+                        Log.d(tag, "  - Sender: ${chatMessage.sender.chatId} (type: ${chatMessage.sender.chatType})")
+                        Log.d(tag, "  - Target Chat: ${chatMessage.chatId} (type: ${chatMessage.chatType})")
+                        Log.d(tag, "  - Receiver: ${chatMessage.recvId}")
+                        Log.d(tag, "  - Content: ${chatMessage.content.text?.take(50) ?: "[非文本消息]"}")
                         
                         scope.launch {
                             val senderId = chatMessage.sender.chatId
                             if (blocklistRepository.isUserBlocked(senderId)) {
-                                // Log.d(tag, "Blocked user $senderId message ignored: ${chatMessage.msgId}")
+                                Log.d(tag, "Blocked user $senderId message ignored: ${chatMessage.msgId}")
                                 return@launch
                             }
                             
@@ -475,7 +475,7 @@ class WebSocketService @Inject constructor(
                             showMessageNotificationAsync(chatMessage)
                         }
                         
-                        // Log.d(tag, "Received new message: ${chatMessage.msgId}")
+                        Log.d(tag, "Received new message: ${chatMessage.msgId}")
                     }
                 }
                 
@@ -486,7 +486,7 @@ class WebSocketService @Inject constructor(
                         val protoMsg = editMessage.data.msg
                         val chatMessage = convertWsMsgToMessage(protoMsg)
 
-                        // Log.d(
+                        Log.d(
                             tag,
                             "Edit message details: msgId=${chatMessage.msgId}, " +
                                 "chatId=${chatMessage.chatId}, recvId=${chatMessage.recvId}, " +
@@ -500,7 +500,7 @@ class WebSocketService @Inject constructor(
                         scope.launch {
                             val senderId = chatMessage.sender.chatId
                             if (blocklistRepository.isUserBlocked(senderId)) {
-                                // Log.d(tag, "Blocked user $senderId edit message ignored: ${chatMessage.msgId}")
+                                Log.d(tag, "Blocked user $senderId edit message ignored: ${chatMessage.msgId}")
                                 return@launch
                             }
                             
@@ -508,7 +508,7 @@ class WebSocketService @Inject constructor(
                             _conversationUpdates.emit(ConversationUpdate.MessageEdited(chatMessage))
                         }
                         
-                        // Log.d(tag, "Received edited message: ${chatMessage.msgId}")
+                        Log.d(tag, "Received edited message: ${chatMessage.msgId}")
                     }
                 }
                 
@@ -521,7 +521,7 @@ class WebSocketService @Inject constructor(
                             "${draft.input.take(50)}..." 
                         else 
                             draft.input
-                        // Log.d(tag, "📝 收到多端草稿同步: chatId=${draft.chatId}, length=${draft.input.length}, content='$displayInput'")
+                        Log.d(tag, "📝 收到多端草稿同步: chatId=${draft.chatId}, length=${draft.input.length}, content='$displayInput'")
                         
                         scope.launch {
                             // 直接发射草稿更新事件，只需要chatId判断就够了
@@ -532,7 +532,7 @@ class WebSocketService @Inject constructor(
                                 )
                             )
                             
-                            // Log.d(tag, "✅ 草稿更新事件已发射")
+                            Log.d(tag, "✅ 草稿更新事件已发射")
                         }
                     }
                 }
@@ -542,7 +542,7 @@ class WebSocketService @Inject constructor(
                     val botBoardMessage = bot_board_message.parseFrom(bytes)
                     if (botBoardMessage.hasData() && botBoardMessage.data.hasBoard()) {
                         val board = botBoardMessage.data.board
-                        // Log.d(tag, "Received bot board message from ${board.botId}: ${board.content}")
+                        Log.d(tag, "Received bot board message from ${board.botId}: ${board.content}")
                         
                         scope.launch {
                             _messageEvents.emit(MessageEvent.BotBoardMessage(
@@ -559,7 +559,7 @@ class WebSocketService @Inject constructor(
                     val streamMsg = stream_message.parseFrom(bytes)
                     if (streamMsg.hasData() && streamMsg.data.hasMsg()) {
                         val msg = streamMsg.data.msg
-                        // Log.d(tag, "Received stream message for chat ${msg.chatId}, msgId: ${msg.msgId}, content: ${msg.content}")
+                        Log.d(tag, "Received stream message for chat ${msg.chatId}, msgId: ${msg.msgId}, content: ${msg.content}")
                         
                         scope.launch {
                             _messageEvents.emit(MessageEvent.StreamMessage(
@@ -573,7 +573,7 @@ class WebSocketService @Inject constructor(
                 }
                 
                 else -> {
-                    // Log.d(tag, "Unhandled message command: $cmd")
+                    Log.d(tag, "Unhandled message command: $cmd")
                 }
             }
             
@@ -668,20 +668,20 @@ class WebSocketService @Inject constructor(
      */
     private suspend fun loadAvatarBitmap(context: Context, avatarUrl: String?): Bitmap? {
         if (avatarUrl.isNullOrEmpty()) {
-            // Log.d(tag, "⚠️ 头像URL为空")
+            Log.d(tag, "⚠️ 头像URL为空")
             return null
         }
         
         // 1. 检查内存缓存
         avatarBitmapCache[avatarUrl]?.let {
-            // Log.d(tag, "✅ 从内存缓存加载头像")
+            Log.d(tag, "✅ 从内存缓存加载头像")
             return it
         }
         
         return try {
             // 提取文件名（用于日志）
             val fileName = avatarUrl.substringAfterLast("/").substringBefore("?")
-            // Log.d(tag, "🖼️ 加载通知头像: $fileName")
+            Log.d(tag, "🖼️ 加载通知头像: $fileName")
             
             // 2. 使用Coil加载（会自动使用磁盘缓存）
             val imageLoader = coil.Coil.imageLoader(context)
@@ -698,7 +698,7 @@ class WebSocketService @Inject constructor(
                 val drawable = result.drawable
                 if (drawable is BitmapDrawable) {
                     val bitmap = drawable.bitmap
-                    // Log.d(tag, "✅ 头像加载成功: ${bitmap.width}x${bitmap.height}")
+                    Log.d(tag, "✅ 头像加载成功: ${bitmap.width}x${bitmap.height}")
                     
                     // 存入内存缓存
                     avatarBitmapCache[avatarUrl] = bitmap
@@ -707,7 +707,7 @@ class WebSocketService @Inject constructor(
                     if (avatarBitmapCache.size > 50) {
                         val oldestKey = avatarBitmapCache.keys.first()
                         avatarBitmapCache.remove(oldestKey)
-                        // Log.d(tag, "🗑️ 清理头像缓存: $oldestKey")
+                        Log.d(tag, "🗑️ 清理头像缓存: $oldestKey")
                     }
                     
                     bitmap
@@ -735,7 +735,7 @@ class WebSocketService @Inject constructor(
                 .firstOrNull { it.chatId == chatId && it.chatType == chatType }
             
             conversation?.avatarUrl?.also {
-                // Log.d(tag, "✅ 从数据库获取会话头像: $it")
+                Log.d(tag, "✅ 从数据库获取会话头像: $it")
             }
         } catch (e: Exception) {
             Log.e(tag, "❌ 获取会话头像失败", e)
@@ -786,7 +786,7 @@ class WebSocketService @Inject constructor(
 
             // 黑名单过滤：被屏蔽用户的消息不弹出通知
             if (blocklistRepository.isUserBlocked(message.sender.chatId) || (isPrivateChat && blocklistRepository.isUserBlocked(targetChatId))) {
-                // Log.d(tag, "Sender $targetChatId is in blocklist, skip notification")
+                Log.d(tag, "Sender $targetChatId is in blocklist, skip notification")
                 return
             }
 
@@ -797,7 +797,7 @@ class WebSocketService @Inject constructor(
                 ?.doNotDisturb == 1
             
             if (isMuted) {
-                // Log.d(tag, "Conversation is muted (doNotDisturb==1), skip notification: chatId=$targetChatId")
+                Log.d(tag, "Conversation is muted (doNotDisturb==1), skip notification: chatId=$targetChatId")
                 return
             }
             
@@ -826,7 +826,7 @@ class WebSocketService @Inject constructor(
             // 1. 对于私聊和机器人，使用对方的头像
             // 2. 对于群聊，使用群头像
             val conversationAvatarUrl = getConversationAvatarUrl(targetChatId, targetChatType)
-            // Log.d(tag, "🎭 会话头像URL: $conversationAvatarUrl (chatType=$targetChatType)")
+            Log.d(tag, "🎭 会话头像URL: $conversationAvatarUrl (chatType=$targetChatType)")
             
             // 加载会话头像Bitmap（用于通知的大图标）
             val conversationAvatarBitmap = loadAvatarBitmap(context, conversationAvatarUrl)
@@ -920,7 +920,7 @@ class WebSocketService @Inject constructor(
                     val bitmap = loadAvatarBitmap(context, msg.senderAvatarUrl)
                     avatarCache[msg.senderAvatarUrl] = bitmap
                     if (bitmap != null) {
-                        // Log.d(tag, "🎭 预加载发送者头像: ${msg.senderName}")
+                        Log.d(tag, "🎭 预加载发送者头像: ${msg.senderName}")
                     }
                 }
             }
@@ -939,7 +939,7 @@ class WebSocketService @Inject constructor(
                     val cachedAvatar = avatarCache[msg.senderAvatarUrl]
                     if (cachedAvatar != null) {
                         personBuilder.setIcon(IconCompat.createWithBitmap(cachedAvatar))
-                        // Log.d(tag, "🎭 为发送者 ${msg.senderName} 设置头像")
+                        Log.d(tag, "🎭 为发送者 ${msg.senderName} 设置头像")
                     }
                     
                     personBuilder.build()
@@ -954,7 +954,7 @@ class WebSocketService @Inject constructor(
             
             // 计算未读消息数
             val unreadCount = messageHistory.size
-            // Log.d(tag, "📊 会话 $conversationTitle 有 $unreadCount 条未读消息")
+            Log.d(tag, "📊 会话 $conversationTitle 有 $unreadCount 条未读消息")
             
             // 创建"标记为已读"动作
             val markReadIntent = Intent(context, com.yhchat.canary.receiver.NotificationReplyReceiver::class.java).apply {
@@ -995,9 +995,9 @@ class WebSocketService @Inject constructor(
             // 设置大图标（会话头像）
             if (conversationAvatarBitmap != null) {
                 notificationBuilder.setLargeIcon(conversationAvatarBitmap)
-                // Log.d(tag, "🎭 通知设置会话头像 (大图标)")
+                Log.d(tag, "🎭 通知设置会话头像 (大图标)")
             } else {
-                // Log.d(tag, "⚠️ 会话头像未加载，使用默认图标")
+                Log.d(tag, "⚠️ 会话头像未加载，使用默认图标")
             }
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1058,9 +1058,9 @@ class WebSocketService @Inject constructor(
             // 显示通知，使用正确的chatId的哈希作为通知ID
             notificationManager.notify(notificationId, notification)
             
-            // Log.d(tag, "✅ 显示带快捷回复的通知: $conversationTitle (ID: $notificationId)")
+            Log.d(tag, "✅ 显示带快捷回复的通知: $conversationTitle (ID: $notificationId)")
             
-            // Log.d(tag, "Shown notification for message from $senderName")
+            Log.d(tag, "Shown notification for message from $senderName")
             
         } catch (e: Exception) {
             Log.e(tag, "Error showing notification", e)
@@ -1074,7 +1074,7 @@ class WebSocketService @Inject constructor(
         // 为了兼容性保留chatType参数，但历史key还是需要包含chatType的
         val historyKey = "$chatId-$chatType"
         notificationMessageHistory.remove(historyKey)
-        // Log.d(tag, "🗑️ 清除会话通知历史: $historyKey")
+        Log.d(tag, "🗑️ 清除会话通知历史: $historyKey")
     }
     
     /**
@@ -1082,7 +1082,7 @@ class WebSocketService @Inject constructor(
      */
     fun clearAvatarCache() {
         avatarBitmapCache.clear()
-        // Log.d(tag, "🗑️ 清除头像缓存")
+        Log.d(tag, "🗑️ 清除头像缓存")
     }
 
     /**
@@ -1091,7 +1091,7 @@ class WebSocketService @Inject constructor(
     fun clearRuntimeCaches() {
         notificationMessageHistory.clear()
         avatarBitmapCache.clear()
-        // Log.d(tag, "🗑️ 清除WebSocket运行时缓存")
+        Log.d(tag, "🗑️ 清除WebSocket运行时缓存")
     }
     
     /**

@@ -176,14 +176,14 @@ fun ChatInputBar(
     ) { uri ->
         uri?.let {
             if (voiceViewModel != null && chatId != null) {
-                // Log.d("ChatInputBar", "audioPicker result uri=$uri")
+                Log.d("ChatInputBar", "audioPicker result uri=$uri")
                 try {
                     ctx.contentResolver.takePersistableUriPermission(
                         uri,
                         android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
                 } catch (e: Exception) {
-                    // Log.d("ChatInputBar", "takePersistableUriPermission failed (may be temporary): ${e.message}")
+                    Log.d("ChatInputBar", "takePersistableUriPermission failed (may be temporary): ${e.message}")
                 }
                 voiceViewModel.selectAudioFromStorage(
                     context = ctx,
@@ -491,10 +491,10 @@ fun ChatInputBar(
                                 .pointerInput(voiceViewModel, chatId, chatType, isProcessing, isUploading) {
                                     detectTapGestures(
                                         onPress = {
-                                            // Log.d("ChatInputBar", "voice press down")
+                                            Log.d("ChatInputBar", "voice press down")
 
                                             if (isProcessing || isUploading) {
-                                                // Log.d("ChatInputBar", "voice press ignored: isProcessing=$isProcessing isUploading=$isUploading")
+                                                Log.d("ChatInputBar", "voice press ignored: isProcessing=$isProcessing isUploading=$isUploading")
                                                 return@detectTapGestures
                                             }
 
@@ -514,18 +514,18 @@ fun ChatInputBar(
                                             ) == PackageManager.PERMISSION_GRANTED
 
                                             if (!hasPermission) {
-                                                // Log.d("ChatInputBar", "request RECORD_AUDIO permission")
+                                                Log.d("ChatInputBar", "request RECORD_AUDIO permission")
                                                 Toast.makeText(ctx, "请授予麦克风权限", Toast.LENGTH_SHORT).show()
                                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                                 return@detectTapGestures
                                             }
 
-                                            // Log.d("ChatInputBar", "startRecording")
+                                            Log.d("ChatInputBar", "startRecording")
                                             voiceViewModel.startRecording(ctx)
 
                                             val released = tryAwaitRelease()
                                             if (released) {
-                                                // Log.d("ChatInputBar", "voice released, show dialog")
+                                                Log.d("ChatInputBar", "voice released, show dialog")
                                                 // 停止录音但不上传，等待用户选择
                                                 voiceViewModel.stopRecordingOnly(ctx) { file ->
                                                     if (file != null) {
@@ -536,7 +536,7 @@ fun ChatInputBar(
                                                     }
                                                 }
                                             } else {
-                                                // Log.d("ChatInputBar", "cancelRecording")
+                                                Log.d("ChatInputBar", "cancelRecording")
                                                 voiceViewModel.cancelRecording()
                                             }
                                         }
@@ -757,14 +757,14 @@ fun ChatInputBar(
                                 detectTapGestures(
                                     onTap = {
                                         if (currentText.isNotEmpty() || isSendTextAllowEmptySetting) {
-                                            // Log.d("ChatInputBar", "Send button tapped")
+                                            Log.d("ChatInputBar", "Send button tapped")
                                             currentOnSendMessage()
                                         }
                                     },
                                     onLongPress = {
                                         val mtc = currentMtc
                                         if ((currentText.isNotEmpty() || isSendTextAllowEmptySetting) && currentLongPressSendMarkdownEnabled && mtc != null) {
-                                            // Log.d("ChatInputBar", "Send button long pressed -> Markdown")
+                                            Log.d("ChatInputBar", "Send button long pressed -> Markdown")
                                             val previousType = currentSelectedMessageType
                                             coroutineScope.launch {
                                                 if (previousType != 3) {
@@ -777,7 +777,7 @@ fun ChatInputBar(
                                             }
                                         } else if (currentText.isNotEmpty() || isSendTextAllowEmptySetting) {
                                             // 如果没开启长按发送 Markdown，则长按也作为普通发送
-                                            // Log.d("ChatInputBar", "Send button long pressed (normal send)")
+                                            Log.d("ChatInputBar", "Send button long pressed (normal send)")
                                             currentOnSendMessage()
                                         }
                                     }

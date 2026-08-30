@@ -53,7 +53,7 @@ class ChatSearchActivity : BaseActivity() {
             ?: intent.getStringExtra("chat_name")
             ?: "聊天"
         
-        android.util.// Log.d("ChatSearchActivity", "Opening chat search: id=$chatId, type=$chatType, name=$chatName")
+        android.util.Log.d("ChatSearchActivity", "Opening chat search: id=$chatId, type=$chatType, name=$chatName")
         
         setContent {
             YhchatCanaryTheme {
