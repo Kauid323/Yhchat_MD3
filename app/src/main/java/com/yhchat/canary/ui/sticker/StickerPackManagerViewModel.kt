@@ -106,6 +106,20 @@ class StickerPackManagerViewModel(
         }
     }
 
+    fun createStickerPack(name: String, onSuccess: (Long) -> Unit, onFailure: (String) -> Unit) {
+        viewModelScope.launch {
+            repository.createStickerPack(name).fold(
+                onSuccess = { packId ->
+                    loadStickerPacks()
+                    onSuccess(packId)
+                },
+                onFailure = { error ->
+                    onFailure(error.message ?: "创建失败")
+                }
+            )
+        }
+    }
+
     companion object {
         fun factory(repository: StickerRepository): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {

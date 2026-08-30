@@ -1,88 +1,7 @@
 package com.yhchat.canary.data.api
 
 import com.google.gson.annotations.SerializedName
-import com.yhchat.canary.data.model.AddExpressionRequest
-import com.yhchat.canary.data.model.AddFriendRequest
-import com.yhchat.canary.data.model.AddStickerPackRequest
-import com.yhchat.canary.data.model.AgreeApplyRequest
-import com.yhchat.canary.data.model.ApiStatus
-import com.yhchat.canary.data.model.BaseResponse
-import com.yhchat.canary.data.model.BotIdRequest
-import com.yhchat.canary.data.model.BotUsageRemoveFollowerRequest
-import com.yhchat.canary.data.model.BotUsageRemoveGroupRequest
-import com.yhchat.canary.data.model.BotLlmRefParamsResponse
-import com.yhchat.canary.data.model.BotLlmSaveRequest
-import com.yhchat.canary.data.model.BotLlmSettingListResponse
-import com.yhchat.canary.data.model.BotLlmSettingRefResponse
-import com.yhchat.canary.data.model.CaptchaResponse
-import com.yhchat.canary.data.model.ChangeInviteCodeRequest
-import com.yhchat.canary.data.model.ChangePasswordRequest
-import com.yhchat.canary.data.model.ChatBackgroundListResponse
-import com.yhchat.canary.data.model.CreateFolderRequest
-import com.yhchat.canary.data.model.CreateShareRequest
-import com.yhchat.canary.data.model.CreateShareResponse
-import com.yhchat.canary.data.model.DeleteDraftRequest
-import com.yhchat.canary.data.model.DeleteFriendRequest
-import com.yhchat.canary.data.model.DismissNotificationRequest
-import com.yhchat.canary.data.model.DismissNotificationResponse
-import com.yhchat.canary.data.model.DraftListResponse
-import com.yhchat.canary.data.model.DraftResponse
-import com.yhchat.canary.data.model.EmailVerificationRequest
-import com.yhchat.canary.data.model.ExpressionActionRequest
-import com.yhchat.canary.data.model.ExpressionListResponse
-import com.yhchat.canary.data.model.FileListResponse
-import com.yhchat.canary.data.model.FriendApplyRequest
-import com.yhchat.canary.data.model.GetFileListRequest
-import com.yhchat.canary.data.model.GoldCoinRecordRequest
-import com.yhchat.canary.data.model.GoldCoinRecordResponse
-import com.yhchat.canary.data.model.GroupLiveRoomsRequest
-import com.yhchat.canary.data.model.LiveHangUpRequest
-import com.yhchat.canary.data.model.LiveJoinRequest
-import com.yhchat.canary.data.model.LiveJoinResponse
-import com.yhchat.canary.data.model.LiveRoomInfoRequest
-import com.yhchat.canary.data.model.LiveRoomInfoResponse
-import com.yhchat.canary.data.model.LiveRoomsResponse
-import com.yhchat.canary.data.model.LoginRequest
-import com.yhchat.canary.data.model.LoginResponse
-import com.yhchat.canary.data.model.MessageContent
-import com.yhchat.canary.data.model.MsgForwardRequest
-import com.yhchat.canary.data.model.MyTaskInfoResponse
-import com.yhchat.canary.data.model.ProductDetailRequest
-import com.yhchat.canary.data.model.ProductDetailResponse
-import com.yhchat.canary.data.model.ProductListRequest
-import com.yhchat.canary.data.model.ProductListResponse
-import com.yhchat.canary.data.model.PurchaseProductRequest
-import com.yhchat.canary.data.model.PurchaseProductResponse
-import com.yhchat.canary.data.model.RemoveConversationRequest
-import com.yhchat.canary.data.model.RemoveFileRequest
-import com.yhchat.canary.data.model.RenameFileRequest
-import com.yhchat.canary.data.model.ReportRequest
-import com.yhchat.canary.data.model.RewardRecordRequest
-import com.yhchat.canary.data.model.RewardRecordResponse
-import com.yhchat.canary.data.model.SaveDraftRequest
-import com.yhchat.canary.data.model.SaveUserDataRequest
-import com.yhchat.canary.data.model.SaveUserRemarkRequest
-import com.yhchat.canary.data.model.SendMessageResponse
-import com.yhchat.canary.data.model.SetChatBackgroundRequest
-import com.yhchat.canary.data.model.ShareInfoRequest
-import com.yhchat.canary.data.model.ShareInfoResponse
-import com.yhchat.canary.data.model.SmsCaptchaRequest
-import com.yhchat.canary.data.model.StickerPackActionRequest
-import com.yhchat.canary.data.model.StickerPackDetailRequest
-import com.yhchat.canary.data.model.StickerPackDetailResponse
-import com.yhchat.canary.data.model.StickerPackListResponse
-import com.yhchat.canary.data.model.StickerPackSortRequest
-import com.yhchat.canary.data.model.StickyOperationRequest
-import com.yhchat.canary.data.model.StickyResponse
-import com.yhchat.canary.data.model.StickyTopRequest
-import com.yhchat.canary.data.model.UpdateDraftRequest
-import com.yhchat.canary.data.model.UploadFileRequest
-import com.yhchat.canary.data.model.User
-import com.yhchat.canary.data.model.UserDataResponse
-import com.yhchat.canary.data.model.UserStatsResponse
-import com.yhchat.canary.data.model.VipBenefitsListResponse
-import com.yhchat.canary.data.model.VipProductListRequest
-import com.yhchat.canary.data.model.VipProductListResponse
+import com.yhchat.canary.data.model.*
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -700,6 +619,73 @@ interface ApiService {
         @Header("token") token: String,
         @Body request: StickerPackSortRequest
     ): Response<com.yhchat.canary.data.model.BaseResponse>
+
+    /**
+     * 创建表情包
+     */
+    @POST("v1/sticker/create-pack")
+    suspend fun createStickerPack(
+        @Header("token") token: String,
+        @Body request: CreateStickerPackRequest
+    ): Response<CreateStickerPackResponse>
+
+    /**
+     * 重命名表情包
+     */
+    @POST("v1/sticker/rename-pack")
+    suspend fun renameStickerPack(
+        @Header("token") token: String,
+        @Body request: RenameStickerPackRequest
+    ): Response<BaseResponse>
+
+    /**
+     * 删除表情包
+     */
+    @POST("v1/sticker/delete-pack")
+    suspend fun deleteStickerPack(
+        @Header("token") token: String,
+        @Body request: StickerPackActionRequest
+    ): Response<BaseResponse>
+
+    /**
+     * 添加表情至表情包
+     */
+    @POST("v1/sticker/add-sticker")
+    suspend fun addSticker(
+        @Header("token") token: String,
+        @Body request: AddStickerRequest
+    ): Response<BaseResponse>
+
+    /**
+     * 重命名表情包里的表情
+     */
+    @POST("v1/sticker/rename-sticker")
+    suspend fun renameSticker(
+        @Header("token") token: String,
+        @Body request: RenameStickerRequest
+    ): Response<BaseResponse>
+
+    /**
+     * 删除表情
+     */
+    @POST("v1/sticker/remove-sticker")
+    suspend fun removeSticker(
+        @Header("token") token: String,
+        @Body request: StickerPackActionRequest
+    ): Response<BaseResponse>
+
+    /**
+     * 获取表情上传 token
+     */
+    @GET("v1/misc/qiniu-token-sticker")
+    suspend fun getQiniuStickerToken(
+        @Header("token") token: String
+    ): Response<QiniuTokenResponse>
+
+    @GET("v1/misc/qiniu-token-expression")
+    suspend fun getQiniuExpressionToken(
+        @Header("token") token: String
+    ): Response<QiniuTokenResponse>
     
     // ==================== 云盘/文件存储相关API ====================
     /**

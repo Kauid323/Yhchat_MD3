@@ -142,3 +142,67 @@ data class StickerPackSortRequest(
     val sort: String  // JSON字符串格式的排序数组
 )
 
+/**
+ * 创建表情包请求
+ */
+data class CreateStickerPackRequest(
+    @SerializedName("name")
+    val name: String
+)
+
+/**
+ * 创建表情包响应
+ */
+data class CreateStickerPackResponse(
+    @SerializedName("code")
+    val code: Int,
+    
+    @SerializedName("data")
+    val data: CreateStickerPackData? = null,
+    
+    @SerializedName("msg")
+    val msg: String? = null
+)
+
+data class CreateStickerPackData(
+    @SerializedName("id")
+    val id: Long
+)
+
+/**
+ * 重命名表情包请求
+ */
+data class RenameStickerPackRequest(
+    @SerializedName("id")
+    val id: Long,
+    
+    @SerializedName("name")
+    val name: String
+)
+
+/**
+ * 添加表情请求
+ */
+data class AddStickerRequest(
+    @SerializedName("name")
+    val name: String,
+    
+    @SerializedName("url")
+    val url: String,
+    
+    @SerializedName("stickerPackId")
+    val stickerPackId: Long
+)
+
+/**
+ * 重命名表情请求
+ */
+data class RenameStickerRequest(
+    @SerializedName("id")
+    val id: Long,
+    
+    @SerializedName("name")
+    val name: String
+)
+
+

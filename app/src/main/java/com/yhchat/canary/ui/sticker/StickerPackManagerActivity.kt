@@ -24,8 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -33,6 +35,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,10 +53,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.StickerPack
+import com.yhchat.canary.ui.adaptive.YhAlertDialog
 import com.yhchat.canary.ui.adaptive.YhCard
 import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
+import com.yhchat.canary.ui.adaptive.YhDropdownMenu
+import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
 import com.yhchat.canary.ui.adaptive.YhIcon as Icon
 import com.yhchat.canary.ui.adaptive.YhIconButton
+import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
 import com.yhchat.canary.ui.adaptive.YhScaffold
 import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.adaptive.YhTextButton
@@ -109,6 +119,11 @@ private fun StickerPackManagerScreen(
         viewModel.moveStickerPack(from.index, to.index)
     }
 
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var createPackName by remember { mutableStateOf("") }
+    var isCreating by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.loadStickerPacks()
     }
@@ -124,6 +139,36 @@ private fun StickerPackManagerScreen(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
+                    }
+                },
+                actions = {
+                    Box {
+                        YhIconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "更多操作"
+                            )
+                        }
+                        YhDropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            YhDropdownMenuItem(
+                                text = { Text("创建表情包") },
+                                onClick = {
+                                    menuExpanded = false
+                                    createPackName = ""
+                                    showCreateDialog = true
+                                }
+                            )
+                            YhDropdownMenuItem(
+                                text = { Text("导入表情包") },
+                                onClick = {
+                                    menuExpanded = false
+                                    Toast.makeText(context, "导入表情包功能开发中", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -214,6 +259,9 @@ private fun StickerPackManagerScreen(
                                         canMoveUp = index > 0,
                                         canMoveDown = index < uiState.stickerPacks.lastIndex,
                                         elevation = elevation,
+                                        onClick = {
+                                            StickerPackDetailActivity.start(context, stickerPack.id.toString())
+                                        },
                                         onReorderFinished = { viewModel.syncSortOrder() },
                                         onMoveUp = {
                                             viewModel.moveStickerPack(index, index - 1)
@@ -247,6 +295,86 @@ private fun StickerPackManagerScreen(
             }
         }
     }
+
+    if (showCreateDialog) {
+        YhAlertDialog(
+            onDismissRequest = {
+                if (!isCreating) {
+                    showCreateDialog = false
+                }
+            },
+            title = {
+                Text(
+                    text = "创建表情包",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "请输入表情包名称",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    YhOutlinedTextField(
+                        value = createPackName,
+                        onValueChange = { createPackName = it },
+                        placeholder = { Text("表情包名称") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isCreating
+                    )
+                }
+            },
+            confirmButton = {
+                YhTextButton(
+                    onClick = {
+                        val name = createPackName.trim()
+                        if (name.isEmpty()) {
+                            Toast.makeText(context, "表情包名称不能为空", Toast.LENGTH_SHORT).show()
+                            return@YhTextButton
+                        }
+                        isCreating = true
+                        viewModel.createStickerPack(
+                            name = name,
+                            onSuccess = { packId ->
+                                isCreating = false
+                                showCreateDialog = false
+                                Toast.makeText(context, "创建成功", Toast.LENGTH_SHORT).show()
+                                StickerPackDetailActivity.start(context, packId.toString())
+                            },
+                            onFailure = { errorMsg ->
+                                isCreating = false
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isCreating && createPackName.isNotBlank()
+                ) {
+                    if (isCreating) {
+                        YhCircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("创建")
+                    }
+                }
+            },
+            dismissButton = {
+                YhTextButton(
+                    onClick = { showCreateDialog = false },
+                    enabled = !isCreating
+                ) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -256,6 +384,7 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     elevation: Dp,
+    onClick: () -> Unit,
     onReorderFinished: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -272,6 +401,7 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
