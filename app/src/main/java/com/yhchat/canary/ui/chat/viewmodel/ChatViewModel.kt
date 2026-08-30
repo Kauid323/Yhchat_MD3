@@ -1606,7 +1606,7 @@ class ChatViewModel @Inject constructor(
                         }
                         
                         nextQueryMsgId = maxNewMessage.msgId
-                        nextQueryMsgSeq = maxNewMessage.msgSeq.takeIf { it > 0L } ?: -1L
+                        nextQueryMsgSeq = maxNewMessage.msgSeq?.takeIf { it > 0L } ?: -1L
                         Log.d(tag, "⏳ 时间差超过 4 小时，以最新消息 ($nextQueryMsgId) 再次请求 by-mid-seq...")
                     }
                             
@@ -1627,7 +1627,7 @@ class ChatViewModel @Inject constructor(
                         val oldest = _messages.minByOrNull { it.sendTime }
                         if (oldest != null) {
                             oldestMsgId = oldest.msgId
-                            oldestMsgSeq = oldest.msgSeq
+                            oldestMsgSeq = oldest.msgSeq ?: 0L
                         }
                         Log.d(tag, "✅ 成功按时间戳插入，当前共 ${_messages.size} 条消息")
                         
