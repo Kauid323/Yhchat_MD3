@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
@@ -530,6 +531,20 @@ fun UserDetailScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     SheetSectionHeader(title = "互动")
+
+                    SheetActionItem(
+                        icon = Icons.Default.ManageSearch,
+                        title = "搜索聊天记录",
+                        onClick = {
+                            viewModel.dismissMoreSheet()
+                            com.yhchat.canary.ui.group.ChatSearchActivity.start(
+                                context,
+                                userId,
+                                1,
+                                uiState.userDetail?.name ?: userName
+                            )
+                        }
+                    )
 
                     SheetActionItem(
                         icon = Icons.Default.Search,

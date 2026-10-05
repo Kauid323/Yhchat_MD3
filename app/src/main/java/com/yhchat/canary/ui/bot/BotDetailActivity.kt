@@ -313,6 +313,20 @@ private fun BotDetailScreen(
                 SheetSectionHeader(title = "互动")
 
                 SheetActionItem(
+                    icon = Icons.Default.ManageSearch,
+                    title = "搜索聊天记录",
+                    onClick = {
+                        showMoreSheet = false
+                        com.yhchat.canary.ui.group.ChatSearchActivity.start(
+                            context,
+                            botId,
+                            3,
+                            uiState.botInfo?.data?.name ?: botName
+                        )
+                    }
+                )
+
+                SheetActionItem(
                     icon = Icons.Default.Search,
                     title = "机器人信息",
                     onClick = {
