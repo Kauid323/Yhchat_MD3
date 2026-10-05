@@ -77,6 +77,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 默认值为 "tools platform-tools"，但旧版 "tools" 包已从 SDK 仓库下架，
+          # sdkmanager 会报 "Failed to find package 'tools'" 并以 exit code 1 失败。
+          # 只安装仍然可用的 platform-tools（build-tools / platforms 由 AGP 自动下载）。
+          packages: 'platform-tools'
 
       - name: Enable 8G swap
         run: |
