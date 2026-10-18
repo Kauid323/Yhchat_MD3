@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.sticker
 
 import android.app.Activity
@@ -40,7 +42,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,21 +85,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.StickerItem
 import com.yhchat.canary.data.model.StickerPackDetailData
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
@@ -185,13 +192,19 @@ fun StickerPackDetailScreen(
         label = "JiggleTranslation"
     )
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = if (uiState.isManaging) "管理表情包" else "表情包详情",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (uiState.isManaging) "管理表情包" else "表情包详情",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (uiState.isManaging) {
                                 viewModel.toggleManageMode(false)
@@ -209,22 +222,22 @@ fun StickerPackDetailScreen(
                 actions = {
                     if (uiState.stickerPack != null) {
                         if (uiState.isManaging) {
-                            YhTextButton(onClick = { viewModel.toggleManageMode(false) }) {
+                            TextButton(onClick = { viewModel.toggleManageMode(false) }) {
                                 Text("完成", fontWeight = FontWeight.Bold)
                             }
                         } else if (uiState.isOwner) {
                             Box {
-                                YhIconButton(onClick = { showMoreMenu = true }) {
+                                IconButton(onClick = { showMoreMenu = true }) {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,
                                         contentDescription = "更多操作"
                                     )
                                 }
-                                YhDropdownMenu(
+                                DropdownMenu(
                                     expanded = showMoreMenu,
                                     onDismissRequest = { showMoreMenu = false }
                                 ) {
-                                    YhDropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text("重命名表情包") },
                                         onClick = {
                                             showMoreMenu = false
@@ -232,21 +245,21 @@ fun StickerPackDetailScreen(
                                             showRenamePackDialog = true
                                         }
                                     )
-                                    YhDropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text("删除表情包") },
                                         onClick = {
                                             showMoreMenu = false
                                             showDeletePackDialog = true
                                         }
                                     )
-                                    YhDropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text("添加表情") },
                                         onClick = {
                                             showMoreMenu = false
                                             imagePickerLauncher.launch("image/*")
                                         }
                                     )
-                                    YhDropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text("管理") },
                                         onClick = {
                                             showMoreMenu = false
@@ -256,7 +269,7 @@ fun StickerPackDetailScreen(
                                 }
                             }
                         } else {
-                            YhIconButton(
+                            IconButton(
                                 onClick = {
                                     viewModel.addStickerPackToFavorites(
                                         stickerPackId = stickerPackId,
@@ -276,7 +289,12 @@ fun StickerPackDetailScreen(
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -287,7 +305,7 @@ fun StickerPackDetailScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -325,15 +343,18 @@ fun StickerPackDetailScreen(
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCard(
-                        cornerRadius = 16.dp
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
                     ) {
                         Row(
                             modifier = Modifier.padding(20.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             Text("正在上传表情...")
                         }
                     }
@@ -344,10 +365,9 @@ fun StickerPackDetailScreen(
 
     if (uiState.showStickerActionSheet && uiState.selectedStickerForAction != null) {
         val selectedSticker = uiState.selectedStickerForAction!!
-        YhBottomSheet(
-            show = true,
-            title = "表情操作",
-            onDismissRequest = { viewModel.dismissStickerActionSheet() }
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.dismissStickerActionSheet() },
+            sheetState = rememberModalBottomSheetState()
         ) {
             Column(
                 modifier = Modifier
@@ -376,7 +396,7 @@ fun StickerPackDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    YhButton(
+                    Button(
                         onClick = {
                             renameStickerText = selectedSticker.name
                             showRenameStickerDialog = true
@@ -386,11 +406,15 @@ fun StickerPackDetailScreen(
                         Text("重命名")
                     }
 
-                    YhButton(
+                    Button(
                         onClick = {
                             showDeleteStickerDialog = true
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
                     ) {
                         Text("删除", color = MaterialTheme.colorScheme.error)
                     }
@@ -402,11 +426,11 @@ fun StickerPackDetailScreen(
     }
 
     if (showRenamePackDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { if (!isOperating) showRenamePackDialog = false },
             title = { Text("重命名表情包", fontWeight = FontWeight.Bold) },
             text = {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = renamePackText,
                     onValueChange = { renamePackText = it },
                     placeholder = { Text("输入新表情包名称") },
@@ -416,14 +440,14 @@ fun StickerPackDetailScreen(
                 )
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         val newName = renamePackText.trim()
                         if (newName.isEmpty()) {
                             Toast.makeText(context, "表情包名称不能为空", Toast.LENGTH_SHORT).show()
-                            return@YhTextButton
+                            return@TextButton
                         }
-                        val packId = uiState.stickerPack?.stickerPack?.id ?: return@YhTextButton
+                        val packId = uiState.stickerPack?.stickerPack?.id ?: return@TextButton
                         isOperating = true
                         viewModel.renameStickerPack(
                             packId = packId,
@@ -445,7 +469,7 @@ fun StickerPackDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showRenamePackDialog = false },
                     enabled = !isOperating
                 ) {
@@ -456,14 +480,14 @@ fun StickerPackDetailScreen(
     }
 
     if (showDeletePackDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { if (!isOperating) showDeletePackDialog = false },
             title = { Text("删除表情包", fontWeight = FontWeight.Bold) },
             text = { Text("确定要删除此表情包吗？此操作无法撤销。") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
-                        val packId = uiState.stickerPack?.stickerPack?.id ?: return@YhTextButton
+                        val packId = uiState.stickerPack?.stickerPack?.id ?: return@TextButton
                         isOperating = true
                         viewModel.deleteStickerPack(
                             packId = packId,
@@ -485,7 +509,7 @@ fun StickerPackDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showDeletePackDialog = false },
                     enabled = !isOperating
                 ) {
@@ -497,11 +521,11 @@ fun StickerPackDetailScreen(
 
     if (showRenameStickerDialog && uiState.selectedStickerForAction != null) {
         val targetSticker = uiState.selectedStickerForAction!!
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { if (!isOperating) showRenameStickerDialog = false },
             title = { Text("重命名表情", fontWeight = FontWeight.Bold) },
             text = {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = renameStickerText,
                     onValueChange = { renameStickerText = it },
                     placeholder = { Text("输入表情名称") },
@@ -511,12 +535,12 @@ fun StickerPackDetailScreen(
                 )
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         val newName = renameStickerText.trim()
                         if (newName.isEmpty()) {
                             Toast.makeText(context, "表情名称不能为空", Toast.LENGTH_SHORT).show()
-                            return@YhTextButton
+                            return@TextButton
                         }
                         isOperating = true
                         viewModel.renameSticker(
@@ -540,7 +564,7 @@ fun StickerPackDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showRenameStickerDialog = false },
                     enabled = !isOperating
                 ) {
@@ -552,12 +576,12 @@ fun StickerPackDetailScreen(
 
     if (showDeleteStickerDialog && uiState.selectedStickerForAction != null) {
         val targetSticker = uiState.selectedStickerForAction!!
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { if (!isOperating) showDeleteStickerDialog = false },
             title = { Text("删除表情", fontWeight = FontWeight.Bold) },
             text = { Text("确定要从表情包中删除表情「${targetSticker.name}」吗？") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         isOperating = true
                         viewModel.removeSticker(
@@ -580,7 +604,7 @@ fun StickerPackDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showDeleteStickerDialog = false },
                     enabled = !isOperating
                 ) {
@@ -626,7 +650,6 @@ fun StickerPackDetailContent(
     LazyVerticalGrid(
         modifier = Modifier
             .fillMaxSize()
-            .yhTopBarNestedScroll()
             .padding(horizontal = 16.dp),
         columns = GridCells.Fixed(4),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -634,9 +657,12 @@ fun StickerPackDetailContent(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 16.dp
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
             ) {
                 Column(
                     modifier = Modifier
@@ -814,12 +840,15 @@ fun StickerItemView(
         Modifier
     }
 
-    YhCard(
+    Card(
         modifier = Modifier
             .aspectRatio(0.8f)
             .then(jiggleModifier)
             .clickable(onClick = onClick),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),

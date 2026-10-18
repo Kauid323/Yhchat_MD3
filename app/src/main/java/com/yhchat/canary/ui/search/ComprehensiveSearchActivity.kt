@@ -14,15 +14,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,13 +52,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yhchat.canary.data.model.BotInfo
 import com.yhchat.canary.data.model.GroupDetail
 import com.yhchat.canary.data.model.UserInfo
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTabRow
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
 
@@ -69,6 +75,7 @@ class ComprehensiveSearchActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComprehensiveSearchScreen(
     viewModel: ComprehensiveSearchViewModel,
@@ -82,18 +89,22 @@ private fun ComprehensiveSearchScreen(
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val coroutineScope = rememberCoroutineScope()
     
-    YhSurface(
+    Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-        YhTopBar(
-            title = "综合搜索",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "综合搜索",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回"
@@ -101,7 +112,7 @@ private fun ComprehensiveSearchScreen(
                 }
             },
             actions = {
-                YhIconButton(onClick = {
+                IconButton(onClick = {
                     if (searchText.isNotBlank()) {
                         when (pagerState.currentPage) {
                             0 -> viewModel.searchGroup(searchText.trim())
@@ -115,9 +126,13 @@ private fun ComprehensiveSearchScreen(
                         contentDescription = "搜索"
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
-        YhOutlinedTextField(
+        OutlinedTextField(
             value = searchText,
             onValueChange = { searchText = it },
             placeholder = { Text("输入ID搜索...") },
@@ -139,7 +154,7 @@ private fun ComprehensiveSearchScreen(
             ),
             trailingIcon = {
                 if (searchText.isNotEmpty()) {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         searchText = ""
                         viewModel.clearResults()
                     }) {
@@ -153,23 +168,32 @@ private fun ComprehensiveSearchScreen(
         )
         
         // 标签
-        YhTabRow(
-            tabs = tabs,
-            selectedTabIndex = pagerState.currentPage,
-            onTabSelected = { index ->
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(index)
-                }
+        SecondaryTabRow(
+            selectedTabIndex = pagerState.currentPage
+        ) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = index == pagerState.currentPage,
+                    onClick = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
+                        }
+                    },
+                    text = { Text(title) }
+                )
             }
-        )
+        }
         
         // 错误信息
         uiState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = error,
@@ -254,7 +278,7 @@ private fun GroupSearchPage(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         }
         groupResult != null -> {
@@ -297,7 +321,7 @@ private fun UserSearchPage(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         }
         userResult != null -> {
@@ -340,7 +364,7 @@ private fun BotSearchPage(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         }
         botResult != null -> {

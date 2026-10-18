@@ -23,7 +23,20 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,16 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.ChatMessage
 import com.yhchat.canary.ui.chat.ChatViewModel
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSegmentedControl
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
 
 /**
  * 编辑历史弹窗
@@ -79,7 +82,7 @@ fun EditHistoryDialog(
         )
     }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -100,7 +103,7 @@ fun EditHistoryDialog(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                         }
                     }
                     errorMessage != null -> {
@@ -136,7 +139,7 @@ fun EditHistoryDialog(
             }
         },
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }
@@ -155,9 +158,9 @@ private fun EditRecordItem(record: com.yhchat.canary.data.model.MessageEditRecor
         }.getOrNull()
     }
 
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -199,7 +202,7 @@ fun SpeechToTextDialog(
     onCopyResult: (String) -> Unit,
     onInsertToInput: (String) -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
         title = {
             Text(
@@ -218,7 +221,7 @@ fun SpeechToTextDialog(
             ) {
                 if (isProcessing) {
                     // 处理中状态
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(48.dp)
                     )
                     Text(
@@ -228,7 +231,7 @@ fun SpeechToTextDialog(
                     )
                 } else if (result != null) {
                     // 识别成功
-                    YhSurface(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(8.dp)
@@ -252,17 +255,17 @@ fun SpeechToTextDialog(
         confirmButton = {
             if (!isProcessing && result != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    YhTextButton(onClick = { onCopyResult(result) }) {
+                    TextButton(onClick = { onCopyResult(result) }) {
                         Text("复制")
                     }
-                    YhTextButton(onClick = { onInsertToInput(result) }) {
+                    TextButton(onClick = { onInsertToInput(result) }) {
                         Text("插入输入框")
                     }
                 }
             }
         },
         dismissButton = {
-            YhTextButton(
+            TextButton(
                 onClick = onDismiss,
                 enabled = !isProcessing
             ) {
@@ -275,6 +278,7 @@ fun SpeechToTextDialog(
 /**
  * 消息编辑对话框
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageEditDialog(
     message: ChatMessage,
@@ -291,7 +295,7 @@ fun MessageEditDialog(
         14 to "A2UI"
     )
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -305,17 +309,26 @@ fun MessageEditDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 消息类型选择器
-                YhSegmentedControl(
-                    labels = contentTypeOptions.map { it.second },
-                    selectedIndex = contentTypeOptions.indexOfFirst { it.first == selectedContentType }.coerceAtLeast(0),
-                    onSelectedIndexChange = { index ->
-                        selectedContentType = contentTypeOptions[index].first
-                    },
+                SingleChoiceSegmentedButtonRow(
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    contentTypeOptions.forEachIndexed { index, option ->
+                        SegmentedButton(
+                            selected = selectedContentType == option.first,
+                            onClick = {
+                                selectedContentType = option.first
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = contentTypeOptions.size
+                            ),
+                            label = { Text(option.second) }
+                        )
+                    }
+                }
                 
                 // 消息内容输入框
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = editedContent,
                     onValueChange = { editedContent = it },
                     label = { Text("消息内容") },
@@ -328,7 +341,7 @@ fun MessageEditDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     if (editedContent.isNotBlank()) {
                         onConfirm(editedContent.trim(), selectedContentType)
@@ -340,7 +353,7 @@ fun MessageEditDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -358,7 +371,7 @@ fun MessageImagePreviewDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -375,7 +388,7 @@ fun MessageImagePreviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 详细信息
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(8.dp)
@@ -427,7 +440,7 @@ fun MessageImagePreviewDialog(
             }
         },
         confirmButton = {
-            YhButton(onClick = onSave) {
+            Button(onClick = onSave) {
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = "保存",
@@ -438,7 +451,7 @@ fun MessageImagePreviewDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }

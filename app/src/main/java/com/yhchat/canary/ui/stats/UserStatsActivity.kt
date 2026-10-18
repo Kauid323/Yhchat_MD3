@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.yhchat.canary.ui.stats
 
 import android.os.Bundle
@@ -17,11 +18,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,16 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.UserStatsData
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import java.text.NumberFormat
 import java.util.Locale
@@ -61,7 +65,7 @@ class UserStatsActivity : ComponentActivity() {
         
         setContent {
             YhchatCanaryTheme {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -93,17 +97,25 @@ fun UserStatsScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        YhTopBar(
-            title = "云湖用户统计",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "云湖用户统计",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回"
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
         
         val scrollState = rememberScrollState()
@@ -112,7 +124,6 @@ fun UserStatsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .yhTopBarNestedScroll()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -126,7 +137,7 @@ fun UserStatsScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                             Text(
                                 text = "正在加载统计数据...",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -153,7 +164,7 @@ fun UserStatsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        YhButton(
+                        Button(
                             onClick = { viewModel.loadUserStats() }
                         ) {
                             Text("重试")
@@ -231,9 +242,12 @@ private fun StatsCard(
     val percentage = (progress * 100).toInt()
     val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
     
-    YhCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Column(
             modifier = Modifier
@@ -317,8 +331,8 @@ private fun StatsCard(
                     )
                 }
                 
-                YhLinearProgressIndicator(
-                    progress = progress.coerceIn(0f, 1f),
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)

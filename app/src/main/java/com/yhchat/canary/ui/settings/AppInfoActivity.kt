@@ -29,8 +29,20 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,17 +65,6 @@ import com.yhchat.canary.crash.CrashHandler
 import com.yhchat.canary.R
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.chat.ChatActivity
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.utils.UnifiedLinkHandler
 import dagger.hilt.android.AndroidEntryPoint
@@ -169,19 +170,27 @@ private fun AppInfoScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "应用详情",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "应用详情",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBack) {
+                    IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -231,7 +240,7 @@ private fun AppInfoScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            YhHorizontalDivider()
+            HorizontalDivider()
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -347,14 +356,14 @@ private fun AppInfoScreen(
             LaunchedEffect(updateInfo) {
             }
             
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = {
                     updateViewModel.clearUpdateInfo()
                 },
                 title = { Text("检查更新") },
                 text = { Text("当前已是最新版本") },
                 confirmButton = {
-                    YhTextButton(onClick = {
+                    TextButton(onClick = {
                         updateViewModel.clearUpdateInfo()
                     }) {
                         Text("确定")
@@ -365,14 +374,14 @@ private fun AppInfoScreen(
     }
 
     updateState.error?.let { error ->
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {
                 updateViewModel.clearError()
             },
             title = { Text("检查更新失败") },
             text = { Text(error) },
             confirmButton = {
-                YhTextButton(onClick = {
+                TextButton(onClick = {
                     updateViewModel.clearError()
                 }) {
                     Text("确定")
@@ -394,7 +403,7 @@ private fun ChatDebugDialog(
     var chatTypeText by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -408,7 +417,7 @@ private fun ChatDebugDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = chatId,
                     onValueChange = { 
                         chatId = it
@@ -420,7 +429,7 @@ private fun ChatDebugDialog(
                     singleLine = true
                 )
 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = chatTypeText,
                     onValueChange = { 
                         chatTypeText = it
@@ -449,17 +458,17 @@ private fun ChatDebugDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     if (chatId.isBlank()) {
                         errorMessage = "chatId"
-                        return@YhTextButton
+                        return@TextButton
                     }
                     
                     val chatType = chatTypeText.toIntOrNull()
                     if (chatType == null || chatType !in 1..3) {
                         errorMessage = "must be 1,2 or 3"
-                        return@YhTextButton
+                        return@TextButton
                     }
                     onConfirm(chatId, chatType)
                 },
@@ -469,7 +478,7 @@ private fun ChatDebugDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -520,7 +529,7 @@ private fun AppInfoItem(
             }
             
             if (isLoading) {
-                YhCircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
@@ -582,7 +591,7 @@ private fun UpdateDialog(
     onDismiss: () -> Unit,
     onUpdate: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
@@ -632,12 +641,12 @@ private fun UpdateDialog(
             }
         },
         confirmButton = {
-            YhButton(onClick = onUpdate) {
+            Button(onClick = onUpdate) {
                 Text(if (isPreviewMode) "下载最新版" else "立即更新")
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text(if (isPreviewMode) "关闭" else "稍后提醒")
             }
         }
@@ -657,7 +666,7 @@ private fun VersionSettingDialog(
     var version by remember { mutableStateOf(currentVersion) }
     var errorMessage by remember { mutableStateOf("") }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -677,7 +686,7 @@ private fun VersionSettingDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = version,
                     onValueChange = { 
                         version = it
@@ -705,11 +714,11 @@ private fun VersionSettingDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     if (version.isBlank()) {
                         errorMessage = "版本号不能为空"
-                        return@YhTextButton
+                        return@TextButton
                     }
                     onConfirm(version)
                 },
@@ -719,7 +728,7 @@ private fun VersionSettingDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,8 +62,36 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.MonetizationOn
 import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,11 +101,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -93,34 +126,13 @@ import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.CommunityBoard
 import com.yhchat.canary.data.model.CommunityComment
 import com.yhchat.canary.data.model.CommunityPost
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownSelector
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhFilterChip
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhCommunityActionBarColor
-import com.yhchat.canary.ui.adaptive.YhCommunityActionChipContainerColor
-import com.yhchat.canary.ui.adaptive.YhCommunityActionChipContentColor
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MarkdownText
+import com.yhchat.canary.ui.components.TopBarActionButton
+import com.yhchat.canary.ui.share.SendToChatActivity
+import com.yhchat.canary.ui.share.SendToChatContent
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
 import com.yhchat.canary.utils.UnifiedLinkHandler
@@ -168,8 +180,7 @@ class PostDetailActivity : BaseActivity() {
                         communityRepository = RepositoryFactory.getCommunityRepository(this@PostDetailActivity),
                         tokenRepository = RepositoryFactory.getTokenRepository(this@PostDetailActivity),
                         userRepository = RepositoryFactory.getUserRepository(this@PostDetailActivity),
-                        friendRepository = RepositoryFactory.getFriendRepository(this@PostDetailActivity),
-                        messageRepository = RepositoryFactory.getMessageRepository(this@PostDetailActivity)
+                        friendRepository = RepositoryFactory.getFriendRepository(this@PostDetailActivity)
                     )
                 }
                 
@@ -248,7 +259,7 @@ fun PostContentCard(
                     )
                     if (post.isVip == 1) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        YhSurface(
+                        Surface(
                             color = MaterialTheme.colorScheme.primary,
                             shape = MaterialTheme.shapes.small
                         ) {
@@ -270,7 +281,7 @@ fun PostContentCard(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            YhTextButton(onClick = onReportClick) {
+            TextButton(onClick = onReportClick) {
                 Text("举报")
             }
         }
@@ -355,7 +366,7 @@ fun PostContentCard(
         // 群聊来源信息
         post.group?.let { group ->
             if (!group.groupId.isNullOrEmpty() && group.groupId != "0") {
-                YhCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -363,7 +374,7 @@ fun PostContentCard(
                             val groupLink = "yunhu://chat-add?id=${group.groupId}&type=group"
                             UnifiedLinkHandler.handleLink(context, groupLink)
                         },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
                     Row(
                         modifier = Modifier
@@ -394,7 +405,7 @@ fun PostContentCard(
         
         // 分区信息卡片
         board?.let { boardInfo ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
@@ -406,7 +417,7 @@ fun PostContentCard(
                         }
                         context.startActivity(intent)
                     },
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
             ) {
                 Row(
                     modifier = Modifier
@@ -504,6 +515,8 @@ fun PostBottomActionBarDuo3(
         label = "postDetailSearchFieldAlpha"
     )
 
+    // 注意：这一层（以及 bottomBar 那一层）**不能有任何背景色/底色**，
+    // 文章要能从按钮之间和按钮周围露出来，只有按钮自己是实心的（挡住它自己那一小块）。
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -529,16 +542,22 @@ fun PostBottomActionBarDuo3(
             ) {
                 Row(
                     modifier = Modifier
+                        // 真悬浮：按钮自己是不透明的 + 阴影，内容从它下面/周围滚过去
+                        .shadow(elevation = 8.dp, shape = RoundedCornerShape(50))
                         .clip(RoundedCornerShape(50))
-                        .background(YhCommunityActionBarColor())
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                         .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    YhSurface(
+                    Surface(
                         modifier = Modifier.clickable { onLikeClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = YhCommunityActionChipContainerColor(post.isLiked == "1")
+                        color = if (post.isLiked == "1") {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -548,21 +567,33 @@ fun PostBottomActionBarDuo3(
                             Icon(
                                 imageVector = if (post.isLiked == "1") Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
                                 contentDescription = "点赞",
-                                tint = YhCommunityActionChipContentColor(post.isLiked == "1"),
+                                tint = if (post.isLiked == "1") {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = post.likeNum.toString(),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = YhCommunityActionChipContentColor(post.isLiked == "1")
+                                color = if (post.isLiked == "1") {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
 
-                    YhSurface(
+                    Surface(
                         modifier = Modifier.clickable { onCollectClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = YhCommunityActionChipContainerColor(post.isCollected == 1)
+                        color = if (post.isCollected == 1) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -572,21 +603,33 @@ fun PostBottomActionBarDuo3(
                             Icon(
                                 imageVector = if (post.isCollected == 1) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                                 contentDescription = "收藏",
-                                tint = YhCommunityActionChipContentColor(post.isCollected == 1),
+                                tint = if (post.isCollected == 1) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = post.collectNum.toString(),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = YhCommunityActionChipContentColor(post.isCollected == 1)
+                                color = if (post.isCollected == 1) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
 
-                    YhSurface(
+                    Surface(
                         modifier = Modifier.clickable { onRewardClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = YhCommunityActionChipContainerColor(post.isReward == 1)
+                        color = if (post.isReward == 1) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -596,13 +639,21 @@ fun PostBottomActionBarDuo3(
                             Icon(
                                 imageVector = if (post.isReward == 1) Icons.Filled.MonetizationOn else Icons.Outlined.MonetizationOn,
                                 contentDescription = "打赏",
-                                tint = YhCommunityActionChipContentColor(post.isReward == 1),
+                                tint = if (post.isReward == 1) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = formatRewardAmount(post.amountNum),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = YhCommunityActionChipContentColor(post.isReward == 1)
+                                color = if (post.isReward == 1) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
@@ -612,8 +663,10 @@ fun PostBottomActionBarDuo3(
 
         Row(
             modifier = Modifier
+                // 真悬浮：按钮自己是不透明的 + 阴影，内容从它下面/周围滚过去
+                .shadow(elevation = 8.dp, shape = RoundedCornerShape(50))
                 .clip(RoundedCornerShape(50))
-                .background(YhCommunityActionBarColor())
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .height(40.dp)
                 .padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -625,7 +678,7 @@ fun PostBottomActionBarDuo3(
                     .height(32.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                YhSurface(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(32.dp)
@@ -676,11 +729,13 @@ fun PostBottomActionBarDuo3(
                 enter = fadeIn(animationSpec = tween(180)),
                 exit = fadeOut(animationSpec = tween(140))
             ) {
-                YhButton(
+                Button(
                     onClick = onCommentInputToggle,
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Comment,
@@ -697,11 +752,13 @@ fun PostBottomActionBarDuo3(
 
             Spacer(modifier = Modifier.width(4.dp))
 
-            YhIconButton(
+            IconButton(
                 onClick = onSearchToggle,
                 modifier = Modifier.size(32.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
             ) {
                 Crossfade(
                     targetState = isSearchExpanded,
@@ -734,9 +791,12 @@ fun CommentItem(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    YhCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -767,7 +827,7 @@ fun CommentItem(
                         )
                         if (comment.isVip == 1) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            YhSurface(
+                            Surface(
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = MaterialTheme.shapes.small
                             ) {
@@ -865,13 +925,13 @@ fun CommentItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (canDelete) {
-                        YhTextButton(
+                        TextButton(
                             onClick = { onDeleteClick(comment) },
                         ) {
                             Text("删除", color = MaterialTheme.colorScheme.error)
                         }
                     }
-                    YhTextButton(
+                    TextButton(
                         onClick = { onReportClick(comment) },
                     ) {
                         Text("举报")
@@ -932,7 +992,7 @@ fun CommentReplyItem(
                 )
                 if (reply.isVip == 1) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    YhSurface(
+                    Surface(
                         color = MaterialTheme.colorScheme.primary,
                         shape = MaterialTheme.shapes.small
                     ) {
@@ -973,7 +1033,7 @@ fun RewardDialog(
     var rewardAmount by remember { mutableStateOf("") }
     val predefinedAmounts = listOf(0.1, 0.5, 1.0, 2.0, 5.0, 10.0)
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -996,7 +1056,7 @@ fun RewardDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     predefinedAmounts.take(3).forEach { amount ->
-                        YhFilterChip(
+                        FilterChip(
                             onClick = { rewardAmount = amount.toString() },
                             label = { Text("${amount}币") },
                             selected = rewardAmount == amount.toString(),
@@ -1010,7 +1070,7 @@ fun RewardDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     predefinedAmounts.drop(3).forEach { amount ->
-                        YhFilterChip(
+                        FilterChip(
                             onClick = { rewardAmount = amount.toString() },
                             label = { Text("${amount}币") },
                             selected = rewardAmount == amount.toString(),
@@ -1019,7 +1079,7 @@ fun RewardDialog(
                     }
                 }
                 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = rewardAmount,
                     onValueChange = { 
                         if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
@@ -1035,7 +1095,7 @@ fun RewardDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     val amount = rewardAmount.toDoubleOrNull()
                     if (amount != null && amount > 0) {
@@ -1048,7 +1108,7 @@ fun RewardDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -1069,7 +1129,7 @@ fun ShareDialog(
     val webLink = "www.yhchat.com/c/p/$postId"
     val deepLink = "yunhu://post-detail?id=$postId"
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -1087,9 +1147,12 @@ fun ShareDialog(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp)
@@ -1106,7 +1169,7 @@ fun ShareDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        YhButton(
+                        Button(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText("文章链接", webLink)
@@ -1126,9 +1189,12 @@ fun ShareDialog(
                     }
                 }
                 
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp)
@@ -1145,7 +1211,7 @@ fun ShareDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        YhButton(
+                        Button(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText("文章链接", deepLink)
@@ -1165,12 +1231,15 @@ fun ShareDialog(
                     }
                 }
                 
-                YhCard(
-                    modifier = Modifier.fillMaxWidth().clickable { 
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
                         onDismiss()
                         onShareToFriend()
                     },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -1193,7 +1262,7 @@ fun ShareDialog(
             }
         },
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }
@@ -1230,8 +1299,6 @@ fun PostDetailScreen(
     
     // 分享对话框状态
     var showShareDialog by remember { mutableStateOf(false) }
-    // 分享给好友BottomSheet状态
-    var showShareToFriendSheet by remember { mutableStateOf(false) }
     var showMoveBoardDialog by remember { mutableStateOf(false) }
     var pendingMoveBoard by remember { mutableStateOf<CommunityBoard?>(null) }
     var topMenuExpanded by remember { mutableStateOf(false) }
@@ -1291,7 +1358,9 @@ fun PostDetailScreen(
     }
     
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -1325,10 +1394,15 @@ fun PostDetailScreen(
             }
         },
         topBar = {
-            YhTopBar(
-                title = "文章详情",
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "文章详情",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -1336,17 +1410,18 @@ fun PostDetailScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(onClick = { topMenuExpanded = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "更多操作"
-                        )
-                    }
-                    YhDropdownMenu(
+                    // 顶栏主操作（更多）：MD3 Expressive 的填充按钮，
+                    // 返回按钮这类导航按钮保持无背景
+                    TopBarActionButton(
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = "更多操作",
+                        onClick = { topMenuExpanded = true }
+                    )
+                    DropdownMenu(
                         expanded = topMenuExpanded,
                         onDismissRequest = { topMenuExpanded = false }
                     ) {
-                        YhDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("分享") },
                             onClick = {
                                 topMenuExpanded = false
@@ -1354,7 +1429,7 @@ fun PostDetailScreen(
                             }
                         )
                         if (canManagePost) {
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("修改") },
                                 onClick = {
                                     topMenuExpanded = false
@@ -1372,14 +1447,14 @@ fun PostDetailScreen(
                                     }
                                 }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("移动文章") },
                                 onClick = {
                                     topMenuExpanded = false
                                     showMoveBoardDialog = true
                                 }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = {
                                     Text(
                                         if ((postDetailState.post?.isSticky ?: 0) == 1) {
@@ -1391,7 +1466,7 @@ fun PostDetailScreen(
                                 },
                                 onClick = {
                                     topMenuExpanded = false
-                                    val post = postDetailState.post ?: return@YhDropdownMenuItem
+                                    val post = postDetailState.post ?: return@DropdownMenuItem
                                     val sticky = post.isSticky != 1
                                     viewModel.togglePostStickyWithToken(
                                         postId = post.id,
@@ -1409,7 +1484,7 @@ fun PostDetailScreen(
                                     )
                                 }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     topMenuExpanded = false
@@ -1418,23 +1493,37 @@ fun PostDetailScreen(
                             )
                         }
                     }
-                }
+                },
+                // 必须把 scrollBehavior 交给顶栏：只有顶栏量到自己的高度后，
+                // 滚动行为才知道"顶栏已完全收起"从而停止吃掉滑动事件。
+                // 少了这一行，heightOffsetLimit 会一直是最小值（无限），
+                // 于是每一帧的上滑都被顶栏行为消费掉 —— 列表完全滚不动。
+                scrollBehavior = scrollBehavior,
             )
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                // 只让出顶部（标题栏）的空间，底部不再让位：
+                // 互动条现在是"真悬浮"，文章内容要从它下面滚过去
+                .padding(
+                    top = paddingValues.calculateTopPadding(),
+                    start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    end = paddingValues.calculateEndPadding(LocalLayoutDirection.current)
+                )
         ) {
             
             // 错误提示
             postDetailState.error?.let { error ->
-                YhCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
                         text = error,
@@ -1451,20 +1540,27 @@ fun PostDetailScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             } else {
                 postDetailState.post?.let { post ->
-                    YhPullToRefresh(
+                    PullToRefreshBox(
                         isRefreshing = postDetailState.isRefreshing,
                         onRefresh = { viewModel.refreshPostDetailWithToken(postId) },
+                        state = rememberPullToRefreshState(),
                         modifier = Modifier.weight(1f)
                     ) {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .yhTopBarNestedScroll(),
-                            contentPadding = PaddingValues(16.dp),
+                                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                            // 底部多留出悬浮互动条的高度（含系统导航栏），滚到底时最后一段不会被按钮压住
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                top = 16.dp,
+                                end = 16.dp,
+                                bottom = 140.dp
+                            ),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             // 文章内容
@@ -1541,15 +1637,27 @@ fun PostDetailScreen(
                 ShareDialog(
                     postId = postId,
                     onDismiss = { showShareDialog = false },
-                    onShareToFriend = { showShareToFriendSheet = true }
+                    onShareToFriend = {
+                        // 分享给好友：打开「选择会话」Activity（不再是 bottom sheet）
+                        postDetailState.post?.let { post ->
+                            SendToChatActivity.start(
+                                context = context,
+                                content = SendToChatContent.Post(
+                                    postId = post.id.toString(),
+                                    title = post.title,
+                                    content = post.content,
+                                    postType = post.contentType.toString()
+                                )
+                            )
+                        }
+                    }
                 )
             }
 
             if (showCommentInput) {
-                YhBottomSheet(
-                    show = true,
-                    title = "评论 (${commentListState.comments.size})",
+                ModalBottomSheet(
                     onDismissRequest = { showCommentInput = false },
+                    sheetState = rememberModalBottomSheetState()
                 ) {
                     Column(
                         modifier = Modifier
@@ -1567,7 +1675,7 @@ fun PostDetailScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            YhTextButton(
+                            TextButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     val clip = ClipData.newPlainText("帖子原文", postDetailState.post?.content ?: "")
@@ -1577,7 +1685,7 @@ fun PostDetailScreen(
                             ) { Text("复制原文") }
                         }
 
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = commentText,
                             onValueChange = { commentText = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -1587,7 +1695,7 @@ fun PostDetailScreen(
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             trailingIcon = {
                                 if (commentText.isNotBlank()) {
-                                    YhIconButton(
+                                    IconButton(
                                         onClick = {
                                             viewModel.commentPostWithToken(postId, commentText)
                                             commentText = ""
@@ -1648,7 +1756,7 @@ fun PostDetailScreen(
                                                 .padding(vertical = 12.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            YhCircularProgressIndicator(
+                                            CircularProgressIndicator(
                                                 modifier = Modifier.size(24.dp),
                                                 strokeWidth = 2.dp
                                             )
@@ -1661,24 +1769,13 @@ fun PostDetailScreen(
                 }
             }
 
-            // 分享给好友BottomSheet
-            if (showShareToFriendSheet) {
-                postDetailState.post?.let { post ->
-                    ShareToFriendBottomSheet(
-                        post = post,
-                        viewModel = viewModel,
-                        onDismiss = { showShareToFriendSheet = false }
-                    )
-                }
-            }
-
             pendingDeleteComment?.let { comment ->
-                YhAlertDialog(
+                AlertDialog(
                     onDismissRequest = { pendingDeleteComment = null },
                     title = { Text("删除评论") },
                     text = { Text("确定要删除这条评论吗？删除后无法恢复。") },
                     confirmButton = {
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 viewModel.deleteCommentWithToken(postId, comment.id)
                                 pendingDeleteComment = null
@@ -1688,7 +1785,7 @@ fun PostDetailScreen(
                         }
                     },
                     dismissButton = {
-                        YhTextButton(onClick = { pendingDeleteComment = null }) {
+                        TextButton(onClick = { pendingDeleteComment = null }) {
                             Text("取消")
                         }
                     }
@@ -1696,7 +1793,7 @@ fun PostDetailScreen(
             }
             
             if (showMoveBoardDialog) {
-                YhAlertDialog(
+                AlertDialog(
                     onDismissRequest = { showMoveBoardDialog = false },
                     title = { Text("移动文章") },
                     text = {
@@ -1708,7 +1805,7 @@ fun PostDetailScreen(
                                         .padding(vertical = 12.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator()
+                                    CircularProgressIndicator()
                                 }
                             }
 
@@ -1758,7 +1855,7 @@ fun PostDetailScreen(
                         }
                     },
                     confirmButton = {
-                        YhTextButton(onClick = { showMoveBoardDialog = false }) {
+                        TextButton(onClick = { showMoveBoardDialog = false }) {
                             Text("关闭")
                         }
                     }
@@ -1766,12 +1863,12 @@ fun PostDetailScreen(
             }
 
             pendingMoveBoard?.let { board ->
-                YhAlertDialog(
+                AlertDialog(
                     onDismissRequest = { pendingMoveBoard = null },
                     title = { Text("确认移动") },
                     text = { Text("确认将文章移动到「${board.name}」吗？") },
                     confirmButton = {
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 pendingMoveBoard = null
                                 viewModel.movePostWithToken(
@@ -1791,7 +1888,7 @@ fun PostDetailScreen(
                         }
                     },
                     dismissButton = {
-                        YhTextButton(onClick = { pendingMoveBoard = null }) {
+                        TextButton(onClick = { pendingMoveBoard = null }) {
                             Text("取消")
                         }
                     }
@@ -1800,12 +1897,12 @@ fun PostDetailScreen(
             
             // 删除确认对话框
             if (showDeleteDialog) {
-                YhAlertDialog(
+                AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
                     title = { Text("删除文章") },
                     text = { Text("确定要删除这篇文章吗？删除后无法恢复。") },
                     confirmButton = {
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 showDeleteDialog = false
                                 viewModel.deletePost(if (isTokenLoaded) currentToken else "", postId) {
@@ -1818,7 +1915,7 @@ fun PostDetailScreen(
                         }
                     },
                     dismissButton = {
-                        YhTextButton(onClick = { showDeleteDialog = false }) {
+                        TextButton(onClick = { showDeleteDialog = false }) {
                             Text("取消")
                         }
                     }
@@ -2012,7 +2109,7 @@ private fun CommunityReportDialog(
         selectedImageUri = uri
     }
 
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(target.title)
@@ -2022,18 +2119,42 @@ private fun CommunityReportDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                YhDropdownSelector(
-                    items = COMMUNITY_REPORT_REASONS,
-                    selectedIndex = COMMUNITY_REPORT_REASONS.indexOf(selectedReason),
-                    onSelectedIndexChange = { index ->
-                        selectedReason = COMMUNITY_REPORT_REASONS.getOrNull(index).orEmpty()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "举报原因",
-                    placeholder = "请选择举报原因"
-                )
+                var reasonMenuExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = reasonMenuExpanded,
+                    onExpandedChange = { reasonMenuExpanded = !reasonMenuExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedReason,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("举报原因") },
+                        placeholder = { Text("请选择举报原因") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = reasonMenuExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = reasonMenuExpanded,
+                        onDismissRequest = { reasonMenuExpanded = false }
+                    ) {
+                        COMMUNITY_REPORT_REASONS.forEach { reason ->
+                            DropdownMenuItem(
+                                text = { Text(reason) },
+                                onClick = {
+                                    selectedReason = reason
+                                    reasonMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = reportContent,
                     onValueChange = { reportContent = it },
                     label = { Text("补充说明") },
@@ -2046,11 +2167,14 @@ private fun CommunityReportDialog(
                     )
                 )
 
-                YhCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { imagePickerLauncher.launch("image/*") },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -2092,25 +2216,25 @@ private fun CommunityReportDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     if (selectedReason.isBlank()) {
                         Toast.makeText(context, "请选择举报原因", Toast.LENGTH_SHORT).show()
-                        return@YhTextButton
+                        return@TextButton
                     }
                     onSubmit(selectedReason, reportContent, selectedImageUri)
                 },
                 enabled = !isSubmitting
             ) {
                 if (isSubmitting) {
-                    YhCircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
                 } else {
                     Text("提交举报")
                 }
             }
         },
         dismissButton = {
-            YhTextButton(
+            TextButton(
                 onClick = onDismiss,
                 enabled = !isSubmitting
             ) {

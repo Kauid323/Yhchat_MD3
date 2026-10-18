@@ -17,13 +17,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -41,16 +56,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
 
@@ -89,11 +94,13 @@ class EmailBindingActivity : BaseActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmailBindingScreen(
     viewModel: EmailBindingViewModel,
     onBackClick: () -> Unit,
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -125,19 +132,28 @@ fun EmailBindingScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "绑定邮箱",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "绑定邮箱",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回"
                     )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -145,15 +161,18 @@ fun EmailBindingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 说明文字
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -174,8 +193,9 @@ fun EmailBindingScreen(
             }
             
             // 人机验证码显示和刷新
-            YhCard(
-                modifier = Modifier.fillMaxWidth()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -190,7 +210,7 @@ fun EmailBindingScreen(
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Medium
                         )
-                        YhIconButton(
+                        IconButton(
                             onClick = {
                                 viewModel.getCaptcha { id, bitmap ->
                                     captchaId = id
@@ -221,7 +241,7 @@ fun EmailBindingScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     // 验证码输入框
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = captchaCode,
                         onValueChange = { captchaCode = it },
                         label = { Text("请输入验证码") },
@@ -236,7 +256,7 @@ fun EmailBindingScreen(
             }
             
             // 邮箱输入
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("邮箱地址") },
@@ -259,7 +279,7 @@ fun EmailBindingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = emailVerificationCode,
                     onValueChange = { emailVerificationCode = it },
                     label = { Text("邮箱验证码") },
@@ -271,7 +291,7 @@ fun EmailBindingScreen(
                     singleLine = true
                 )
                 
-                YhButton(
+                Button(
                     onClick = {
                         if (email.isNotBlank() && captchaCode.isNotBlank() && captchaId.isNotBlank()) {
                             isGettingEmailCode = true
@@ -304,7 +324,7 @@ fun EmailBindingScreen(
                     modifier = Modifier.height(56.dp)
                 ) {
                     if (isGettingEmailCode) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -319,7 +339,7 @@ fun EmailBindingScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             // 确定绑定按钮
-            YhButton(
+            Button(
                 onClick = {
                     if (email.isNotBlank() && emailVerificationCode.isNotBlank()) {
                         isLoading = true
@@ -348,7 +368,7 @@ fun EmailBindingScreen(
                     .height(56.dp)
             ) {
                 if (isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp
                     )

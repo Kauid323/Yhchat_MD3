@@ -57,13 +57,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Toast
 import com.yhchat.canary.service.FileDownloadService
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhSlider
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -300,7 +300,7 @@ private fun FullscreenVideoPlayer(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(48.dp)
                 )
             }
@@ -330,7 +330,7 @@ private fun FullscreenVideoPlayer(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             onClose(uiState.currentPositionMs, uiState.isPlaying)
                         }
@@ -344,7 +344,7 @@ private fun FullscreenVideoPlayer(
                     }
 
                     Box {
-                        YhIconButton(onClick = { moreMenuExpanded = true }) {
+                        IconButton(onClick = { moreMenuExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "更多操作",
@@ -352,11 +352,11 @@ private fun FullscreenVideoPlayer(
                                 modifier = Modifier.size(32.dp)
                             )
                         }
-                        YhDropdownMenu(
+                        DropdownMenu(
                             expanded = moreMenuExpanded,
                             onDismissRequest = { moreMenuExpanded = false }
                         ) {
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(if (isLandscape) "切换为竖屏" else "切换为横屏") },
                                 onClick = {
                                     moreMenuExpanded = false
@@ -368,7 +368,7 @@ private fun FullscreenVideoPlayer(
                                     }
                                 }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("保存视频") },
                                 onClick = {
                                     moreMenuExpanded = false
@@ -432,7 +432,7 @@ private fun FullscreenVideoPlayer(
                 ) {
                     val durationMs = uiState.durationMs
                     // Seek slider
-                    YhSlider(
+                    Slider(
                         value = if (durationMs > 0L) {
                             (uiState.currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
                         } else {
@@ -475,7 +475,7 @@ private fun FullscreenVideoPlayer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Rewind 10s button
-                    YhIconButton(
+                    IconButton(
                         onClick = { seekBackward(10) },
                         modifier = Modifier.size(48.dp)
                     ) {
@@ -492,7 +492,7 @@ private fun FullscreenVideoPlayer(
                     }
                     
                     // Play/Pause button (large)
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (uiState.isPlaying) {
                                 pauseVideo()
@@ -503,7 +503,7 @@ private fun FullscreenVideoPlayer(
                         modifier = Modifier.size(64.dp)
                     ) {
                         if (uiState.isBuffering) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(32.dp),
                                 strokeWidth = 3.dp
                             )
@@ -517,7 +517,7 @@ private fun FullscreenVideoPlayer(
                     }
                     
                     // Forward 10s button
-                    YhIconButton(
+                    IconButton(
                         onClick = { seekForward(10) },
                         modifier = Modifier.size(48.dp)
                     ) {
@@ -534,7 +534,7 @@ private fun FullscreenVideoPlayer(
                     }
                     
                     // Volume button
-                    YhIconButton(
+                    IconButton(
                         onClick = { 
                             val nextVisible = !uiState.showVolumeSlider
                             viewModel.setVolumeSliderVisible(nextVisible)
@@ -567,7 +567,7 @@ private fun FullscreenVideoPlayer(
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
-                        YhSlider(
+                        Slider(
                             value = uiState.volume,
                             onValueChange = { newVolume ->
                                 val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)

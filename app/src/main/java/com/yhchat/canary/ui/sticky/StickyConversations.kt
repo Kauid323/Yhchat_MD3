@@ -14,8 +14,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,7 +37,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yhchat.canary.R
 import com.yhchat.canary.data.model.StickyItem
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
 
 /**
  * 置顶会话组件
@@ -103,7 +103,7 @@ fun StickyConversations(
         }
 
         // 分隔线
-        YhHorizontalDivider(
+        HorizontalDivider(
             modifier = Modifier.padding(vertical = 6.dp),
             color = MaterialTheme.colorScheme.outlineVariant
         )

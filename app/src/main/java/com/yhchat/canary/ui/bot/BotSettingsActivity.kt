@@ -44,20 +44,23 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhRichListItem
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class BotSettingsActivity : BaseActivity() {
@@ -123,16 +126,19 @@ private fun BotSettingsScreen(
         }
     }
 
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "$botName 设置",
-                large = false,
+            TopAppBar(
+                title = { Text("$botName 设置", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBack) {
+                    IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -153,9 +159,9 @@ private fun BotSettingsScreen(
                 }
 
                 // Token 区域
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -173,7 +179,7 @@ private fun BotSettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhOutlinedTextField(
+                            OutlinedTextField(
                                 value = uiState.token,
                                 onValueChange = { },
                                 modifier = Modifier.weight(1f),
@@ -182,7 +188,7 @@ private fun BotSettingsScreen(
                                 enabled = !uiState.isLoading,
                                 readOnly = true,
                                 trailingIcon = {
-                                    YhIconButton(
+                                    IconButton(
                                         onClick = {
                                             if (uiState.token.isNotBlank()) {
                                                 clipboard.setText(AnnotatedString(uiState.token))
@@ -201,7 +207,7 @@ private fun BotSettingsScreen(
                             
                             Spacer(modifier = Modifier.width(8.dp))
                             
-                            YhOutlinedButton(
+                            OutlinedButton(
                                 onClick = { viewModel.resetBotToken(botId) },
                                 enabled = !uiState.isLoading
                             ) {
@@ -214,9 +220,9 @@ private fun BotSettingsScreen(
                 }
                 
                 // Webhook 订阅地址区域
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -242,7 +248,7 @@ private fun BotSettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhRadioButton(
+                                RadioButton(
                                     selected = uiState.callbackMode == 0,
                                     onClick = { viewModel.updateCallbackMode(0) },
                                     enabled = !uiState.isSavingWebhook && !uiState.isLoading
@@ -255,7 +261,7 @@ private fun BotSettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhRadioButton(
+                                RadioButton(
                                     selected = uiState.callbackMode == 1,
                                     onClick = { viewModel.updateCallbackMode(1) },
                                     enabled = !uiState.isSavingWebhook && !uiState.isLoading
@@ -273,7 +279,7 @@ private fun BotSettingsScreen(
                         }
 
                         if (uiState.callbackMode == 0) {
-                            YhOutlinedTextField(
+                            OutlinedTextField(
                                 value = uiState.webhookUrl,
                                 onValueChange = { viewModel.updateWebhookUrl(it) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -282,7 +288,7 @@ private fun BotSettingsScreen(
                                 enabled = !uiState.isSavingWebhook && !uiState.isLoading
                             )
                         } else {
-                            YhOutlinedTextField(
+                            OutlinedTextField(
                                 value = wsSubscribeUrl,
                                 onValueChange = { },
                                 modifier = Modifier.fillMaxWidth(),
@@ -290,7 +296,7 @@ private fun BotSettingsScreen(
                                 enabled = !uiState.isSavingWebhook && !uiState.isLoading,
                                 readOnly = true,
                                 trailingIcon = {
-                                    YhIconButton(
+                                    IconButton(
                                         onClick = {
                                             clipboard.setText(AnnotatedString(wsSubscribeUrl))
                                             Toast.makeText(context, "已复制 WS 地址", Toast.LENGTH_SHORT).show()
@@ -312,7 +318,7 @@ private fun BotSettingsScreen(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhOutlinedButton(
+                            OutlinedButton(
                                 onClick = {
                                     BotWsTestActivity.start(
                                         context = context,
@@ -329,12 +335,12 @@ private fun BotSettingsScreen(
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            YhButton(
-                                onClick = { viewModel.saveWebhook(botId) },
-                                enabled = !uiState.isSavingWebhook && !uiState.isLoading
-                            ) {
+                        Button(
+                            onClick = { viewModel.saveWebhook(botId) },
+                            enabled = !uiState.isSavingWebhook && !uiState.isLoading
+                        ) {
                                 if (uiState.isSavingWebhook) {
-                                    YhCircularProgressIndicator(
+                                    CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
                                         strokeWidth = 2.dp
                                     )
@@ -349,9 +355,9 @@ private fun BotSettingsScreen(
                 }
                 
                 // 恢复订阅链接按钮
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -372,13 +378,13 @@ private fun BotSettingsScreen(
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
                         
-                        YhButton(
+                        Button(
                             onClick = { viewModel.resetBotLink(botId) },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !uiState.isResettingLink && !uiState.isLoading
                         ) {
                             if (uiState.isResettingLink) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -392,9 +398,9 @@ private fun BotSettingsScreen(
                 }
 
                 // 订阅设置
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(text = "事件订阅", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -423,9 +429,9 @@ private fun BotSettingsScreen(
                     }
                 }
 
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -446,7 +452,7 @@ private fun BotSettingsScreen(
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
 
-                        YhRichListItem(
+                        ListItem(
                             headlineContent = { Text("查看使用列表") },
                             supportingContent = { Text("用户列表 / 群聊列表") },
                             trailingContent = {
@@ -455,21 +461,21 @@ private fun BotSettingsScreen(
                                     contentDescription = null
                                 )
                             },
-                            containerColor = Color.Transparent,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp)),
-                            onClick = {
-                                BotUsageListActivity.start(context, botId, botName)
-                            }
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    BotUsageListActivity.start(context, botId, botName)
+                                },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                         )
                     }
                 }
                 
                 // 机器人指令列表
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -483,7 +489,7 @@ private fun BotSettingsScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                             
-                            YhIconButton(
+                            IconButton(
                                 onClick = {
                                     InstructionManagementActivity.start(context, botId, botName)
                                 }
@@ -504,7 +510,7 @@ private fun BotSettingsScreen(
                                     .height(60.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
                         } else if (uiState.instructions.isEmpty()) {
                             Text(
@@ -548,7 +554,7 @@ private fun BotSettingsScreen(
                                     }
                                     
                                     if (instruction != uiState.instructions.take(3).last()) {
-                                        YhHorizontalDivider()
+                                        HorizontalDivider()
                                     }
                                 }
                                 
@@ -577,6 +583,6 @@ private fun SubscriptionSwitch(title: String, checked: Boolean, onCheckedChange:
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = title, style = MaterialTheme.typography.bodyMedium)
-        YhSwitch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

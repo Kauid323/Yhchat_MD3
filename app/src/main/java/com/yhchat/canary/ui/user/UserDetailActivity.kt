@@ -43,8 +43,28 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -57,6 +77,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -74,28 +95,14 @@ import com.yhchat.canary.data.model.MedalInfo
 import com.yhchat.canary.data.model.RemarkExtraEntry
 import com.yhchat.canary.data.model.RemarkInfo
 import com.yhchat.canary.data.model.UserDetail
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRichListItem
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.chat.ChatActivity
 import com.yhchat.canary.ui.community.BoardDetailActivity
 import com.yhchat.canary.ui.components.ReportDialog
+import com.yhchat.canary.ui.components.SheetMenuGroup
+import com.yhchat.canary.ui.components.SheetMenuHeader
+import com.yhchat.canary.ui.components.SheetMenuItem
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -210,7 +217,7 @@ private fun RemarkEditorDialog(
         }
     }
 
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = {
             if (!isSaving) onDismiss()
         },
@@ -219,7 +226,7 @@ private fun RemarkEditorDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (mode) {
                     RemarkEditorMode.Name, RemarkEditorMode.Phone -> {
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = primaryValue,
                             onValueChange = { primaryValue = it },
                             singleLine = true,
@@ -229,14 +236,14 @@ private fun RemarkEditorDialog(
                     }
 
                     is RemarkEditorMode.Other -> {
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = otherKey,
                             onValueChange = { otherKey = it },
                             singleLine = true,
                             label = { Text("备注名") },
                             enabled = !isSaving
                         )
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = otherValue,
                             onValueChange = { otherValue = it },
                             label = { Text("备注内容") },
@@ -249,13 +256,13 @@ private fun RemarkEditorDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showDelete) {
-                    YhTextButton(onClick = { if (!isSaving) handleDelete() }, enabled = !isSaving) {
+                    TextButton(onClick = { if (!isSaving) handleDelete() }, enabled = !isSaving) {
                         Text("删除")
                     }
                 }
-                YhButton(onClick = { handleSave() }, enabled = confirmEnabled) {
+                Button(onClick = { handleSave() }, enabled = confirmEnabled) {
                     if (isSaving) {
-                        YhCircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
                         Text("确定")
                     }
@@ -263,7 +270,7 @@ private fun RemarkEditorDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = { if (!isSaving) onDismiss() }, enabled = !isSaving) {
+            TextButton(onClick = { if (!isSaving) onDismiss() }, enabled = !isSaving) {
                 Text("取消")
             }
         }
@@ -330,21 +337,35 @@ fun UserDetailScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "用户详情",
-                large = true,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "用户详情",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
                 actions = {
-                    YhIconButton(onClick = { viewModel.openMoreSheet() }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "更多")
-                    }
-                }
+                    // 顶栏主操作（更多）：MD3 Expressive 的填充按钮
+                    TopBarActionButton(
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = "更多",
+                        onClick = { viewModel.openMoreSheet() }
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -355,7 +376,7 @@ fun UserDetailScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -369,7 +390,7 @@ fun UserDetailScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        YhButton(onClick = {
+                        Button(onClick = {
                             // 重新加载
                             // 这里简单处理，实际应触发LaunchedEffect重新执行
                         }) {
@@ -452,7 +473,7 @@ fun UserDetailScreen(
         }
         
         if (uiState.showAddFriendDialog) {
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = {
                     if (!uiState.isAddingFriend) {
                         viewModel.dismissAddFriendDialog()
@@ -463,7 +484,7 @@ fun UserDetailScreen(
                     Column {
                         Text("确定要添加 ${uiState.userDetail?.name ?: userName} 为好友吗？")
                         Spacer(modifier = Modifier.height(8.dp))
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = uiState.addFriendRemark,
                             onValueChange = viewModel::updateAddFriendRemark,
                             label = { Text("申请备注（可选）") },
@@ -474,22 +495,22 @@ fun UserDetailScreen(
                     }
                 },
                 confirmButton = {
-                    YhButton(
+                    Button(
                         onClick = {
-                            if (uiState.isAddingFriend) return@YhButton
+                            if (uiState.isAddingFriend) return@Button
                             viewModel.confirmAddFriend(userId)
                         },
                         enabled = !uiState.isAddingFriend
                     ) {
                         if (uiState.isAddingFriend) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
                             Text("添加")
                         }
                     }
                 },
                 dismissButton = {
-                    YhTextButton(
+                    TextButton(
                         onClick = viewModel::dismissAddFriendDialog,
                         enabled = !uiState.isAddingFriend
                     ) {
@@ -518,167 +539,169 @@ fun UserDetailScreen(
         }
 
         if (uiState.showMoreSheet) {
-            YhBottomSheet(
-                show = true,
-                title = "更多",
-                onDismissRequest = viewModel::dismissMoreSheet
+            // 点菜单项不再自动关掉弹窗：只有「会跳转到其它页面」的项才关闭，
+            // 弹对话框（账号信息/分享/举报/删除确认等）、开关和原地执行的动作保持打开，
+            // 免得点一下整个弹窗就没了、还得重新打开。
+            ModalBottomSheet(
+                onDismissRequest = viewModel::dismissMoreSheet,
+                sheetState = rememberModalBottomSheetState()
             ) {
                 val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(scrollState)
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SheetSectionHeader(title = "互动")
+                    SheetMenuGroup {
+                        SheetMenuHeader(title = "互动")
 
-                    SheetActionItem(
-                        icon = Icons.Default.ManageSearch,
-                        title = "搜索聊天记录",
-                        onClick = {
-                            viewModel.dismissMoreSheet()
-                            com.yhchat.canary.ui.group.ChatSearchActivity.start(
-                                context,
-                                userId,
-                                1,
-                                uiState.userDetail?.name ?: userName
-                            )
-                        }
-                    )
-
-                    SheetActionItem(
-                        icon = Icons.Default.Search,
-                        title = "账号信息",
-                        onClick = {
-                            viewModel.dismissMoreSheet()
-                            viewModel.openUserInfoDialog()
-                        }
-                    )
-
-                    SheetActionItem(
-                        icon = Icons.Default.Share,
-                        title = "分享好友",
-                        onClick = {
-                            viewModel.dismissMoreSheet()
-                            viewModel.openShareDialog()
-                        }
-                    )
-
-                    SheetActionItem(
-                        icon = Icons.Default.Report,
-                        title = "举报",
-                        onClick = {
-                            viewModel.dismissMoreSheet()
-                            viewModel.openReportDialog()
-                        }
-                    )
-
-                    SheetActionItem(
-                        icon = Icons.Default.Wallpaper,
-                        title = "聊天背景",
-                        onClick = {
-                            viewModel.dismissMoreSheet()
-                            com.yhchat.canary.ui.background.ChatBackgroundActivity.start(
-                                context,
-                                userId,
-                                uiState.userDetail?.name ?: userName
-                            )
-                        }
-                    )
-
-                    YhRichListItem(
-                        headlineContent = { Text("免打扰") },
-                        supportingContent = {
-                            Text(if (uiState.isNoNotify) "已开启" else "未开启")
-                        },
-                        leadingContent = {
-                            Icon(
-                                imageVector = if (uiState.isNoNotify) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        trailingContent = {
-                            if (uiState.isSettingNoNotify) {
-                                YhCircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                YhSwitch(
-                                    checked = uiState.isNoNotify,
-                                    onCheckedChange = { checked ->
-                                        if (uiState.isSettingNoNotify) return@YhSwitch
-                                        viewModel.setNoNotify(userId, checked)
-                                    },
-                                    enabled = !uiState.isSettingNoNotify
-                                )
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                    YhHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                    if (!uiState.isCheckingAddressBook && uiState.isInAddressBook) {
-                        SheetActionItem(
-                            icon = Icons.Default.Delete,
-                            title = "删除好友",
-                            isDestructive = true,
+                        SheetMenuItem(
+                            icon = Icons.Default.ManageSearch,
+                            title = "搜索聊天记录",
                             onClick = {
                                 viewModel.dismissMoreSheet()
-                                viewModel.openDeleteFriendDialog()
+                                com.yhchat.canary.ui.group.ChatSearchActivity.start(
+                                    context,
+                                    userId,
+                                    1,
+                                    uiState.userDetail?.name ?: userName
+                                )
+                            }
+                        )
+
+                        SheetMenuItem(
+                            icon = Icons.Default.Search,
+                            title = "账号信息",
+                            onClick = {
+                                viewModel.openUserInfoDialog()
+                            }
+                        )
+
+                        SheetMenuItem(
+                            icon = Icons.Default.Share,
+                            title = "分享好友",
+                            onClick = {
+                                viewModel.openShareDialog()
+                            }
+                        )
+
+                        SheetMenuItem(
+                            icon = Icons.Default.Report,
+                            title = "举报",
+                            onClick = {
+                                viewModel.openReportDialog()
+                            }
+                        )
+
+                        SheetMenuItem(
+                            icon = Icons.Default.Wallpaper,
+                            title = "聊天背景",
+                            onClick = {
+                                viewModel.dismissMoreSheet()
+                                com.yhchat.canary.ui.background.ChatBackgroundActivity.start(
+                                    context,
+                                    userId,
+                                    uiState.userDetail?.name ?: userName
+                                )
+                            }
+                        )
+
+                        SheetMenuItem(
+                            icon = if (uiState.isNoNotify) {
+                                Icons.Default.NotificationsOff
+                            } else {
+                                Icons.Default.Notifications
+                            },
+                            title = "免打扰",
+                            subtitle = if (uiState.isNoNotify) "已开启" else "未开启",
+                            enabled = !uiState.isSettingNoNotify,
+                            onClick = {
+                                if (uiState.isSettingNoNotify) return@SheetMenuItem
+                                viewModel.setNoNotify(userId, !uiState.isNoNotify)
+                            },
+                            trailing = {
+                                if (uiState.isSettingNoNotify) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Switch(
+                                        checked = uiState.isNoNotify,
+                                        onCheckedChange = { checked ->
+                                            if (uiState.isSettingNoNotify) return@Switch
+                                            viewModel.setNoNotify(userId, checked)
+                                        },
+                                        enabled = !uiState.isSettingNoNotify
+                                    )
+                                }
                             }
                         )
                     }
 
-                    if (groupId != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        SheetSectionHeader(title = "群聊管理")
-
-                        if (uiState.targetUserPermission == 2) {
-                            SheetActionItem(
-                                icon = Icons.Default.AdminPanelSettings,
-                                title = "卸任管理员",
-                                enabled = !uiState.isProcessingMemberAction,
+                    if (!uiState.isCheckingAddressBook && uiState.isInAddressBook) {
+                        SheetMenuGroup {
+                            SheetMenuItem(
+                                icon = Icons.Default.Delete,
+                                title = "删除好友",
+                                isDestructive = true,
                                 onClick = {
-                                    viewModel.dismissMoreSheet()
-                                    if (!uiState.isProcessingMemberAction) {
-                                        viewModel.setMemberRole(groupId, userId, 0)
-                                    }
-                                }
-                            )
-                        } else if (uiState.targetUserPermission == 0) {
-                            SheetActionItem(
-                                icon = Icons.Default.AdminPanelSettings,
-                                title = "设为管理员",
-                                enabled = !uiState.isProcessingMemberAction,
-                                onClick = {
-                                    viewModel.dismissMoreSheet()
-                                    if (!uiState.isProcessingMemberAction) {
-                                        viewModel.setMemberRole(groupId, userId, 2)
-                                    }
+                                    viewModel.openDeleteFriendDialog()
                                 }
                             )
                         }
+                    }
 
-                        SheetActionItem(
-                            icon = Icons.Default.Delete,
-                            title = "踢出群聊",
-                            enabled = !uiState.isProcessingMemberAction,
-                            isDestructive = true,
-                            onClick = {
-                                viewModel.dismissMoreSheet()
-                                if (!uiState.isProcessingMemberAction) {
-                                    viewModel.removeMember(groupId, userId)
+                    if (groupId != null) {
+                        SheetMenuGroup {
+                            SheetMenuHeader(title = "群聊管理")
+
+                            if (uiState.targetUserPermission == 2) {
+                                SheetMenuItem(
+                                    icon = Icons.Default.AdminPanelSettings,
+                                    title = "卸任管理员",
+                                    enabled = !uiState.isProcessingMemberAction,
+                                    onClick = {
+                                        if (!uiState.isProcessingMemberAction) {
+                                            viewModel.setMemberRole(groupId, userId, 0)
+                                        }
+                                    }
+                                )
+                            } else if (uiState.targetUserPermission == 0) {
+                                SheetMenuItem(
+                                    icon = Icons.Default.AdminPanelSettings,
+                                    title = "设为管理员",
+                                    enabled = !uiState.isProcessingMemberAction,
+                                    onClick = {
+                                        if (!uiState.isProcessingMemberAction) {
+                                            viewModel.setMemberRole(groupId, userId, 2)
+                                        }
+                                    }
+                                )
+                            }
+
+                            SheetMenuItem(
+                                icon = Icons.Default.Delete,
+                                title = "踢出群聊",
+                                enabled = !uiState.isProcessingMemberAction,
+                                isDestructive = true,
+                                onClick = {
+                                    if (!uiState.isProcessingMemberAction) {
+                                        viewModel.removeMember(groupId, userId)
+                                    }
                                 }
-                            }
-                        )
-                        SheetActionItem(
-                            icon = Icons.Default.Block,
-                            title = "禁言",
-                            enabled = !uiState.isProcessingMemberAction,
-                            onClick = {
-                                viewModel.dismissMoreSheet()
-                                viewModel.openGagDialog()
-                            }
-                        )
+                            )
+                            SheetMenuItem(
+                                icon = Icons.Default.Block,
+                                title = "禁言",
+                                enabled = !uiState.isProcessingMemberAction,
+                                onClick = {
+                                    viewModel.openGagDialog()
+                                }
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -687,7 +710,7 @@ fun UserDetailScreen(
         }
 
         if (uiState.showDeleteFriendDialog) {
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = viewModel::dismissDeleteFriendDialog,
                 title = {
                     Text(
@@ -700,19 +723,21 @@ fun UserDetailScreen(
                     Text("确定要删除好友「${uiState.userDetail?.name ?: userName}」吗？")
                 },
                 confirmButton = {
-                    YhButton(
+                    Button(
                         onClick = {
                             viewModel.dismissDeleteFriendDialog()
                             viewModel.deleteFriend(userId)
                         },
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
                     ) {
                         Text("删除", color = MaterialTheme.colorScheme.onError)
                     }
                 },
                 dismissButton = {
-                    YhTextButton(onClick = viewModel::dismissDeleteFriendDialog) {
+                    TextButton(onClick = viewModel::dismissDeleteFriendDialog) {
                         Text("取消")
                     }
                 }
@@ -743,52 +768,6 @@ fun UserDetailScreen(
 }
 
 @Composable
-private fun SheetSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp)
-    )
-}
-
-@Composable
-private fun SheetActionItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    isDestructive: Boolean = false
-) {
-    val containerColor = MaterialTheme.colorScheme.surface
-    val baseTextColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    val baseIconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    val alpha = if (enabled) 1f else 0.45f
-
-    YhRichListItem(
-        headlineContent = {
-            Text(
-                text = title,
-                color = baseTextColor.copy(alpha = alpha)
-            )
-        },
-        leadingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = baseIconColor.copy(alpha = alpha)
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-        containerColor = containerColor,
-        onClick = if (enabled) onClick else null
-    )
-    YhHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-}
-
-@Composable
 private fun GagMemberDialog(
     userName: String,
     isLoading: Boolean,
@@ -804,14 +783,14 @@ private fun GagMemberDialog(
         1 to "永久禁言"
     )
 
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = if (!isLoading) onDismiss else { {} },
         title = { Text("禁言 $userName") },
         text = {
             Column {
                 Spacer(modifier = Modifier.height(8.dp))
                 gagOptions.forEach { (gagTime, label) ->
-                    YhTextButton(
+                    TextButton(
                         onClick = { onConfirm(gagTime) },
                         enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth()
@@ -823,7 +802,7 @@ private fun GagMemberDialog(
         },
         confirmButton = {},
         dismissButton = {
-            YhTextButton(onClick = onDismiss, enabled = !isLoading) {
+            TextButton(onClick = onDismiss, enabled = !isLoading) {
                 Text("取消")
             }
         }
@@ -851,8 +830,7 @@ fun UserDetailContent(
     LazyColumn(
         state = listState,
         modifier = Modifier
-            .fillMaxSize()
-            .yhTopBarNestedScroll(),
+            .fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -878,7 +856,7 @@ fun UserDetailContent(
                 InfoSectionCard(
                     title = "备注信息",
                     action = {
-                        YhIconButton(onClick = onAddOtherRemark) {
+                        IconButton(onClick = onAddOtherRemark) {
                             Icon(Icons.Default.Add, contentDescription = "添加备注")
                         }
                     }
@@ -963,7 +941,7 @@ fun UserDetailContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     when {
                         isLoadingBoards -> {
-                            YhCircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         }
                         createdBoards.isEmpty() -> {
                             Text(
@@ -974,7 +952,7 @@ fun UserDetailContent(
                         }
                         else -> {
                             createdBoards.forEach { board ->
-                                YhSurface(
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -1048,10 +1026,12 @@ private fun UserHeroCard(
     onAvatarClick: (String) -> Unit
 ) {
     val context = LocalContext.current
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 28.dp,
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -1110,7 +1090,7 @@ private fun UserHeroCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     medals.take(4).forEach { medal ->
-                        YhSurface(
+                        Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
                         ) {
@@ -1127,18 +1107,18 @@ private fun UserHeroCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                YhButton(
+                Button(
                     onClick = onPrimaryAction,
                     shape = RoundedCornerShape(18.dp),
                     enabled = !isPrimaryLoading
                 ) {
                     if (isPrimaryLoading) {
-                        YhCircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
                         Text(primaryButtonText)
                     }
                 }
-                YhOutlinedButton(
+                OutlinedButton(
                     onClick = onInfoClick,
                     shape = RoundedCornerShape(18.dp)
                 ) {
@@ -1151,7 +1131,7 @@ private fun UserHeroCard(
 
 @Composable
 private fun VipBadge() {
-    YhSurface(
+    Surface(
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.primary
     ) {
@@ -1182,9 +1162,12 @@ private fun InfoSectionCard(
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 24.dp
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Column(
             modifier = Modifier
@@ -1215,10 +1198,10 @@ private fun UserInfoDialog(
     userDetail: UserDetail,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("确定")
             }
         },

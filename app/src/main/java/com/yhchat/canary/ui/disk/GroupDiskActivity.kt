@@ -45,8 +45,24 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,26 +72,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.crash.CrashHandler
 import com.yhchat.canary.data.model.DiskFile
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFloatingActionButton
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.disk.webdav.WebDAVBrowserActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
@@ -133,6 +136,7 @@ fun GroupDiskScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     
     LaunchedEffect(Unit) {
@@ -185,12 +189,12 @@ fun GroupDiskScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopAppBar(
+            TopAppBar(
                 title = { Text("$groupName 的网盘", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -198,7 +202,7 @@ fun GroupDiskScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             WebDAVBrowserActivity.start(context, groupId, groupName)
                         },
@@ -209,7 +213,7 @@ fun GroupDiskScreen(
                             contentDescription = "WebDAV"
                         )
                     }
-                    YhIconButton(
+                    IconButton(
                         onClick = { showCreateFolderDialog = true },
                         enabled = !uiState.isLoading
                     ) {
@@ -218,7 +222,7 @@ fun GroupDiskScreen(
                             contentDescription = "创建文件夹"
                         )
                     }
-                    YhIconButton(
+                    IconButton(
                         onClick = { filePickerLauncher.launch("*/*") },
                         enabled = !uiState.isUploading
                     ) {
@@ -227,12 +231,17 @@ fun GroupDiskScreen(
                             contentDescription = "上传文件"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         floatingActionButton = {
             if (!uiState.isLoading && !uiState.isUploading) {
-                YhFloatingActionButton(
+                FloatingActionButton(
                     onClick = { viewModel.loadFiles(groupId) }
                 ) {
                     Icon(Icons.Default.Refresh, "刷新")
@@ -246,11 +255,14 @@ fun GroupDiskScreen(
                 .padding(paddingValues)
         ) {
             // 面包屑导航
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
             ) {
                 LazyRow(
                     modifier = Modifier
@@ -328,7 +340,7 @@ fun GroupDiskScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -345,7 +357,7 @@ fun GroupDiskScreen(
                                 text = uiState.error ?: "加载失败",
                                 color = MaterialTheme.colorScheme.error
                             )
-                            YhButton(onClick = { viewModel.loadFiles(groupId) }) {
+                            Button(onClick = { viewModel.loadFiles(groupId) }) {
                                 Text("重试")
                             }
                         }
@@ -380,7 +392,7 @@ fun GroupDiskScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .yhTopBarNestedScroll(),
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -409,7 +421,7 @@ fun GroupDiskScreen(
             
             // 上传进度
             if (uiState.isUploading) {
-                YhLinearProgressIndicator(
+                LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -529,14 +541,14 @@ private fun DiskFileCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        cornerRadius = 8.dp
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
             modifier = Modifier
@@ -591,11 +603,11 @@ private fun CreateFolderDialog(
 ) {
     var folderName by remember { mutableStateOf("") }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("创建文件夹") },
         text = {
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = folderName,
                 onValueChange = { folderName = it },
                 label = { Text("文件夹名称") },
@@ -604,7 +616,7 @@ private fun CreateFolderDialog(
             )
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = { if (folderName.isNotBlank()) onConfirm(folderName) },
                 enabled = folderName.isNotBlank()
             ) {
@@ -612,7 +624,7 @@ private fun CreateFolderDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -629,7 +641,7 @@ private fun FileActionDialog(
 ) {
     val context = LocalContext.current
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("文件操作") },
         text = {
@@ -639,7 +651,7 @@ private fun FileActionDialog(
                 
                 // 如果是文件（objectType=2），显示下载选项
                 if (file.objectType == 2) {
-                    YhTextButton(
+                    TextButton(
                         onClick = {
                             onDownload()
                             onDismiss()
@@ -652,7 +664,7 @@ private fun FileActionDialog(
                     }
                 }
                 
-                YhTextButton(
+                TextButton(
                     onClick = onRename,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -661,7 +673,7 @@ private fun FileActionDialog(
                     Text("重命名")
                 }
                 
-                YhTextButton(
+                TextButton(
                     onClick = onDelete,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -677,7 +689,7 @@ private fun FileActionDialog(
         },
         confirmButton = {},
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -690,7 +702,7 @@ private fun DownloadConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("确认下载") },
         text = {
@@ -699,8 +711,11 @@ private fun DownloadConfirmDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 // 文件信息
-                YhCard(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -735,7 +750,7 @@ private fun DownloadConfirmDialog(
             }
         },
         confirmButton = {
-            YhButton(onClick = onConfirm) {
+            Button(onClick = onConfirm) {
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = null,
@@ -746,7 +761,7 @@ private fun DownloadConfirmDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -761,11 +776,11 @@ private fun RenameFileDialog(
 ) {
     var newName by remember { mutableStateOf(currentName) }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("重命名") },
         text = {
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = newName,
                 onValueChange = { newName = it },
                 label = { Text("新名称") },
@@ -774,7 +789,7 @@ private fun RenameFileDialog(
             )
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = { if (newName.isNotBlank()) onConfirm(newName) },
                 enabled = newName.isNotBlank()
             ) {
@@ -782,7 +797,7 @@ private fun RenameFileDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

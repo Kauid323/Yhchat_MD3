@@ -1,12 +1,9 @@
 package com.yhchat.canary.crash
 
-import android.app.AlarmManager
 import android.app.Application
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -19,6 +16,14 @@ object CrashHandler {
 
     @Volatile
     private var visibleActivityCount = 0
+
+    /**
+     * 崩溃页运行在独立进程（AndroidManifest 中声明的 :crash）中，
+     * 主进程被杀掉后它依然存活，因此崩溃日志可以在崩溃的瞬间直接显示，不需要重启应用。
+     */
+
+    /** 等系统把崩溃页拉起来之后再结束主进程，避免启动请求被取消。 */
+    private const val KILL_DELAY_MS = 400L
 
     fun install(context: Context) {
         if (installed) return
@@ -46,27 +51,43 @@ object CrashHandler {
                 override fun onActivityDestroyed(activity: android.app.Activity) = Unit
             }
         )
+
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            if (!shouldShowCrashActivity(thread, throwable)) {
+            val reportPath = if (shouldShowCrashActivity(throwable)) {
+                runCatching {
+                    CrashReportStore.writeCrashReport(appContext, thread, throwable).absolutePath
+                }.getOrNull()
+            } else {
+                null
+            }
+
+            if (reportPath == null) {
                 previousHandler?.uncaughtException(thread, throwable)
                 return@setDefaultUncaughtExceptionHandler
             }
 
-            runCatching {
-                val reportFile = CrashReportStore.writeCrashReport(appContext, thread, throwable)
-                scheduleCrashActivity(appContext, reportFile.absolutePath)
-            }
-
-            Process.killProcess(Process.myPid())
-            exitProcess(10)
+            launchCrashActivity(appContext, reportPath)
+            killCurrentProcessDelayed()
         }
     }
 
-    private fun shouldShowCrashActivity(thread: Thread, throwable: Throwable): Boolean {
-        if (throwable.stackTrace.any { it.className == CrashReportActivity::class.java.name }) return false
-        if (thread != Looper.getMainLooper().thread) return false
+    private fun shouldShowCrashActivity(throwable: Throwable): Boolean {
+        // 崩溃页自身出问题时不要再弹一次，避免死循环。
+        if (isCrashScreenFailure(throwable)) return false
+        // 应用处于前台时才有权限直接拉起崩溃页（Android 10+ 后台启动限制）。
         return visibleActivityCount > 0
+    }
+
+    private fun isCrashScreenFailure(throwable: Throwable): Boolean {
+        var current: Throwable? = throwable
+        var depth = 0
+        while (current != null && depth < 16) {
+            if (current.stackTrace.any { it.className == CrashReportActivity::class.java.name }) return true
+            current = current.cause
+            depth++
+        }
+        return false
     }
 
     fun showCaughtException(context: Context, throwable: Throwable) {
@@ -77,10 +98,7 @@ object CrashHandler {
             throwable = throwable
         )
         val starter = {
-            val intent = CrashReportActivity.createIntent(appContext, reportFile.absolutePath).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            appContext.startActivity(intent)
+            launchCrashActivity(appContext, reportFile.absolutePath)
         }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -92,15 +110,26 @@ object CrashHandler {
         }
     }
 
-    private fun scheduleCrashActivity(context: Context, reportPath: String) {
+    private fun launchCrashActivity(context: Context, reportPath: String) {
         val intent = CrashReportActivity.createIntent(context, reportPath).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
         }
-        val flags = PendingIntent.FLAG_CANCEL_CURRENT or (
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        )
-        val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.set(AlarmManager.RTC, System.currentTimeMillis() + 150L, pendingIntent)
+        runCatching { context.startActivity(intent) }
+            .onFailure { android.util.Log.e("CrashHandler", "启动崩溃页失败", it) }
+    }
+
+    private fun killCurrentProcessDelayed() {
+        Thread {
+            runCatching { Thread.sleep(KILL_DELAY_MS) }
+            Process.killProcess(Process.myPid())
+            exitProcess(10)
+        }.apply {
+            name = "crash-process-killer"
+            isDaemon = true
+        }.start()
     }
 }

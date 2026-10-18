@@ -31,8 +31,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,16 +61,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.yhchat.canary.crash.CrashHandler
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class ChangePasswordActivity : ComponentActivity() {
@@ -185,14 +187,22 @@ fun ChangePasswordScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {      
-        YhTopBar(
-            title = "更改密码",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "更改密码",
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
         
         // 内容区域
@@ -204,7 +214,7 @@ fun ChangePasswordScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 邮箱输入
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = uiState.email,
                 onValueChange = { },
                 label = { Text("邮箱") },
@@ -213,7 +223,10 @@ fun ChangePasswordScreen(
             )
             
             // 图片验证码
-            YhCard(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
@@ -225,19 +238,19 @@ fun ChangePasswordScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     // 验证码图片
-                    YhCard(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp)
                             .clip(RoundedCornerShape(8.dp)),
-                        cornerRadius = 8.dp
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         if (uiState.isLoading) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -262,14 +275,14 @@ fun ChangePasswordScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = uiState.captchaCode,
                             onValueChange = { viewModel.updateCaptchaCode(it) },
                             label = { Text("请输入验证码") },
                             modifier = Modifier.weight(1f)
                         )
                         
-                        YhButton(
+                        Button(
                             onClick = { viewModel.getCaptcha() },
                             enabled = !uiState.isLoading
                         ) {
@@ -279,7 +292,7 @@ fun ChangePasswordScreen(
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    YhButton(
+                    Button(
                         onClick = { viewModel.sendEmailVerificationCode() },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !uiState.isLoading && uiState.captchaCode.isNotEmpty()
@@ -290,7 +303,7 @@ fun ChangePasswordScreen(
             }
             
             // 邮箱验证码输入
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = uiState.emailVerificationCode,
                 onValueChange = { viewModel.updateEmailVerificationCode(it) },
                 label = { Text("邮箱验证") },
@@ -298,14 +311,14 @@ fun ChangePasswordScreen(
             )
             
             // 新密码输入            
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = uiState.newPassword,
                 onValueChange = { viewModel.updateNewPassword(it) },
                 label = { Text("新密码") },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (uiState.showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    YhIconButton(onClick = viewModel::togglePasswordVisibility) {
+                    IconButton(onClick = viewModel::togglePasswordVisibility) {
                         Icon(
                             imageVector = if (uiState.showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                             contentDescription = if (uiState.showPassword) "隐藏密码" else "显示密码"
@@ -315,14 +328,14 @@ fun ChangePasswordScreen(
             )
             
             // 确认密码输入
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = uiState.confirmPassword,
                 onValueChange = { viewModel.updateConfirmPassword(it) },
                 label = { Text("确认密码") },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (uiState.showConfirmPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    YhIconButton(onClick = viewModel::toggleConfirmPasswordVisibility) {
+                    IconButton(onClick = viewModel::toggleConfirmPasswordVisibility) {
                         Icon(
                             imageVector = if (uiState.showConfirmPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                             contentDescription = if (uiState.showConfirmPassword) "隐藏密码" else "显示密码"
@@ -333,9 +346,12 @@ fun ChangePasswordScreen(
             
             // 错误信息
             if (uiState.message != null) {
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
                         text = uiState.message!!,
@@ -346,7 +362,7 @@ fun ChangePasswordScreen(
             }
             
             // 更改密码按钮
-            YhButton(
+            Button(
                 onClick = { viewModel.changePassword() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading &&
@@ -355,7 +371,7 @@ fun ChangePasswordScreen(
                     uiState.confirmPassword.isNotEmpty()
             ) {
                 if (uiState.isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -367,12 +383,12 @@ fun ChangePasswordScreen(
     
     // 成功
     if (uiState.success) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { },
             title = { Text("更改成功") },
             text = { Text("密码已成功更改，请使用新密码登录") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         viewModel.consumeSuccess()
                         onBackClick()

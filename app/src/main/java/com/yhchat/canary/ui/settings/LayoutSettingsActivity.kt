@@ -72,27 +72,29 @@ import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 /**
@@ -129,18 +131,30 @@ fun LayoutSettingsScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     
-    YhScaffold(
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            YhTopBar(
-                title = "布局设置",
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "布局设置",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
+                scrollBehavior = scrollBehavior,
+                // 顶部栏跟页面背景（Scaffold 的 surfaceContainer）保持一致，之前用 background 会比内容区还浅
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
         },
         contentWindowInsets = WindowInsets.safeDrawing
@@ -148,7 +162,7 @@ fun LayoutSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(padding),
             contentPadding = PaddingValues(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -399,7 +413,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
     )
 
     if (showLayoutModeDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showLayoutModeDialog = false },
             title = { Text("选择置顶布局方式") },
             text = {
@@ -416,7 +430,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhRadioButton(
+                            RadioButton(
                                 selected = stickyLayoutMode == value,
                                 onClick = null
                             )
@@ -430,7 +444,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                 }
             },
             confirmButton = {
-                YhTextButton(onClick = { showLayoutModeDialog = false }) {
+                TextButton(onClick = { showLayoutModeDialog = false }) {
                     Text("取消")
                 }
             }
@@ -438,7 +452,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
     }
 
     if (showDisplayModeDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showDisplayModeDialog = false },
             title = { Text("选择置顶显示内容") },
             text = {
@@ -455,7 +469,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhRadioButton(
+                            RadioButton(
                                 selected = stickyDisplayMode == value,
                                 onClick = null
                             )
@@ -469,7 +483,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                 }
             },
             confirmButton = {
-                YhTextButton(onClick = { showDisplayModeDialog = false }) {
+                TextButton(onClick = { showDisplayModeDialog = false }) {
                     Text("取消")
                 }
             }
@@ -477,7 +491,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
     }
 
     if (showAlignmentDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showAlignmentDialog = false },
             title = { Text("选择平铺对齐方式") },
             text = {
@@ -494,7 +508,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhRadioButton(
+                            RadioButton(
                                 selected = stickyAlignment == value,
                                 onClick = null
                             )
@@ -508,7 +522,7 @@ private fun ConversationLayoutSettingsGroup(context: Context) {
                 }
             },
             confirmButton = {
-                YhTextButton(onClick = { showAlignmentDialog = false }) {
+                TextButton(onClick = { showAlignmentDialog = false }) {
                     Text("取消")
                 }
             }

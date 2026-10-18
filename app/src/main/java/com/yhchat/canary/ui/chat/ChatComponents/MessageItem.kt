@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,8 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -64,24 +61,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.ChatMessage
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import com.yhchat.canary.ui.components.ImageUtils
-import com.yhchat.canary.ui.components.htmltext.AdvancedHtmlRenderer
+import com.yhchat.canary.ui.components.htmltext.htmlToPlainText
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.components.rememberMessageActionMenuLauncher
 import com.yhchat.canary.ui.webview.WebViewActivity
 import com.yhchat.canary.ui.share.ExternalShareUtils
 import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.FavoriteMessageStore
-import com.yhchat.canary.utils.UnifiedLinkHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -89,6 +85,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+/** 折叠预览时最多解析的原始 HTML 字符数（只用于展示开头部分）。 */
+private const val HTML_COLLAPSED_PREVIEW_RAW_LIMIT = 8_000
 
 /**
  * 消息项
@@ -401,7 +400,7 @@ fun MessageItem(
                 MaterialTheme.colorScheme.surfaceVariant
             }
 
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .wrapContentWidth()
                     .then(
@@ -441,10 +440,7 @@ fun MessageItem(
                         if (htmlPreviewShown) {
                             HtmlCollapsedPreview(
                                 html = message.content.text.orEmpty(),
-                                bubbleColor = bubbleColor,
-                                modifier = Modifier.fillMaxWidth(),
-                                onImageClick = onImageClick,
-                                onLinkClick = { link -> UnifiedLinkHandler.handleLink(context, link) }
+                                modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                         } else {
@@ -468,7 +464,7 @@ fun MessageItem(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        YhOutlinedButton(
+                        OutlinedButton(
                             onClick = onToggleCollapse,
                             modifier = Modifier.align(Alignment.End)
                         ) {
@@ -651,11 +647,11 @@ fun MessageItem(
     }
 
     if (showFreeCopyDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showFreeCopyDialog = false },
             title = { Text("自由复制") },
             text = {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = freeCopyText,
                     onValueChange = { freeCopyText = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -664,7 +660,7 @@ fun MessageItem(
                 )
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         val clip = android.content.ClipData.newPlainText("message", freeCopyText)
                         clipboardManager.setPrimaryClip(clip)
@@ -674,7 +670,7 @@ fun MessageItem(
                 ) { Text("复制") }
             },
             dismissButton = {
-                YhTextButton(onClick = { showFreeCopyDialog = false }) { Text("取消") }
+                TextButton(onClick = { showFreeCopyDialog = false }) { Text("取消") }
             }
         )
     }
@@ -782,7 +778,7 @@ fun SenderNameAndTags(
             )
 
             if (message.sender.chatType == 3) {
-                YhSurface(
+                Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -797,7 +793,7 @@ fun SenderNameAndTags(
 
             when (resolvedMemberPermission) {
                 100 -> if (showOwnerBadge) {
-                    YhSurface(
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = Color(0xFFFF9800)
                     ) {
@@ -810,7 +806,7 @@ fun SenderNameAndTags(
                     }
                 }
                 2 -> if (showAdminBadge) {
-                    YhSurface(
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = Color(0xFF2196F3)
                     ) {
@@ -826,7 +822,7 @@ fun SenderNameAndTags(
 
             if (showMemberTags && !shouldHideTagsForPrivateChat) {
                 tags.take(1).forEach { tag ->
-                    YhSurface(
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = parseTagColor(tag.color)
                     ) {
@@ -840,7 +836,7 @@ fun SenderNameAndTags(
                 }
 
                 if (hasMultipleTags) {
-                    YhIconButton(
+                    IconButton(
                         onClick = onToggleExpand,
                         modifier = Modifier.size(20.dp)
                     ) {
@@ -866,7 +862,7 @@ fun SenderNameAndTags(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 tags.drop(1).forEach { tag ->
-                    YhSurface(
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = parseTagColor(tag.color)
                     ) {
@@ -1004,7 +1000,7 @@ fun AnimatedMessageItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isMultiSelectMode) {
-                YhCheckbox(
+                Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onSelectionToggle?.invoke(message.msgId) },
                     modifier = Modifier
@@ -1064,7 +1060,7 @@ fun AnimatedMessageItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isMultiSelectMode) {
-                YhCheckbox(
+                Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onSelectionToggle?.invoke(message.msgId) },
                     modifier = Modifier
@@ -1111,56 +1107,21 @@ fun AnimatedMessageItem(
 @Composable
 private fun HtmlCollapsedPreview(
     html: String,
-    bubbleColor: Color,
-    modifier: Modifier = Modifier,
-    onImageClick: (String) -> Unit,
-    onLinkClick: (String) -> Unit
+    modifier: Modifier = Modifier
 ) {
-    val plainTextLength = remember(html) {
-        html.replace(Regex("<[^>]+>"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .length
+    // 折叠预览只展示纯文本开头部分：
+    // 之前这里会直接把整条 HTML 交给 AdvancedHtmlRenderer 渲染，
+    // 超长 HTML（例如粘贴的整个网页）会产生海量节点，导致 OOM/栈溢出而闪退。
+    val previewText = remember(html) {
+        htmlToPlainText(html, HTML_COLLAPSED_PREVIEW_RAW_LIMIT).ifBlank { "HTML 消息" }
     }
-    val showBottomFade = remember(html, plainTextLength) {
-        plainTextLength > 80 ||
-            html.contains("<img", ignoreCase = true) ||
-            html.contains("<table", ignoreCase = true) ||
-            html.contains("<ul", ignoreCase = true) ||
-            html.contains("<ol", ignoreCase = true) ||
-            html.contains("<blockquote", ignoreCase = true) ||
-            html.contains("<br", ignoreCase = true)
-    }
-
-    Box(
-        modifier = modifier
-            .heightIn(max = 200.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clipToBounds()
-    ) {
-        AdvancedHtmlRenderer(
-            html = html,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = if (showBottomFade) 8.dp else 0.dp),
-            onImageClick = onImageClick,
-            onLinkClick = onLinkClick
-        )
-
-        if (showBottomFade) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, bubbleColor.copy(alpha = 0.95f))
-                        )
-                    )
-            )
-        }
-    }
+    Text(
+        text = previewText.take(200) + if (previewText.length > 200) "..." else "",
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 3,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 private fun resolveMemberPermission(

@@ -38,8 +38,24 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,27 +63,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.service.AudioPlayerService
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSlider
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -90,7 +94,7 @@ class SavedAudiosActivity : BaseActivity() {
 
         setContent {
             YhchatCanaryTheme {
-                YhSurface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     SavedAudiosScreen(
                         viewModel = viewModel,
                         onBack = { finish() }
@@ -272,13 +276,19 @@ private fun SavedAudiosScreen(
         "已保存的语音"
     }
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = topBarTitle,
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = topBarTitle,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         if (uiState.selectionMode) {
                             viewModel.finishSelection()
                         } else {
@@ -290,7 +300,7 @@ private fun SavedAudiosScreen(
                 },
                 actions = {
                     if (uiState.selectionMode) {
-                        YhIconButton(
+                        IconButton(
                             onClick = {
                                 viewModel.requestDelete(uiState.selectedIds.toList())
                             },
@@ -298,7 +308,7 @@ private fun SavedAudiosScreen(
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = "删除")
                         }
-                        YhIconButton(
+                        IconButton(
                             onClick = {
                                 viewModel.finishSelection()
                             }
@@ -306,14 +316,14 @@ private fun SavedAudiosScreen(
                             Icon(Icons.Default.Done, contentDescription = "完成")
                         }
                     } else {
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 viewModel.requestImportAudioPicker()
                             }
                         ) {
                             Text("导入音频")
                         }
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 viewModel.requestTreePicker()
                             }
@@ -321,7 +331,12 @@ private fun SavedAudiosScreen(
                             Text("授权文件夹")
                         }
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { innerPadding ->
@@ -341,18 +356,19 @@ private fun SavedAudiosScreen(
                 } else {
                     android.Manifest.permission.READ_EXTERNAL_STORAGE
                 }
-                YhTextButton(onClick = { requestReadPermissionLauncher.launch(readPermission) }) {
+                TextButton(onClick = { requestReadPermissionLauncher.launch(readPermission) }) {
                     Text("授权")
                 }
             }
-            return@YhScaffold
+            return@Scaffold
         }
 
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = {
                 viewModel.reload()
             },
+            state = rememberPullToRefreshState(),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -360,7 +376,7 @@ private fun SavedAudiosScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .yhTopBarNestedScroll()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -413,18 +429,18 @@ private fun SavedAudiosScreen(
 
     if (uiState.renameTarget != null) {
         val target = uiState.renameTarget
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = viewModel::dismissRenameDialog,
             title = { Text("重命名") },
             text = {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = uiState.renameText,
                     onValueChange = viewModel::updateRenameText,
                     singleLine = true
                 )
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         viewModel.confirmRename()
                     }
@@ -433,18 +449,18 @@ private fun SavedAudiosScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = viewModel::dismissRenameDialog) { Text("取消") }
+                TextButton(onClick = viewModel::dismissRenameDialog) { Text("取消") }
             }
         )
     }
 
     if (uiState.confirmDeleteIds.isNotEmpty()) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = viewModel::dismissDeleteDialog,
             title = { Text("删除") },
             text = { Text("确定删除选中的语音吗？") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         viewModel.confirmDelete()
                     }
@@ -453,7 +469,7 @@ private fun SavedAudiosScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = viewModel::dismissDeleteDialog) { Text("取消") }
+                TextButton(onClick = viewModel::dismissDeleteDialog) { Text("取消") }
             }
         )
     }
@@ -481,20 +497,22 @@ private fun SavedAudioCard(
         formatDateTime(item.dateAddedSeconds)
     }
 
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        cornerRadius = 16.dp,
-        containerColor = MaterialTheme.colorScheme.surface
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (selectionMode) {
-                    YhCheckbox(checked = selected, onCheckedChange = { onClick() })
+                    Checkbox(checked = selected, onCheckedChange = { onClick() })
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
@@ -514,16 +532,16 @@ private fun SavedAudioCard(
                 }
 
                 if (!selectionMode) {
-                    YhIconButton(onClick = onPlay) {
+                    IconButton(onClick = onPlay) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (isPlaying) "暂停" else "播放"
                         )
                     }
-                    YhIconButton(onClick = onRename) {
+                    IconButton(onClick = onRename) {
                         Icon(Icons.Default.Edit, contentDescription = "重命名")
                     }
-                    YhIconButton(onClick = onDelete) {
+                    IconButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "删除")
                     }
                 }
@@ -531,7 +549,7 @@ private fun SavedAudioCard(
 
             if ((isExpanded || isActive) && !selectionMode) {
                 Spacer(modifier = Modifier.height(8.dp))
-                YhSlider(
+                Slider(
                     value = sliderPosMs,
                     onValueChange = onSeek,
                     valueRange = 0f..(if (sliderMaxMs > 0) sliderMaxMs else maxOf(sliderPosMs, 60_000f) + 1_000f),

@@ -253,6 +253,70 @@ private fun resolveDetailsOpenDeclaration(tag: String, rules: List<CssRule>): St
         .joinToString(";")
 }
 
+/**
+ * 单条 HTML 消息交给高级渲染器处理的最大长度。超过后降级为纯文本，
+ * 避免解析/渲染体量过大的 HTML 导致内存溢出（OOM）或栈溢出。
+ */
+internal const val MAX_HTML_INPUT_LENGTH = 60_000
+
+/** 高级渲染器允许渲染的最大节点数。 */
+internal const val MAX_HTML_NODE_COUNT = 1_500
+
+/** 高级渲染器允许的最大嵌套深度，避免深层嵌套导致栈溢出。 */
+internal const val MAX_HTML_NESTING_DEPTH = 40
+
+/** 降级展示时最多保留的纯文本字符数。 */
+internal const val HTML_PLAIN_TEXT_LIMIT = 4_000
+
+private val htmlTagRegex = Regex("(?s)<[^>]*>")
+private val htmlHorizontalSpaceRegex = Regex("[\\t\\u000B\\f\\r ]+")
+private val htmlBlankLineRegex = Regex("\\n{2,}")
+
+/**
+ * 在索引 [maxChars] 处截断字符串，但不会把一个代理对（surrogate pair）从中间切开。
+ */
+internal fun truncateAtSafeBoundary(text: String, maxChars: Int): String {
+    if (maxChars <= 0) return ""
+    if (text.length <= maxChars) return text
+    var end = maxChars
+    if (text[end].isLowSurrogate()) end -= 1
+    return text.substring(0, end)
+}
+
+/**
+ * 去掉 HTML 标签，得到用于降级展示的纯文本。
+ *
+ * 只会处理开头 [maxRawChars] 个字符，避免对超大字符串做正则替换导致内存问题。
+ */
+internal fun htmlToPlainText(html: String, maxRawChars: Int = MAX_HTML_INPUT_LENGTH): String {
+    if (html.isEmpty()) return ""
+    return truncateAtSafeBoundary(html, maxRawChars)
+        .replace(htmlTagRegex, " ")
+        .replace(htmlHorizontalSpaceRegex, " ")
+        .replace(htmlBlankLineRegex, "\n")
+        .trim()
+}
+
+/**
+ * 判断节点树是否过于复杂（节点过多或嵌套过深）。
+ *
+ * 使用显式栈遍历，避免递归本身造成栈溢出。
+ */
+internal fun isHtmlTreeTooComplex(root: HtmlNode.Element): Boolean {
+    val stack = ArrayDeque<Pair<HtmlNode.Element, Int>>()
+    stack.addLast(root to 0)
+    var nodeCount = 0
+    while (stack.isNotEmpty()) {
+        val (node, depth) = stack.removeLast()
+        nodeCount++
+        if (nodeCount > MAX_HTML_NODE_COUNT || depth > MAX_HTML_NESTING_DEPTH) return true
+        node.children.forEach { child ->
+            if (child is HtmlNode.Element) stack.addLast(child to depth + 1)
+        }
+    }
+    return false
+}
+
 internal fun normalizeHtmlText(text: String, whiteSpace: String?): String {
     if (text.isEmpty()) return text
     return when (whiteSpace?.lowercase()) {

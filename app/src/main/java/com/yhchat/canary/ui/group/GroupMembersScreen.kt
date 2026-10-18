@@ -17,12 +17,29 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,23 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.GroupMemberInfo
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.user.UserDetailActivity
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupMembersScreen(
     groupId: String,
@@ -81,9 +85,9 @@ fun GroupMembersScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopAppBar(
+            TopAppBar(
                 title = { 
                     if (!isSearching) {
                         Column {
@@ -98,7 +102,7 @@ fun GroupMembersScreen(
                             )
                         }
                     } else {
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = searchKeyword,
                             onValueChange = { searchKeyword = it },
                             placeholder = { Text("搜索群成员...") },
@@ -108,7 +112,7 @@ fun GroupMembersScreen(
                     }
                 },
                 navigationIcon = {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         if (isSearching) {
                             isSearching = false
                             searchKeyword = ""
@@ -125,14 +129,18 @@ fun GroupMembersScreen(
                 },
                 actions = {
                     if (!isSearching) {
-                        YhIconButton(onClick = { isSearching = true }) {
+                        IconButton(onClick = { isSearching = true }) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "搜索"
                             )
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -143,7 +151,7 @@ fun GroupMembersScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -160,7 +168,7 @@ fun GroupMembersScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        YhButton(onClick = { viewModel.loadGroupInfo(groupId) }) {
+                        Button(onClick = { viewModel.loadGroupInfo(groupId) }) {
                             Text("重试")
                         }
                     }
@@ -253,7 +261,7 @@ private fun GroupMembersContent(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             }
         } else {
@@ -283,7 +291,7 @@ private fun GroupMembersContent(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp
                             )
@@ -336,13 +344,14 @@ private fun MemberItem(
     val showAdminMenu = member.permissionLevel < 100
     val canTransferGroupOwner = currentUserPermission >= 100 && member.permissionLevel < 100
     
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
                 // 点击成员卡片跳转到用户详情页
                 UserDetailActivity.start(context = context, userId = member.userId, userName = member.name, groupId = groupId)
-            }
+            },
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -376,7 +385,7 @@ private fun MemberItem(
                     when (member.permissionLevel) {
                         100 -> {
                             Spacer(modifier = Modifier.width(8.dp))
-                            YhSurface(
+                            Surface(
                                 shape = MaterialTheme.shapes.small,
                                 color = MaterialTheme.colorScheme.primary
                             ) {
@@ -390,7 +399,7 @@ private fun MemberItem(
                         }
                         2 -> {
                             Spacer(modifier = Modifier.width(8.dp))
-                            YhSurface(
+                            Surface(
                                 shape = MaterialTheme.shapes.small,
                                 color = MaterialTheme.colorScheme.secondary
                             ) {
@@ -407,7 +416,7 @@ private fun MemberItem(
                     // VIP标签
                     if (member.isVip) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        YhSurface(
+                        Surface(
                             shape = MaterialTheme.shapes.small,
                             color = MaterialTheme.colorScheme.tertiaryContainer
                         ) {
@@ -440,21 +449,21 @@ private fun MemberItem(
             // 管理菜单（除了群主外的所有成员都显示）
             if (showAdminMenu) {
                 Box {
-                    YhIconButton(onClick = { showMenu = true }) {
+                    IconButton(onClick = { showMenu = true }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "管理"
                         )
                     }
                     
-                    YhDropdownMenu(
+                    DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         // 根据成员权限显示上任/卸任管理员
                         if (member.permissionLevel == 2) {
                             // 管理员，显示卸任选项
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("卸任管理员") },
                                 onClick = {
                                     showMenu = false
@@ -463,7 +472,7 @@ private fun MemberItem(
                             )
                         } else if (member.permissionLevel == 0) {
                             // 普通成员，显示上任选项
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("设为管理员") },
                                 onClick = {
                                     showMenu = false
@@ -473,7 +482,7 @@ private fun MemberItem(
                         }
 
                         if (canTransferGroupOwner) {
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("转让群主") },
                                 onClick = {
                                     showMenu = false
@@ -482,14 +491,14 @@ private fun MemberItem(
                             )
                         }
                         
-                        YhDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("踢出群聊") },
                             onClick = {
                                 showMenu = false
                                 onRemoveMember?.invoke(member.userId)
                             }
                         )
-                        YhDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("禁言") },
                             onClick = {
                                 showMenu = false
@@ -515,12 +524,12 @@ private fun MemberItem(
     }
 
     if (showTransferOwnerDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showTransferOwnerDialog = false },
             title = { Text("转让群主") },
             text = { Text("确认将群主转让给 ${member.name} 吗？转让后你将不再是群主。") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         showTransferOwnerDialog = false
                         onTransferGroupOwner?.invoke(member.userId)
@@ -530,7 +539,7 @@ private fun MemberItem(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = { showTransferOwnerDialog = false }) {
+                TextButton(onClick = { showTransferOwnerDialog = false }) {
                     Text("取消")
                 }
             }
@@ -556,7 +565,7 @@ private fun GroupMemberGagDialog(
         1 to "永久禁言"
     )
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("禁言 $memberName") },
         text = {
@@ -565,7 +574,7 @@ private fun GroupMemberGagDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 gagOptions.forEach { (gagTime, label) ->
-                    YhTextButton(
+                    TextButton(
                         onClick = { onConfirm(gagTime) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -576,7 +585,7 @@ private fun GroupMemberGagDialog(
         },
         confirmButton = {},
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

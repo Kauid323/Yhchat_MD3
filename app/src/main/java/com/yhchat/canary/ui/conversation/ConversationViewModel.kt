@@ -13,6 +13,7 @@ import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.data.repository.UserRepository
 import com.yhchat.canary.data.websocket.MessageEvent
 import com.yhchat.canary.data.websocket.WebSocketManager
+import com.yhchat.canary.utils.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,12 +34,32 @@ class ConversationViewModel @Inject constructor(
     private val userRepository: UserRepository
 ) : ViewModel() {
 
+    companion object {
+        /** 会话数据超过该时长未联网刷新过时，再次进入页面 / 回到前台会静默刷新一次 */
+        private const val CONVERSATION_REFRESH_STALE_MS = 60_000L
+
+        /** 同一时刻重复触发加载时的去重窗口，避免冷启动时 init 和 ON_RESUME 各请求一次 */
+        private const val CONVERSATION_LOAD_DEDUP_MS = 3_000L
+
+        private const val TAG = "ConversationViewModel"
+    }
+
     private val blocklistRepository by lazy { com.yhchat.canary.data.repository.BlocklistRepository(context) }
     private var currentActiveUserId: String? = null
     private var cacheCollectionJob: kotlinx.coroutines.Job? = null
 
+    /** 当前账号的 token，用于网络恢复后自动刷新 */
+    private var currentToken: String = ""
+
+    /** 上一次「发起」会话列表网络加载的时间，用于去重 */
+    private var lastConversationsLoadStartedAtMs = 0L
+
+    /** 上一次「成功」拿到网络会话数据的时间，0 表示本次进程内还没有成功联网加载过 */
+    private var lastConversationsLoadedAtMs = 0L
+
     init {
         observeWebSocketMessages()
+        observeNetworkRecovery()
     }
 
     fun setTokenRepository(tokenRepository: TokenRepository) {
@@ -63,10 +84,13 @@ class ConversationViewModel @Inject constructor(
     val stickyLoading: StateFlow<Boolean> = _stickyLoading.asStateFlow()
     
     /**
-     * 为指定账号初始化会话数据（切换账号时隔离重置，且已有缓存时不重复请求网络）
+     * 为指定账号初始化会话数据（切换账号时隔离重置；已有缓存时先展示缓存，同时联网静默刷新一次）
      */
     fun initForUser(userId: String, token: String) {
+        currentToken = token
         if (currentActiveUserId == userId && _conversations.value.isNotEmpty()) {
+            // 同一账号再次进入页面：只在数据较旧时静默刷新，避免频繁切页重复请求网络
+            refreshConversationsIfStale(token)
             return
         }
         currentActiveUserId = userId
@@ -91,15 +115,55 @@ class ConversationViewModel @Inject constructor(
             }
         }
         
-        // 检查当前账号本地是否有缓存数据，仅在没有本地数据时才发起初次网络请求
+        // 有网：以服务器数据为准刷新（有本地缓存时先展示缓存，不显示加载圈）；
+        // 没网：只用本地缓存，不发注定失败的请求（等网络恢复后会再自动刷新）
         viewModelScope.launch {
-            val cached = cacheRepository.getCachedConversationsSync(userId)
-            if (cached.isEmpty() && token.isNotBlank()) {
-                loadConversations(token, isForceOrPullRefresh = false)
+            val online = token.isNotBlank() && NetworkUtils.isNetworkAvailable(context)
+            if (online) {
+                val cached = cacheRepository.getCachedConversationsSync(userId)
+                loadConversations(token, isForceOrPullRefresh = cached.isEmpty())
+                loadStickyConversations()
             } else {
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }
-            loadStickyConversations()
+        }
+    }
+
+    /**
+     * 数据超过 [CONVERSATION_REFRESH_STALE_MS] 未成功联网刷新过时，静默刷新一次会话列表。
+     * 没网时直接跳过（只用缓存）；还没初始化账号（首次进入）时跳过，由 initForUser 负责；
+     * 最近刚请求过（[CONVERSATION_LOAD_DEDUP_MS] 内）也会跳过，避免重复请求。
+     */
+    fun refreshConversationsIfStale(token: String) {
+        if (token.isBlank()) return
+        // 还没完成账号初始化时（首次进入）交给 initForUser 处理，避免重复请求
+        if (currentActiveUserId == null) return
+        if (!NetworkUtils.isNetworkAvailable(context)) return
+        val now = System.currentTimeMillis()
+        if (now - lastConversationsLoadStartedAtMs < CONVERSATION_LOAD_DEDUP_MS) return
+        val lastLoadedAt = lastConversationsLoadedAtMs
+        if (lastLoadedAt != 0L && now - lastLoadedAt < CONVERSATION_REFRESH_STALE_MS) return
+        loadConversations(token, isForceOrPullRefresh = _conversations.value.isEmpty())
+    }
+
+    /**
+     * 监听网络恢复：从「没网」变成「有网」时立刻刷新一次会话列表，
+     * 保证「打开软件时没网、之后连上网」也能自动拿到最新数据。
+     */
+    private fun observeNetworkRecovery() {
+        viewModelScope.launch {
+            var lastAvailable = NetworkUtils.isNetworkAvailable(context)
+            NetworkUtils.networkAvailabilityFlow(context).collect { available ->
+                if (available && !lastAvailable) {
+                    val token = currentToken
+                    if (token.isNotBlank() && currentActiveUserId != null) {
+                        Log.d(TAG, "网络已恢复，自动刷新会话列表")
+                        loadConversations(token, isForceOrPullRefresh = _conversations.value.isEmpty())
+                        loadStickyConversations()
+                    }
+                }
+                lastAvailable = available
+            }
         }
     }
     
@@ -107,12 +171,15 @@ class ConversationViewModel @Inject constructor(
      * 加载会话列表（从网络，并写入对应账号的专属数据库）
      */
     fun loadConversations(token: String, isForceOrPullRefresh: Boolean = true) {
+        // 记录发起时间，用于去重（短时间重复进入页面不再重复请求）
+        lastConversationsLoadStartedAtMs = System.currentTimeMillis()
         viewModelScope.launch {
             if (isForceOrPullRefresh || _conversations.value.isEmpty()) {
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             }
             conversationRepository.getConversations()
                 .onSuccess { conversationList ->
+                    lastConversationsLoadedAtMs = System.currentTimeMillis()
                     val blockedSet = blocklistRepository.getBlockedUserIdsSet()
                     val filtered = if (blockedSet.isEmpty()) conversationList else conversationList.filter { conv ->
                         !(conv.chatType == 1 && conv.chatId in blockedSet)

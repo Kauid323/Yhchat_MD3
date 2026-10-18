@@ -31,8 +31,7 @@ class PostDetailViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
     private val tokenRepository: TokenRepository,
     private val userRepository: UserRepository,
-    private val friendRepository: com.yhchat.canary.data.repository.FriendRepository,
-    private val messageRepository: com.yhchat.canary.data.repository.MessageRepository
+    private val friendRepository: com.yhchat.canary.data.repository.FriendRepository
 ) : ViewModel() {
     
     private val _postDetailState = MutableStateFlow(PostDetailState())
@@ -46,9 +45,6 @@ class PostDetailViewModel @Inject constructor(
 
     private val _communityReportState = MutableStateFlow(CommunityReportState())
     val communityReportState: StateFlow<CommunityReportState> = _communityReportState.asStateFlow()
-    
-    // Share sheet persistent state
-    var shareSheetSelectedTab by androidx.compose.runtime.mutableStateOf(0)
     
     /**
      * 使用TokenRepository获取token并加载文章详情
@@ -629,54 +625,6 @@ class PostDetailViewModel @Inject constructor(
      */
     suspend fun getAddressBookList(): Result<address_book_list> {
         return friendRepository.getAddressBookList()
-    }
-    
-    /**
-     * 分享文章给好友
-     */
-    fun sharePostToFriends(
-        contact: address_book_list.Data.Data_list,
-        post: CommunityPost,
-        onSuccess: () -> Unit = {},
-        onError: (String) -> Unit = {}
-    ) {
-        viewModelScope.launch {
-            // ... (rest of the unused method)
-        }
-    }
-    
-    /**
-     * 分享文章给好友 (带 chatType)
-     */
-    fun sharePostToFriend(
-        chatId: String,
-        chatType: Int,
-        post: CommunityPost,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            val previewContent = if (post.content.length > 50) {
-                post.content.substring(0, 50) + "..."
-            } else {
-                post.content
-            }
-
-            messageRepository.sendMessage(
-                chatId = chatId,
-                chatType = chatType,
-                payload = com.yhchat.canary.data.repository.SendMessagePayload(
-                    contentType = 6,
-                    postId = post.id.toString(),
-                    postTitle = post.title,
-                    postContent = previewContent,
-                    postType = post.contentType.toString()
-                )
-            ).fold(
-                onSuccess = { onSuccess() },
-                onFailure = { onError(it.message ?: "发送失败") }
-            )
-        }
     }
 }
 

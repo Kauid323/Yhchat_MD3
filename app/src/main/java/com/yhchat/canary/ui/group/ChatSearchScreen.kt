@@ -33,8 +33,18 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.filled.VoiceChat
 import androidx.compose.material.icons.filled.Web
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,15 +67,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yhchat.canary.R
 import com.yhchat.canary.data.model.ChatMessage
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -100,26 +101,35 @@ fun ChatSearchScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         // 顶部搜索栏
-        YhTopBar(
-            title = "搜索聊天记录",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "搜索聊天记录",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回"
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
         
         // 搜索输入框
-        YhCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp)
         ) {
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { 
                     searchQuery = it
@@ -136,7 +146,7 @@ fun ChatSearchScreen(
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        YhIconButton(
+                        IconButton(
                             onClick = { 
                                 searchQuery = ""
                             }
@@ -167,7 +177,7 @@ fun ChatSearchScreen(
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "搜索中...",
@@ -198,7 +208,7 @@ fun ChatSearchScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(
+                            Button(
                                 onClick = { 
                                     viewModel.clearError()
                                     if (searchQuery.isNotBlank()) {
@@ -291,7 +301,7 @@ fun ChatSearchScreen(
                                             .padding(16.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                     }
                                 } else {
                                     // 使用lastTimestamp作为key，当时间戳更新时触发加载更多
@@ -323,10 +333,11 @@ fun SearchMessageItem(
     searchQuery: String,
     onClick: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable { onClick() },
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -662,11 +673,11 @@ fun MessageDetailDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
-        YhCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(),
-            cornerRadius = 16.dp
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -684,7 +695,7 @@ fun MessageDetailDialog(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    YhIconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Clear,
                             contentDescription = "关闭"
@@ -751,7 +762,7 @@ private fun MessageDetailContent(message: ChatMessage) {
             Spacer(modifier = Modifier.height(8.dp))
             
             // 消息气泡
-            YhSurface(
+            Surface(
                 modifier = Modifier.wrapContentWidth(),
                 shape = RoundedCornerShape(
                     topStart = 4.dp,

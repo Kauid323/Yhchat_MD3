@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.disk.webdav
 
 import android.os.Bundle
@@ -14,9 +16,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,12 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.data.model.DownloadStatus
 import com.yhchat.canary.data.model.WebDAVDownloadTask
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.utils.WebDAVDownloadManager
@@ -59,13 +62,12 @@ class WebDAVDownloadListActivity : BaseActivity() {
 private fun DownloadTaskScreen(onBackClick: () -> Unit) {
     val tasks by WebDAVDownloadManager.tasks.collectAsState()
 
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "下载列表",
-                large = false,
+            TopAppBar(
+                title = { Text("下载列表") },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -103,9 +105,9 @@ private fun DownloadTaskScreen(onBackClick: () -> Unit) {
 
 @Composable
 private fun DownloadTaskCard(task: WebDAVDownloadTask) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        containerColor = MaterialTheme.colorScheme.surface
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(task.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -125,8 +127,8 @@ private fun DownloadTaskCard(task: WebDAVDownloadTask) {
                 }
             )
             if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.QUEUED) {
-                YhLinearProgressIndicator(
-                    progress = task.progress,
+                LinearProgressIndicator(
+                    progress = { task.progress },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -136,7 +138,7 @@ private fun DownloadTaskCard(task: WebDAVDownloadTask) {
                 )
             }
             if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.QUEUED) {
-                YhTextButton(
+                TextButton(
                     onClick = { WebDAVDownloadManager.cancelDownload(task.id) },
                     modifier = Modifier.align(Alignment.End)
                 ) {

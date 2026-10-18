@@ -15,19 +15,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhFloatingActionButton
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
 
 /**
  * 评论输入栏组件
@@ -46,9 +47,9 @@ fun CommentInputBar(
     minLines: Int = 1
 ) {
     if (isVisible) {
-        YhCard(
+        Card(
             modifier = modifier.fillMaxWidth(),
-            containerColor = MaterialTheme.colorScheme.surface
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Row(
                 modifier = Modifier
@@ -56,7 +57,7 @@ fun CommentInputBar(
                     .padding(16.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = commentText,
                     onValueChange = onCommentTextChange,
                     modifier = Modifier.weight(1f),
@@ -80,7 +81,7 @@ fun CommentInputBar(
                 
                 Spacer(modifier = Modifier.width(8.dp))
                 
-                YhIconButton(
+                IconButton(
                     onClick = {
                         if (commentText.isNotBlank()) {
                             val processedContent = commentText.trim()
@@ -120,7 +121,7 @@ fun BottomCommentInputBar(
     minLines: Int = 1
 ) {
     if (isVisible) {
-        YhSurface(
+        Surface(
             modifier = modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
@@ -134,7 +135,7 @@ fun BottomCommentInputBar(
                     .padding(16.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = commentText,
                     onValueChange = onCommentTextChange,
                     modifier = Modifier.weight(1f),
@@ -159,7 +160,7 @@ fun BottomCommentInputBar(
                 
                 Spacer(modifier = Modifier.width(12.dp))
                 
-                YhFloatingActionButton(
+                FloatingActionButton(
                     onClick = {
                         if (commentText.isNotBlank()) {
                             val processedContent = commentText.trim()

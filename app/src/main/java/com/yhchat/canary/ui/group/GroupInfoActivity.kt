@@ -10,7 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import com.yhchat.canary.crash.CrashHandler
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhSurface
+import androidx.compose.material3.Surface
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -48,7 +48,7 @@ class GroupInfoActivity : BaseActivity() {
         
         setContent {
             YhchatCanaryTheme {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.surfaceContainer
                 ) {

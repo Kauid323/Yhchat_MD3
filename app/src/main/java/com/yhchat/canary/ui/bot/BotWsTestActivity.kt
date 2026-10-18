@@ -26,8 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,14 +44,16 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -108,6 +110,7 @@ private data class WsMessageItem(
     val time: String
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Suppress("DEPRECATION")
 @Composable
 private fun BotWsTestScreen(
@@ -201,19 +204,22 @@ private fun BotWsTestScreen(
         }
     }
 
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "事件测试",
-                large = false,
+            TopAppBar(
+                title = { Text("事件测试", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBack) {
+                    IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -228,7 +234,7 @@ private fun BotWsTestScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = wsUrl,
                     onValueChange = { wsUrl = it },
                     modifier = Modifier.weight(1f),
@@ -239,14 +245,14 @@ private fun BotWsTestScreen(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                YhButton(
+                Button(
                     onClick = {
                         if (isConnected) disconnect() else connect()
                     },
                     enabled = !isConnecting
                 ) {
                     if (isConnecting) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -258,7 +264,7 @@ private fun BotWsTestScreen(
                 }
             }
 
-            YhHorizontalDivider()
+            HorizontalDivider()
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -267,7 +273,7 @@ private fun BotWsTestScreen(
             ) {
                 items(messages) { item ->
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        YhSurface(
+                        Surface(
                             shape = RoundedCornerShape(12.dp),
                             shadowElevation = 1.dp,
                             modifier = Modifier.fillMaxWidth()
@@ -278,7 +284,7 @@ private fun BotWsTestScreen(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
-                                YhIconButton(
+                                IconButton(
                                     onClick = {
                                         clipboard.setText(AnnotatedString(item.raw))
                                         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()

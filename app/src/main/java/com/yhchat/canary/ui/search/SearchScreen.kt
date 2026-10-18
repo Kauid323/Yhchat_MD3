@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.search
 
 import androidx.activity.compose.BackHandler
@@ -16,13 +18,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,14 +53,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yhchat.canary.R
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
 
 /**
  * 搜索界面
@@ -72,18 +77,22 @@ fun SearchScreen(
     
 
 
-    YhSurface(
+    Surface(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-        YhTopBar(
-            title = "搜索",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "搜索",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回"
@@ -91,15 +100,19 @@ fun SearchScreen(
                 }
             },
             actions = {
-                YhIconButton(onClick = { viewModel.search(searchText) }) {
+                IconButton(onClick = { viewModel.search(searchText) }) {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "搜索"
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
-        YhOutlinedTextField(
+        OutlinedTextField(
             value = searchText,
             onValueChange = { searchText = it },
             placeholder = { Text("搜索用户、群组和机器人") },
@@ -115,7 +128,7 @@ fun SearchScreen(
             ),
             trailingIcon = {
                 if (searchText.isNotEmpty()) {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         searchText = ""
                         viewModel.clearSearch()
                     }) {
@@ -130,11 +143,14 @@ fun SearchScreen(
 
         // 错误信息
         uiState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = error,
@@ -150,7 +166,7 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         } else {
             searchResult?.let { result ->
@@ -171,7 +187,7 @@ fun SearchScreen(
                                     )
                                 }
                                 itemsIndexed(items, key = { index, item -> "${item.friendId}_${item.friendType}_$index" }) { _, searchItem ->
-                                    YhCard(
+                                    Card(
 
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -183,7 +199,8 @@ fun SearchScreen(
                                                     searchItem.friendType,
                                                     searchItem.nickname
                                                 )
-                                            }
+                                            },
+                                        shape = RoundedCornerShape(24.dp)
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -240,7 +257,7 @@ fun SearchScreen(
                                             }
                                             
                                             // 显示类型标签
-                                            YhSurface(
+                                            Surface(
                                                 color = when (searchItem.friendType) {
                                                     1 -> MaterialTheme.colorScheme.primaryContainer
                                                     2 -> MaterialTheme.colorScheme.secondaryContainer

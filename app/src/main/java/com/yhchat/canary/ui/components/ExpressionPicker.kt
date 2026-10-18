@@ -26,9 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,11 +59,6 @@ import com.yhchat.canary.data.model.StickerItem
 import com.yhchat.canary.data.model.StickerPack
 import com.yhchat.canary.data.repository.ExpressionRepository
 import com.yhchat.canary.data.repository.StickerRepository
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhClickableSurface
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.sticker.StickerPackManagerActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,7 +111,7 @@ fun ExpressionPicker(
     )
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     
-    YhSurface(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(300.dp),
@@ -125,7 +124,7 @@ fun ExpressionPicker(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                YhIconButton(
+                IconButton(
                     onClick = { StickerPackManagerActivity.start(context) }
                 ) {
                     Icon(
@@ -153,7 +152,7 @@ fun ExpressionPicker(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -170,7 +169,7 @@ fun ExpressionPicker(
                                 text = uiState.error ?: "加载失败",
                                 color = MaterialTheme.colorScheme.error
                             )
-                            YhTextButton(onClick = { 
+                            TextButton(onClick = { 
                                 viewModel.loadExpressions()
                                 viewModel.loadStickerPacks()
                                 viewModel.loadDefaultExpressions(context)
@@ -413,7 +412,7 @@ private fun ExpressionPickerTabItem(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    YhClickableSurface(
+    Surface(
         onClick = onClick,
         shape = RoundedCornerShape(999.dp),
         color = containerColor,

@@ -9,7 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,8 +22,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.isMiuixUi
-import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
@@ -110,11 +109,7 @@ class ChatActivity : BaseActivity() {
                     defaultValue = true,
                     mode = Context.MODE_PRIVATE
                 )
-                val topBarComposeColor = if (isMiuixUi) {
-                    top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.surface
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
+                val topBarComposeColor = MaterialTheme.colorScheme.surface
                 val topBarColor = topBarComposeColor.toArgb()
                 val navigationBarColor = android.graphics.Color.TRANSPARENT
                 val view = LocalView.current
@@ -141,7 +136,7 @@ class ChatActivity : BaseActivity() {
                         window.isNavigationBarContrastEnforced = false
                     }
                 }
-                YhSurface(color = MaterialTheme.colorScheme.background) {
+                Surface(color = MaterialTheme.colorScheme.background) {
                     if (chatId.isBlank()) {
                         Box(
                             modifier = androidx.compose.ui.Modifier.fillMaxSize(),

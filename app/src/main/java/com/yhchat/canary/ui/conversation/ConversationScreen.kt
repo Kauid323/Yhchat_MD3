@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.yhchat.canary.ui.conversation
 
 import android.content.Intent
@@ -6,7 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -14,8 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -58,8 +62,26 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,7 +93,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -87,6 +112,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -99,21 +127,6 @@ import com.yhchat.canary.data.model.ChatType
 import com.yhchat.canary.data.model.Conversation
 import com.yhchat.canary.data.model.StickyItem
 import com.yhchat.canary.data.repository.TokenRepository
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBasicComponent
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhClickableSurface
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.components.ConversationMenuDialog
 import com.yhchat.canary.ui.components.observeScrollForNavigation
 import com.yhchat.canary.ui.components.rememberBooleanPreference
@@ -198,6 +211,10 @@ fun ConversationScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
+    // 搜索栏"展开程度"：0 = 完全收起，1 = 完全展开。
+    // 整段过渡（高度、图标、列表切换）都只由这一个值驱动，避免出现
+    // "框先凭空出现、框里内容再自己动一下"的割裂感。
+    val searchReveal = remember { Animatable(if (isSearchActive) 1f else 0f) }
 
     // 顶栏左侧自己的头像（来自 UserRepository.getUserProfile）
     var myAvatarUrl by rememberSaveable { mutableStateOf<String?>(null) }
@@ -211,16 +228,32 @@ fun ConversationScreen(
         }
     }
 
-    // 监听搜索状态变化：激活时自动请求焦点并弹出键盘，退出时清除焦点
+    // 监听搜索状态变化：先把搜索栏展开到位，再请求焦点弹键盘。
+    // 以前是固定 delay(100) 后抢焦点，键盘会在框还没长出来的时候就先弹起来，看着很假。
     LaunchedEffect(isSearchActive) {
         if (isSearchActive) {
-            kotlinx.coroutines.delay(100)
-            try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
+            try {
+                searchReveal.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.9f,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+                searchFocusRequester.requestFocus()
+            } catch (_: Exception) {}
         } else {
             try {
                 focusManager.clearFocus()
                 searchFocusRequester.freeFocus()
             } catch (_: Exception) {}
+            searchReveal.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = 1f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
         }
     }
 
@@ -308,13 +341,33 @@ fun ConversationScreen(
             viewModel.initForUser(userId, token)
         }
     }
+
+    // 回到前台时（从后台切回来 / 从聊天页返回）如果列表数据比较旧且有网，静默刷新一次
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, token) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshConversationsIfStale(token)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier,
         topBar = {
-            YhTopBar(
-                title = "消息",
-                large = true,
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "消息",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
                     if (layoutShowAvatar) {
                         val avatarOuterSize = 32.dp
@@ -356,27 +409,44 @@ fun ConversationScreen(
                     }
                 },
                 actions = {
-                    if (layoutShowSearch) {
-                        YhIconButton(onClick = {
-                            isSearchActive = true
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "搜索",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                    // 搜索栏展开时，顶栏这两个按钮跟着一起淡出（同一个 progress 驱动），
+                    // 不会出现"搜索框已经打开、搜索图标还杵在那儿"的重复感
+                    val actionsAlpha = (1f - searchReveal.value).coerceIn(0f, 1f)
+                    Row(
+                        modifier = Modifier.alpha(actionsAlpha),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (layoutShowSearch) {
+                            IconButton(
+                                onClick = { isSearchActive = true },
+                                enabled = !isSearchActive
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "搜索",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        if (layoutShowAddButton) {
+                            IconButton(
+                                onClick = { showAddMenuBottomSheet = true },
+                                enabled = !isSearchActive
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "添加",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
-                    if (layoutShowAddButton) {
-                        YhIconButton(onClick = { showAddMenuBottomSheet = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "添加",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
@@ -385,98 +455,40 @@ fun ConversationScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        // 搜索栏：从顶栏位置滑入动画
-        AnimatedVisibility(
-            visible = isSearchActive,
-            enter = slideInVertically(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it } +
-                    fadeIn(animationSpec = tween(200)),
-            exit = slideOutVertically(animationSpec = tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { -it } +
-                    fadeOut(animationSpec = tween(160))
-        ) {
-            val searchBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
-            val onSearchColor = MaterialTheme.colorScheme.onSurfaceVariant
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(searchBackgroundColor)
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "退出搜索",
-                    tint = onSearchColor,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clickable {
-                            if (searchQuery.isNotEmpty()) {
-                                searchQuery = ""
-                                searchViewModel.clearSearch()
-                            }
-                            isSearchActive = false
-                            focusManager.clearFocus()
-                        }
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "搜索会话、联系人...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = onSearchColor.copy(alpha = 0.6f),
-                            maxLines = 1
-                        )
-                    }
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = {
-                            searchQuery = it
-                            if (it.isNotEmpty()) {
-                                searchViewModel.search(it)
-                            } else {
-                                searchViewModel.clearSearch()
-                            }
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = onSearchColor),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(searchFocusRequester),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            if (searchQuery.isNotEmpty()) searchViewModel.search(searchQuery)
-                            focusManager.clearFocus()
-                        }),
-                        singleLine = true,
-                        enabled = isSearchActive
-                    )
+        // 搜索栏：从顶栏下沿被裁剪着"抽"出来，整条只跟 searchReveal 一个进度走
+        ConversationSearchBar(
+            reveal = searchReveal,
+            query = searchQuery,
+            onQueryChange = { newValue ->
+                searchQuery = newValue
+                if (newValue.isNotEmpty()) {
+                    searchViewModel.search(newValue)
+                } else {
+                    searchViewModel.clearSearch()
                 }
+            },
+            onClose = {
                 if (searchQuery.isNotEmpty()) {
-                    YhIconButton(
-                        onClick = {
-                            searchQuery = ""
-                            searchViewModel.clearSearch()
-                        },
-                        modifier = Modifier.size(20.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "清除",
-                            tint = onSearchColor
-                        )
-                    }
+                    searchQuery = ""
+                    searchViewModel.clearSearch()
                 }
-            }
-        }
+                isSearchActive = false
+                focusManager.clearFocus()
+            },
+            onClear = {
+                searchQuery = ""
+                searchViewModel.clearSearch()
+            },
+            onSearchAction = {
+                if (searchQuery.isNotEmpty()) searchViewModel.search(searchQuery)
+                focusManager.clearFocus()
+            },
+            focusRequester = searchFocusRequester,
+            enabled = isSearchActive
+        )
 
         uiState.error?.let { error ->
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -501,14 +513,18 @@ fun ConversationScreen(
             ) {
                 // 本地会话匹配结果
                 if (filteredConversations.isNotEmpty()) {
-                    item(key = "local_header") {
-                        Text(
-                            text = "本地筛选",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                    // 空查询时本地结果就是全部会话，这时候不加分组标题，
+                    // 让"进入搜索"这一步看起来只是顶栏多了一条搜索栏，列表不跳
+                    if (searchQuery.isNotBlank()) {
+                        item(key = "local_header") {
+                            Text(
+                                text = "本地筛选",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                     items(
                         items = filteredConversations,
@@ -544,7 +560,7 @@ fun ConversationScreen(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }
@@ -566,7 +582,7 @@ fun ConversationScreen(
                                     items = category.list ?: emptyList(),
                                     key = { index, item -> "api_${catIndex}_${item.friendId}_${item.friendType}_$index" }
                                 ) { index, searchItem ->
-                                    YhSurface(
+                                    Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
@@ -622,7 +638,7 @@ fun ConversationScreen(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
-                                            YhSurface(
+                                            Surface(
                                                 color = when (searchItem.friendType) {
                                                     1 -> MaterialTheme.colorScheme.primaryContainer
                                                     2 -> MaterialTheme.colorScheme.secondaryContainer
@@ -669,7 +685,7 @@ fun ConversationScreen(
         } else {
             // ========== 正常模式 ==========
             // 会话列表（支持下拉刷新）
-            YhPullToRefresh(
+            PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {
                     refreshing = true
@@ -680,14 +696,15 @@ fun ConversationScreen(
                         refreshing = false
                     }
                 },
-                modifier = Modifier.fillMaxSize().yhTopBarNestedScroll()
+                state = rememberPullToRefreshState(),
+                modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)
             ) {
                 if (uiState.isLoading && conversations.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 } else {
                     val stickyList = stickyData?.sticky ?: emptyList()
@@ -983,7 +1000,7 @@ fun ConversationScreen(
                                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                             }
                         }
@@ -992,7 +1009,7 @@ fun ConversationScreen(
             }
         } // end if isSearchActive / else
         } // end Column
-    } // end YhScaffold
+    } // end Scaffold
     
     // 长按菜单弹窗
     if (showConversationMenu && selectedConversation != null) {
@@ -1018,12 +1035,12 @@ fun ConversationScreen(
     
     // 扫描方式选择弹窗
     if (showScanMethodDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showScanMethodDialog = false },
             title = { Text("扫一扫") },
             text = { Text("请选择扫描方式") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         showScanMethodDialog = false
                         val options = ScanOptions()
@@ -1039,7 +1056,7 @@ fun ConversationScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         showScanMethodDialog = false
                         galleryLauncher.launch("image/*")
@@ -1052,9 +1069,9 @@ fun ConversationScreen(
     }
 
     if (showAddMenuBottomSheet) {
-        YhBottomSheet(
-            show = showAddMenuBottomSheet,
-            onDismissRequest = { showAddMenuBottomSheet = false }
+        ModalBottomSheet(
+            onDismissRequest = { showAddMenuBottomSheet = false },
+            sheetState = rememberModalBottomSheetState()
         ) {
             val activity = context as? android.app.Activity
             val sheetColor = MaterialTheme.colorScheme.surface
@@ -1083,6 +1100,109 @@ fun ConversationScreen(
                 )
             }
         }
+}
+
+/**
+ * 主界面顶部搜索栏。
+ *
+ * 旧实现用 AnimatedVisibility 把一整块带底色的圆角框从上方滑下来：框先成型，落位之后
+ * 框里的内容再各自淡入，观感上就是"凭空冒出一个盒子、盒子里再动一下"。
+ *
+ * 现在整条搜索栏只由 reveal 这一个进度驱动：
+ *  - 外层容器高度从 0 连续长到 56dp，并且 clipToBounds()；
+ *  - 内层内容保持固定尺寸、自己不做任何淡入/位移动画，纯粹被外层"裁"出来。
+ * 于是视觉上它是从顶栏下沿被抽出来的一条，而不是啪地贴上去一个框。
+ */
+@Composable
+private fun ConversationSearchBar(
+    reveal: Animatable<Float, AnimationVector1D>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onClear: () -> Unit,
+    onSearchAction: () -> Unit,
+    focusRequester: FocusRequester,
+    enabled: Boolean
+) {
+    val progress = reveal.value.coerceIn(0f, 1f)
+    if (progress <= 0f) return
+
+    val backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp * progress)
+            .clipToBounds()
+    ) {
+        // requiredHeight 让内层始终按 44dp 排版，超出的部分交给外层裁剪，
+        // 这样内容是"被露出来"的，而不是跟着容器一起被压扁
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp)
+                .requiredHeight(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(backgroundColor)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "退出搜索",
+                tint = contentColor,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(onClick = onClose)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "搜索会话、联系人...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.6f),
+                        maxLines = 1
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = contentColor),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearchAction() }),
+                    singleLine = true,
+                    enabled = enabled
+                )
+            }
+            AnimatedVisibility(
+                visible = query.isNotEmpty(),
+                enter = fadeIn(animationSpec = tween(120)) +
+                        scaleIn(initialScale = 0.85f, animationSpec = tween(140)),
+                exit = fadeOut(animationSpec = tween(90)) +
+                        scaleOut(targetScale = 0.85f, animationSpec = tween(90))
+            ) {
+                IconButton(
+                    onClick = onClear,
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "清除",
+                        tint = contentColor
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -1118,52 +1238,52 @@ private fun AddMenuBottomSheetContent(
         
         // 添加用户/群聊/机器人
         if (showAddUser) {
-            YhBasicComponent(
-                title = "添加用户/群聊/机器人",
-                summary = "通过ID搜索并添加好友、群聊或机器人",
-                onClick = onAddUserGroupBot,
-                startAction = {
+            ListItem(
+                headlineContent = { Text("添加用户/群聊/机器人") },
+                supportingContent = { Text("通过ID搜索并添加好友、群聊或机器人") },
+                leadingContent = {
                     Icon(
                         imageVector = Icons.Default.PersonAdd,
                         contentDescription = "添加",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                }
+                },
+                modifier = Modifier.clickable(onClick = onAddUserGroupBot)
             )
         }
         
         // 创建群聊/机器人
         if (showAddGroup) {
-            YhBasicComponent(
-                title = "创建群聊/机器人",
-                summary = "创建新的群聊或机器人",
-                onClick = onCreateGroupBot,
-                startAction = {
+            ListItem(
+                headlineContent = { Text("创建群聊/机器人") },
+                supportingContent = { Text("创建新的群聊或机器人") },
+                leadingContent = {
                     Icon(
                         imageVector = Icons.Default.GroupAdd,
                         contentDescription = "创建",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                }
+                },
+                modifier = Modifier.clickable(onClick = onCreateGroupBot)
             )
         }
         
         // 扫一扫
         if (showScan) {
-            YhBasicComponent(
-                title = "扫一扫",
-                summary = "扫描二维码添加好友或加入群聊",
-                onClick = onScan,
-                startAction = {
+            ListItem(
+                headlineContent = { Text("扫一扫") },
+                supportingContent = { Text("扫描二维码添加好友或加入群聊") },
+                leadingContent = {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
                         contentDescription = "扫一扫",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                }
+                },
+                modifier = Modifier.clickable(onClick = onScan)
             )
         }
     }
@@ -1220,7 +1340,7 @@ fun ConversationItem(
         }
     }
     
-    YhSurface(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = if (isSticky) 2.dp else 3.dp),
@@ -1492,7 +1612,7 @@ fun StickyConversationCard(
     when (displayMode) {
         "no_avatar" -> {
             // 不显示头像：以胶囊/标签样式展示会话名称
-            YhSurface(
+            Surface(
                 modifier = modifier
                     .border(
                         width = 1.dp,

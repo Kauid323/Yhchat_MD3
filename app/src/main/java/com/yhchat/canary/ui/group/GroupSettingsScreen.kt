@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.group
 
 import android.net.Uri
@@ -33,7 +35,24 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,31 +61,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ImageViewer
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.settings.SettingsCustomItem
 import com.yhchat.canary.ui.settings.SettingsGroup
 import com.yhchat.canary.ui.settings.SettingsItemCell
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupSettingsScreenRoot(
     groupId: String,
@@ -75,20 +84,25 @@ fun GroupSettingsScreenRoot(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(groupId) {
         viewModel.loadGroupInfo(groupId)
     }
 
-    YhScaffold(
+    Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            YhTopBar(
-                title = "群聊设置 · $groupName",
-                large = true,
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "群聊设置 · $groupName",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -96,32 +110,29 @@ fun GroupSettingsScreenRoot(
                     }
                 },
                 actions = {
+                    // 顶栏主操作（编辑/保存）：MD3 Expressive 的填充按钮
                     if (uiState.isEditing) {
-                        YhIconButton(
+                        TopBarActionButton(
+                            icon = Icons.Default.Check,
+                            contentDescription = "保存",
                             onClick = { viewModel.saveEditing() },
-                            enabled = !uiState.isSaving && !uiState.isUploadingAvatar
-                        ) {
-                            if (uiState.isSaving) {
-                                YhCircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "保存"
-                                )
-                            }
-                        }
+                            enabled = !uiState.isSaving && !uiState.isUploadingAvatar,
+                            loading = uiState.isSaving
+                        )
                     } else {
-                        YhIconButton(onClick = { viewModel.startEditing() }) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "编辑"
-                            )
-                        }
+                        TopBarActionButton(
+                            icon = Icons.Default.Edit,
+                            contentDescription = "编辑",
+                            onClick = { viewModel.startEditing() }
+                        )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                // 顶部栏跟页面背景（Scaffold 的 surfaceContainer）保持一致，之前用 background 会比内容区还浅
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
         }
     ) { padding ->
@@ -132,7 +143,7 @@ fun GroupSettingsScreenRoot(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 uiState.error != null -> {
                     Column(
@@ -147,7 +158,7 @@ fun GroupSettingsScreenRoot(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        YhButton(onClick = { viewModel.loadGroupInfo(groupId) }) {
+                        Button(onClick = { viewModel.loadGroupInfo(groupId) }) {
                             Text("重试")
                         }
                     }
@@ -156,6 +167,7 @@ fun GroupSettingsScreenRoot(
                     GroupSettingsContent(
                         uiState = uiState,
                         viewModel = viewModel,
+                        scrollBehavior = scrollBehavior,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -168,6 +180,7 @@ fun GroupSettingsScreenRoot(
 private fun GroupSettingsContent(
     uiState: GroupSettingsUiState,
     viewModel: GroupSettingsViewModel,
+    scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState()),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -186,7 +199,7 @@ private fun GroupSettingsContent(
     }
 
     LazyColumn(
-        modifier = modifier.yhTopBarNestedScroll(),
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentPadding = PaddingValues(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
@@ -219,7 +232,7 @@ private fun GroupSettingsContent(
                                         contentScale = ContentScale.Crop
                                     )
                                     if (uiState.isEditing) {
-                                        YhSurface(
+                                        Surface(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clickable(enabled = !uiState.isUploadingAvatar) {
@@ -231,7 +244,7 @@ private fun GroupSettingsContent(
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 if (uiState.isUploadingAvatar) {
-                                                    YhCircularProgressIndicator(
+                                                    CircularProgressIndicator(
                                                         modifier = Modifier.size(16.dp),
                                                         strokeWidth = 2.dp
                                                     )
@@ -499,11 +512,11 @@ private fun GroupSettingsContent(
     }
 
     if (uiState.showKeywordDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = viewModel::dismissKeywordDialog,
             title = { Text("设置群口令") },
             text = {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = uiState.keywordInput,
                     onValueChange = viewModel::updateKeywordInput,
                     label = { Text("群口令") },
@@ -512,14 +525,14 @@ private fun GroupSettingsContent(
                 )
             },
             confirmButton = {
-                YhButton(
+                Button(
                     onClick = {
                         viewModel.confirmKeyword(groupInfo.groupId)
                     },
                     enabled = !uiState.isSettingKeyword
                 ) {
                     if (uiState.isSettingKeyword) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -529,7 +542,7 @@ private fun GroupSettingsContent(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = viewModel::dismissKeywordDialog,
                     enabled = !uiState.isSettingKeyword
                 ) {
@@ -557,7 +570,7 @@ private fun GroupSettingsContent(
             730 to "2年"
         )
 
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {
                 if (!uiState.isSettingAutoDeleteMessage) {
                     viewModel.dismissAutoDeleteMessageDialog()
@@ -567,7 +580,7 @@ private fun GroupSettingsContent(
             text = {
                 Column {
                     options.forEach { (value, label) ->
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 if (!uiState.isSettingAutoDeleteMessage) {
                                     viewModel.setAutoDeleteMessage(groupInfo.groupId, value)
@@ -593,13 +606,13 @@ private fun GroupSettingsContent(
                     }
                     if (uiState.isSettingAutoDeleteMessage) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        YhCircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { viewModel.dismissAutoDeleteMessageDialog() },
                     enabled = !uiState.isSettingAutoDeleteMessage
                 ) {
@@ -685,7 +698,7 @@ private fun GroupSettingsTextFieldItem(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth(),
@@ -734,12 +747,12 @@ private fun GroupSettingsSwitchItem(
             }
             Spacer(modifier = Modifier.width(8.dp))
             if (showLoading) {
-                YhCircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
             } else {
-                YhSwitch(
+                Switch(
                     checked = checked,
                     onCheckedChange = if (enabled) onCheckedChange else null,
                     enabled = enabled
@@ -755,7 +768,7 @@ private fun StatusMessageCard(
     containerColor: Color,
     contentColor: Color
 ) {
-    YhSurface(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -802,7 +815,7 @@ private fun MessageTypeLimitDialog(
         14 to "A2UI消息"
     )
 
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = if (!isLoading) onDismiss else { {} },
         title = { Text("消息类型限制") },
         text = {
@@ -822,7 +835,7 @@ private fun MessageTypeLimitDialog(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        YhCheckbox(
+                        Checkbox(
                             checked = selectedTypes.contains(type),
                             onCheckedChange = { onToggleType(type) },
                             enabled = !isLoading
@@ -837,12 +850,12 @@ private fun MessageTypeLimitDialog(
             }
         },
         confirmButton = {
-            YhButton(
+            Button(
                 onClick = onConfirm,
                 enabled = !isLoading
             ) {
                 if (isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )
@@ -852,7 +865,7 @@ private fun MessageTypeLimitDialog(
             }
         },
         dismissButton = {
-            YhTextButton(
+            TextButton(
                 onClick = onDismiss,
                 enabled = !isLoading
             ) {

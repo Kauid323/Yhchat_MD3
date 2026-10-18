@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -18,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yhchat.canary.data.model.MenuButton
-import com.yhchat.canary.ui.adaptive.YhButton
 
 /**
  * 群聊菜单按钮栏
@@ -61,14 +62,16 @@ private fun MenuButtonItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhButton(
+    Button(
         onClick = onClick,
         modifier = modifier
             .height(32.dp)
             .widthIn(min = 60.dp),
         shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        ),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Text(

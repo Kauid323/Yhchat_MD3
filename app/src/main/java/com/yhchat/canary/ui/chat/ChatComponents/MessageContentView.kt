@@ -58,13 +58,13 @@ import com.yhchat.canary.data.model.MessageContent
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiSpec
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.parser.looksLikeA2UiJson
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.parser.parseA2UiSpec
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import com.yhchat.canary.ui.community.PostDetailActivity
 import com.yhchat.canary.ui.components.DownloadManager
 import com.yhchat.canary.ui.components.DownloadState
@@ -75,6 +75,8 @@ import com.yhchat.canary.ui.components.LinkText
 import com.yhchat.canary.ui.components.MarkdownText
 import com.yhchat.canary.ui.components.MessageSelectionContainer
 import com.yhchat.canary.ui.components.htmltext.HtmlTextMessage
+import com.yhchat.canary.ui.components.htmltext.MAX_HTML_INPUT_LENGTH
+import com.yhchat.canary.ui.components.htmltext.truncateAtSafeBoundary
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.share.ExternalShareUtils
 import com.yhchat.canary.ui.webview.WebViewActivity
@@ -167,8 +169,17 @@ fun MessageContentView(
                                 ExternalShareUtils.shareText(context, selectedText?.takeIf { it.isNotBlank() } ?: htmlContent, message.chatId ?: message.recvId)
                             }
                         ) {
+                            val rawDisplayText = remember(htmlContent) {
+                                // 避免把超长 HTML 直接丢给 Text：极端长度会造成布局/内存崩溃
+                                if (htmlContent.length <= MAX_HTML_INPUT_LENGTH) {
+                                    htmlContent
+                                } else {
+                                    truncateAtSafeBoundary(htmlContent, MAX_HTML_INPUT_LENGTH) +
+                                        "\n\n…（内容过长，仅展示开头部分）"
+                                }
+                            }
                             Text(
-                                text = htmlContent,
+                                text = rawDisplayText,
                                 color = textColor,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.fillMaxWidth()
@@ -254,7 +265,7 @@ fun MessageContentView(
                             } 
                         }
                         
-                        YhSurface(
+                        Surface(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
@@ -362,7 +373,7 @@ fun MessageContentView(
                                     // 下载状态图标和取消按钮
                                     when (downloadState) {
                                         is DownloadState.Downloading -> {
-                                            YhIconButton(
+                                            IconButton(
                                                 onClick = {
                                                     DownloadManager.cancelDownload(context, fileUrl)
                                                 },
@@ -406,8 +417,8 @@ fun MessageContentView(
                                 // 下载进度条
                                 val currentState = downloadState
                                 if (currentState is DownloadState.Downloading && currentState.total > 0) {
-                                    YhLinearProgressIndicator(
-                                        progress = (currentState.progress.toFloat() / currentState.total.toFloat()).coerceIn(0f, 1f),
+                                    LinearProgressIndicator(
+                                        progress = { (currentState.progress.toFloat() / currentState.total.toFloat()).coerceIn(0f, 1f) },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(horizontal = 12.dp)
@@ -811,7 +822,7 @@ fun MessageContentView(
         content.quoteMsgText?.let { quoteText: String ->
             val safeQuoteText = quoteText.ifBlank { "[引用消息]" }
             Spacer(modifier = Modifier.height(4.dp))
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .widthIn(max = 280.dp)
                     .clip(RoundedCornerShape(4.dp))
@@ -974,7 +985,7 @@ private fun PostMessageView(
     }
 
     // 文章卡片
-    YhSurface(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
@@ -1094,7 +1105,7 @@ private fun FormMessageView(
                 )
                 if (formItems.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    YhHorizontalDivider(
+                    HorizontalDivider(
                         color = textColor.copy(alpha = 0.2f),
                         thickness = 0.5.dp
                     )
@@ -1224,7 +1235,7 @@ private fun FormItemView(
                     color = secondaryTextColor
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = textColor.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(6.dp)
@@ -1251,7 +1262,7 @@ private fun FormItemView(
                     style = MaterialTheme.typography.bodyMedium,
                     color = textColor
                 )
-                YhSurface(
+                Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (item.value == true) accentColor else textColor.copy(alpha = 0.3f)
                 ) {
@@ -1276,7 +1287,7 @@ private fun FormItemView(
                     color = secondaryTextColor
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = textColor.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(6.dp)
@@ -1555,7 +1566,7 @@ private fun TgsPreviewMessage(
     ) {
         when {
             lottieJson == null -> {
-                YhCircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
                     strokeWidth = 2.dp
                 )

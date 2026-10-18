@@ -20,10 +20,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -43,18 +60,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.CommunityGroup
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -119,27 +124,39 @@ fun GroupListScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            YhTopBar(
-                title = "$boardName - 群聊列表",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "$boardName - 群聊列表",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = groupListState.isLoading,
             onRefresh = { viewModel.loadGroupList(token, boardId) },
+            state = rememberPullToRefreshState(),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -150,11 +167,14 @@ fun GroupListScreen(
         
         // 错误提示
         groupListState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = error,
@@ -169,7 +189,7 @@ fun GroupListScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .yhTopBarNestedScroll(),
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -183,7 +203,7 @@ fun GroupListScreen(
             // 加载更多按钮
             if (groupListState.groups.isNotEmpty() && groupListState.hasMore) {
                 item {
-                    YhButton(
+                    Button(
                         onClick = { viewModel.loadMoreGroups(token, boardId) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -191,7 +211,7 @@ fun GroupListScreen(
                         enabled = !groupListState.isLoading
                     ) {
                         if (groupListState.isLoading) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp
                             )
@@ -227,7 +247,7 @@ fun GroupListScreen(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
             }
@@ -289,11 +309,14 @@ fun GroupListItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Row(
             modifier = Modifier
@@ -363,7 +386,7 @@ fun GroupDetailDialog(
 ) {
     val joinRequestState by viewModel.joinRequestState.collectAsState()
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         modifier = modifier,
         title = {
@@ -481,12 +504,12 @@ fun GroupDetailDialog(
             }
         },
          confirmButton = {
-             YhButton(
+             Button(
                  onClick = { onJoinRequest(group.groupId) },
                  enabled = !joinRequestState.isLoading && !joinRequestState.isSuccess && !joinRequestState.isChecking
              ) {
                  if (joinRequestState.isLoading || joinRequestState.isChecking) {
-                     YhCircularProgressIndicator(
+                     CircularProgressIndicator(
                          modifier = Modifier.size(16.dp),
                          strokeWidth = 2.dp
                      )
@@ -504,7 +527,7 @@ fun GroupDetailDialog(
              }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }

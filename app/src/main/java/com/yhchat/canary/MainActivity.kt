@@ -51,11 +51,11 @@ import com.yhchat.canary.ui.login.LoginViewModel
 import com.yhchat.canary.ui.profile.ProfileScreen
 import com.yhchat.canary.ui.search.SearchScreen
 import com.yhchat.canary.ui.search.SearchViewModel
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhVerticalDivider as VerticalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
 import com.yhchat.canary.utils.UnifiedLinkHandler
@@ -91,7 +91,7 @@ class MainActivity : BaseActivity() {
                 // 设置系统导航栏颜色，让手势线自动适配应用的导航栏颜色
                 SetSystemNavigationBarColor()
                 
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -569,8 +569,7 @@ class MainActivity : BaseActivity() {
                                                                         communityRepository = RepositoryFactory.getCommunityRepository(this@MainActivity),
                                                                         tokenRepository = RepositoryFactory.getTokenRepository(this@MainActivity),
                                                                         userRepository = RepositoryFactory.getUserRepository(this@MainActivity),
-                                                                        friendRepository = RepositoryFactory.getFriendRepository(this@MainActivity),
-                                                                        messageRepository = RepositoryFactory.getMessageRepository(this@MainActivity)
+                                                                        friendRepository = RepositoryFactory.getFriendRepository(this@MainActivity)
                                                                     )
                                                                 }
                                                                 PostDetailScreen(
@@ -732,7 +731,7 @@ class MainActivity : BaseActivity() {
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                                     }
                                 }
                             }
@@ -852,7 +851,7 @@ class MainActivity : BaseActivity() {
                                             modifier = Modifier.fillMaxSize(),
                                             contentAlignment = Alignment.Center
                                         ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                                         }
                                     }
                                 }

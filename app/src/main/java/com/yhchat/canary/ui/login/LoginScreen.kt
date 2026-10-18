@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -20,14 +21,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -51,8 +55,14 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -64,8 +74,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -82,12 +92,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.R
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhText as Text
 import kotlinx.coroutines.delay
 
 /**
@@ -232,57 +236,77 @@ fun LoginScreen(
                     .fillMaxWidth()
                     .padding(vertical = 2.dp)
             ) {
-                Row(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(4.dp)
                 ) {
-                    loginTabs.forEach { (label, icon, index) ->
-                        val isSelected = selectedTab == index
-                        val tabBgColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                            animationSpec = tween(durationMillis = 200),
-                            label = "loginTabBg"
-                        )
-                        val contentColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            animationSpec = tween(durationMillis = 200),
-                            label = "loginTabColor"
-                        )
+                    val tabSpacing = 4.dp
+                    val tabWidth = (maxWidth - tabSpacing * (loginTabs.size - 1)) / loginTabs.size
+                    val indicatorOffset by animateDpAsState(
+                        targetValue = (tabWidth + tabSpacing) * selectedTab,
+                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        label = "loginTabIndicator"
+                    )
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = tabBgColor,
-                            tonalElevation = if (isSelected) 3.dp else 0.dp,
-                            shadowElevation = if (isSelected) 1.5.dp else 0.dp,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    selectedTab = index
-                                    viewModel.clearError()
-                                }
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // 选中的胶囊指示块：随 tab 切换平滑滑动过去（以前是原地淡入淡出）
+                        Box(modifier = Modifier.matchParentSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = indicatorOffset)
+                                    .width(tabWidth)
+                                    .fillMaxHeight()
+                                    .shadow(elevation = 2.dp, shape = RoundedCornerShape(12.dp), clip = false)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(tabSpacing)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = contentColor,
-                                    modifier = Modifier.size(16.dp)
+                            loginTabs.forEach { (label, icon, index) ->
+                                val isSelected = selectedTab == index
+                                val contentColor by animateColorAsState(
+                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    animationSpec = tween(durationMillis = 220),
+                                    label = "loginTabColor"
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = contentColor,
-                                    maxLines = 1
-                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            selectedTab = index
+                                            viewModel.clearError()
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            tint = contentColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = contentColor,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -320,7 +344,7 @@ fun LoginScreen(
                         when (targetTab) {
                             0 -> {
                                 // 手机号输入
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = mobile,
                                     onValueChange = { 
                                         mobile = it
@@ -337,7 +361,7 @@ fun LoginScreen(
                                     },
                                     trailingIcon = {
                                         if (mobile.isNotEmpty()) {
-                                            YhIconButton(onClick = { mobile = "" }) {
+                                            IconButton(onClick = { mobile = "" }) {
                                                 Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
                                             }
                                         }
@@ -359,7 +383,7 @@ fun LoginScreen(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    YhOutlinedTextField(
+                                    OutlinedTextField(
                                         value = imageCaptcha,
                                         onValueChange = { 
                                             imageCaptcha = it
@@ -433,7 +457,7 @@ fun LoginScreen(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    YhOutlinedTextField(
+                                    OutlinedTextField(
                                         value = smsCaptcha,
                                         onValueChange = { 
                                             smsCaptcha = it
@@ -465,7 +489,7 @@ fun LoginScreen(
                                     )
 
                                     // 发送验证码按钮
-                                    YhButton(
+                                    Button(
                                         onClick = { 
                                             focusManager.clearFocus()
                                             viewModel.getSmsCaptcha(mobile.trim(), imageCaptcha.trim())
@@ -506,7 +530,7 @@ fun LoginScreen(
 
                             1 -> {
                                 // 邮箱输入
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = email,
                                     onValueChange = { 
                                         email = it
@@ -523,7 +547,7 @@ fun LoginScreen(
                                     },
                                     trailingIcon = {
                                         if (email.isNotEmpty()) {
-                                            YhIconButton(onClick = { email = "" }) {
+                                            IconButton(onClick = { email = "" }) {
                                                 Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
                                             }
                                         }
@@ -540,7 +564,7 @@ fun LoginScreen(
                                 )
 
                                 // 密码输入
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = password,
                                     onValueChange = { 
                                         password = it
@@ -569,7 +593,7 @@ fun LoginScreen(
                                         }
                                     ),
                                     trailingIcon = {
-                                        YhIconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                                 contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
@@ -583,7 +607,7 @@ fun LoginScreen(
 
                             2 -> {
                                 // Token 输入
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = tokenInput,
                                     onValueChange = { 
                                         tokenInput = it
@@ -601,7 +625,7 @@ fun LoginScreen(
                                     trailingIcon = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             if (tokenInput.isEmpty()) {
-                                                YhIconButton(onClick = {
+                                                IconButton(onClick = {
                                                     val clip = clipboardManager.getText()?.text
                                                     if (!clip.isNullOrBlank()) {
                                                         tokenInput = clip.trim()
@@ -614,7 +638,7 @@ fun LoginScreen(
                                                     )
                                                 }
                                             } else {
-                                                YhIconButton(onClick = { tokenInput = "" }) {
+                                                IconButton(onClick = { tokenInput = "" }) {
                                                     Icon(imageVector = Icons.Default.Clear, contentDescription = "清除")
                                                 }
                                             }
@@ -682,7 +706,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // 登录提交按钮
-                YhButton(
+                Button(
                     onClick = {
                         focusManager.clearFocus()
                         when (selectedTab) {
@@ -698,7 +722,7 @@ fun LoginScreen(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     if (uiState.isLoading) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.5.dp
                         )

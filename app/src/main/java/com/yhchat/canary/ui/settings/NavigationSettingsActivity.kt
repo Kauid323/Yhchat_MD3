@@ -20,34 +20,38 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yhchat.canary.data.model.NavigationItem
 import com.yhchat.canary.data.repository.NavigationRepository
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
@@ -75,7 +79,7 @@ class NavigationSettingsActivity : com.yhchat.canary.ui.base.BaseActivity() {
 
         setContent {
             YhchatCanaryTheme {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -110,15 +114,20 @@ fun NavigationSettingsScreen(
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         viewModel.moveItem(from.index, to.index)
     }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-    YhScaffold(
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            YhTopBar(
-                title = "导航栏管理",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "导航栏管理",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -126,12 +135,17 @@ fun NavigationSettingsScreen(
                     }
                 },
                 actions = {
-                    YhTextButton(
+                    TextButton(
                         onClick = { viewModel.resetToDefault() }
                     ) {
                         Text("重置")
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { innerPadding ->
@@ -141,11 +155,14 @@ fun NavigationSettingsScreen(
                 .padding(innerPadding)
         ) {
 
-        YhCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
         ) {
             Column(
                 modifier = Modifier.padding(16.dp)
@@ -165,11 +182,14 @@ fun NavigationSettingsScreen(
         }
 
         if (uiState.hasChanges) {
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
             ) {
                 Row(
                     modifier = Modifier
@@ -184,7 +204,7 @@ fun NavigationSettingsScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    YhButton(onClick = { viewModel.applyChanges() }) {
+                    Button(onClick = { viewModel.applyChanges() }) {
                         Text("应用并重启")
                     }
                 }
@@ -195,7 +215,7 @@ fun NavigationSettingsScreen(
             state = lazyListState,
             modifier = Modifier
                 .fillMaxSize()
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(horizontal = 16.dp)
         ) {
             itemsIndexed(uiState.items, key = { _, item -> item.id }) { index, item ->
@@ -222,12 +242,12 @@ fun NavigationSettingsScreen(
         }
 
         if (uiState.showRestartDialog) {
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = viewModel::dismissRestartDialog,
                 title = { Text("重启应用") },
                 text = { Text("更改已保存。应用需要重启才能生效，是否立即重启？") },
                 confirmButton = {
-                    YhButton(
+                    Button(
                         onClick = {
                             val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                             intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -241,7 +261,7 @@ fun NavigationSettingsScreen(
                     }
                 },
                 dismissButton = {
-                    YhTextButton(onClick = viewModel::dismissRestartDialog) {
+                    TextButton(onClick = viewModel::dismissRestartDialog) {
                         Text("稍后")
                     }
                 }
@@ -262,11 +282,11 @@ private fun ReorderableCollectionItemScope.NavigationItemCard(
 ) {
     @Suppress("UNUSED_VARIABLE")
     val ignoredElevation = elevation
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
@@ -323,7 +343,7 @@ private fun ReorderableCollectionItemScope.NavigationItemCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                YhSwitch(
+                Switch(
                     checked = item.isVisible,
                     onCheckedChange = onVisibilityChange
                 )

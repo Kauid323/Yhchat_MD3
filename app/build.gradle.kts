@@ -78,49 +78,21 @@ android {
             dimension = "variant"
             buildConfigField("boolean", "WITH_PLAYER", "false")
             buildConfigField("boolean", "WITH_LIVE", "false")
-            buildConfigField("String", "UI_STYLE", "\"md3\"")
         }
         create("player") {
             dimension = "variant"
             buildConfigField("boolean", "WITH_PLAYER", "true")
             buildConfigField("boolean", "WITH_LIVE", "false")
-            buildConfigField("String", "UI_STYLE", "\"md3\"")
-        }
-        create("playermiuix") {
-            dimension = "variant"
-            buildConfigField("boolean", "WITH_PLAYER", "true")
-            buildConfigField("boolean", "WITH_LIVE", "false")
-            buildConfigField("String", "UI_STYLE", "\"miuix\"")
         }
         create("live") {
             dimension = "variant"
             buildConfigField("boolean", "WITH_PLAYER", "false")
             buildConfigField("boolean", "WITH_LIVE", "true")
-            buildConfigField("String", "UI_STYLE", "\"md3\"")
-        }
-        create("livemiuix") {
-            dimension = "variant"
-            buildConfigField("boolean", "WITH_PLAYER", "false")
-            buildConfigField("boolean", "WITH_LIVE", "true")
-            buildConfigField("String", "UI_STYLE", "\"miuix\"")
         }
         create("full") {
             dimension = "variant"
             buildConfigField("boolean", "WITH_PLAYER", "true")
             buildConfigField("boolean", "WITH_LIVE", "true")
-            buildConfigField("String", "UI_STYLE", "\"md3\"")
-        }
-        create("fullmiuix") {
-            dimension = "variant"
-            buildConfigField("boolean", "WITH_PLAYER", "true")
-            buildConfigField("boolean", "WITH_LIVE", "true")
-            buildConfigField("String", "UI_STYLE", "\"miuix\"")
-        }
-        create("miuix") {
-            dimension = "variant"
-            buildConfigField("boolean", "WITH_PLAYER", "false")
-            buildConfigField("boolean", "WITH_LIVE", "false")
-            buildConfigField("String", "UI_STYLE", "\"miuix\"")
         }
     }
 
@@ -175,15 +147,9 @@ protobuf {
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     add("playerImplementation", project(":player"))
-    add("playermiuixImplementation", project(":player"))
     add("liveImplementation", project(":live"))
-    add("livemiuixImplementation", project(":live"))
     add("fullImplementation", project(":player"))
     add("fullImplementation", project(":live"))
-    add("fullmiuixImplementation", project(":player"))
-    add("fullmiuixImplementation", project(":live"))
-    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.0")
-    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

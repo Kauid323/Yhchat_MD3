@@ -12,9 +12,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.yhchat.canary.data.model.Conversation
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhTextButton
 
 /**
  * 会话长按菜单弹窗
@@ -67,11 +69,11 @@ fun ConversationMenuDialog(
                 dismissOnClickOutside = true
             )
         ) {
-            YhCard(
+            Card(
                 modifier = modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                cornerRadius = 16.dp
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -111,7 +113,7 @@ fun ConversationMenuDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     // 取消按钮
-                    YhOutlinedButton(
+                    OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -134,11 +136,13 @@ private fun MenuButton(
     isDestructive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    YhButton(
+    Button(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
-        containerColor = if (isDestructive) MaterialTheme.colorScheme.error else null,
-        contentColor = if (isDestructive) MaterialTheme.colorScheme.onError else null
+        colors = if (isDestructive) ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError
+        ) else ButtonDefaults.buttonColors()
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -166,7 +170,7 @@ private fun DeleteConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -182,16 +186,18 @@ private fun DeleteConfirmationDialog(
             )
         },
         confirmButton = {
-            YhButton(
+            Button(
                 onClick = onConfirm,
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = MaterialTheme.colorScheme.onError
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
             ) {
                 Text("删除")
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

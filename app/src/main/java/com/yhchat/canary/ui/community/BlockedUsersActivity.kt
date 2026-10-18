@@ -19,12 +19,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,14 +51,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.BlockedUser
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
@@ -100,20 +103,28 @@ fun BlockedUsersScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            YhTopBar(
-                title = "屏蔽用户",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "屏蔽用户",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -125,11 +136,14 @@ fun BlockedUsersScreen(
         ) {
             // 错误提示
             blockedUsersState.error?.let { error ->
-                YhCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
                         text = error,
@@ -167,7 +181,7 @@ fun BlockedUsersScreen(
                 // 加载更多按钮
                 if (blockedUsersState.users.isNotEmpty() && blockedUsersState.hasMore) {
                     item {
-                        YhButton(
+                        Button(
                             onClick = { viewModel.loadMoreBlockedUsers(token) },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -175,7 +189,7 @@ fun BlockedUsersScreen(
                             enabled = !blockedUsersState.isLoading
                         ) {
                             if (blockedUsersState.isLoading) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -213,7 +227,7 @@ fun BlockedUsersScreen(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                         }
                     }
                 }
@@ -223,12 +237,12 @@ fun BlockedUsersScreen(
     
     // 取消屏蔽错误提示
     unblockState.error?.let { error ->
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { viewModel.resetUnblockState() },
             title = { Text("错误") },
             text = { Text(error) },
             confirmButton = {
-                YhTextButton(onClick = { viewModel.resetUnblockState() }) {
+                TextButton(onClick = { viewModel.resetUnblockState() }) {
                     Text("确定")
                 }
             }
@@ -247,11 +261,11 @@ fun BlockedUserItem(
     isUnblocking: Boolean,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
@@ -286,12 +300,12 @@ fun BlockedUserItem(
                 )
             }
             
-            YhButton(
+            Button(
                 onClick = onUnblockClick,
                 enabled = !isUnblocking
             ) {
                 if (isUnblocking) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )

@@ -35,9 +35,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhText as Text
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiChartPoint
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiPaintElement
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiPieChartSlice
@@ -211,14 +212,14 @@ internal fun A2UiLineChart(
                 tooltipPosition?.let { position ->
                     val point = points[index]
                     val density = LocalDensity.current
-                    YhCard(
+                    Card(
                         modifier = Modifier
                             .offset(
                                 x = with(density) { position.x.toDp() } - 40.dp,
                                 y = with(density) { position.y.toDp() } - 60.dp
                             )
                             .wrapContentSize(),
-                        containerColor = MaterialTheme.colorScheme.surface
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(
                             modifier = Modifier.padding(8.dp),
@@ -416,14 +417,14 @@ internal fun A2UiBarChart(
                 tooltipPosition?.let { position ->
                     val point = points[index]
                     val density = LocalDensity.current
-                    YhCard(
+                    Card(
                         modifier = Modifier
                             .offset(
                                 x = with(density) { position.x.toDp() } - 40.dp,
                                 y = with(density) { position.y.toDp() } - 60.dp
                             )
                             .wrapContentSize(),
-                        containerColor = MaterialTheme.colorScheme.surface
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(
                             modifier = Modifier.padding(8.dp),

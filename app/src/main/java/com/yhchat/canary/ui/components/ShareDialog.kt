@@ -27,7 +27,19 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,17 +62,6 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.repository.ShareRepository
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,7 +94,7 @@ fun ShareDialog(
     val scope = rememberCoroutineScope()
     var isSavingImage by remember { mutableStateOf(false) }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(
@@ -138,7 +139,7 @@ fun ShareDialog(
             ) {
                 when {
                     uiState.isLoading -> {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                         Text("生成分享链接中...")
                     }
                     
@@ -177,9 +178,12 @@ fun ShareDialog(
                         val shareImageUrl = shareData?.getShareImageUrl()
                         
                         // 分享图片卡片
-                        YhCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 12.dp
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
                         ) {
                             Column {
                                 // 分享图片
@@ -196,7 +200,7 @@ fun ShareDialog(
                                     )
                                     
                                     // 保存图片按钮
-                                    YhIconButton(
+                                    IconButton(
                                         onClick = {
                                             scope.launch {
                                                 isSavingImage = true
@@ -213,12 +217,12 @@ fun ShareDialog(
                                             .align(Alignment.TopEnd)
                                             .padding(8.dp)
                                     ) {
-                                        YhSurface(
+                                        Surface(
                                             shape = RoundedCornerShape(8.dp),
                                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                                         ) {
                                             if (isSavingImage) {
-                                                YhCircularProgressIndicator(
+                                                CircularProgressIndicator(
                                                     modifier = Modifier
                                                         .padding(12.dp)
                                                         .size(20.dp),
@@ -257,7 +261,7 @@ fun ShareDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // 复制链接按钮
-                            YhOutlinedButton(
+                            OutlinedButton(
                                 onClick = { copyToClipboard(context, shareText) },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -271,7 +275,7 @@ fun ShareDialog(
                             }
                             
                             // 分享按钮
-                            YhButton(
+                            Button(
                                 onClick = { shareToSystem(context, shareText, chatName) },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -288,10 +292,12 @@ fun ShareDialog(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // 链接信息卡片
-                        YhCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            cornerRadius = 8.dp
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 // 外部分享链接
@@ -302,7 +308,7 @@ fun ShareDialog(
                                 )
                                 
                                 Spacer(modifier = Modifier.height(8.dp))
-                                YhHorizontalDivider()
+                                HorizontalDivider()
                                 Spacer(modifier = Modifier.height(8.dp))
                                 
                                 // 云湖内链
@@ -318,7 +324,7 @@ fun ShareDialog(
             }
         },
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }
@@ -477,7 +483,7 @@ private fun LinkInfoRow(
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
-            YhTextButton(onClick = onCopy) {
+            TextButton(onClick = onCopy) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = null,

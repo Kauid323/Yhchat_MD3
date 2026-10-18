@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,7 +21,24 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,21 +54,6 @@ import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.bot.BotDetailActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.contacts.Contact
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFloatingActionButton
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -85,7 +88,7 @@ class GroupBotManagementActivity : BaseActivity() {
         
         setContent {
             YhchatCanaryTheme {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -101,6 +104,7 @@ class GroupBotManagementActivity : BaseActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupBotManagementScreen(
     groupId: String,
@@ -116,20 +120,28 @@ fun GroupBotManagementScreen(
         viewModel.onScreenEnter(groupId)
     }
 
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "机器人管理",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "机器人管理",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         floatingActionButton = {
-            YhFloatingActionButton(
+            FloatingActionButton(
                 onClick = { viewModel.openInviteDialog() }
             ) {
                 Icon(Icons.Default.Add, contentDescription = "邀请机器人")
@@ -143,7 +155,7 @@ fun GroupBotManagementScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -157,7 +169,7 @@ fun GroupBotManagementScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        YhButton(onClick = { viewModel.loadGroupBots(groupId) }) {
+                        Button(onClick = { viewModel.loadGroupBots(groupId) }) {
                             Text("重试")
                         }
                     }
@@ -217,12 +229,12 @@ fun GroupBotManagementScreen(
     }
 
     uiState.pendingRemoveBot?.let { pendingBot ->
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { viewModel.dismissRemoveBotDialog() },
             title = { Text("移除机器人") },
             text = { Text("确定要从群聊中移除「${pendingBot.name}」吗？") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         viewModel.removeBot(pendingBot.botId, groupId)
                     }
@@ -231,7 +243,7 @@ fun GroupBotManagementScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = { viewModel.dismissRemoveBotDialog() }) {
+                TextButton(onClick = { viewModel.dismissRemoveBotDialog() }) {
                     Text("取消")
                 }
             }
@@ -267,10 +279,11 @@ fun BotCard(
 ) {
     val context = LocalContext.current
 
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onBotClick)
+            .clickable(onClick = onBotClick),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -325,7 +338,7 @@ fun BotCard(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                YhButton(onClick = onManageClick) {
+                Button(onClick = onManageClick) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "管理权限",
@@ -336,7 +349,7 @@ fun BotCard(
                 }
 
                 if (canRemove) {
-                    YhIconButton(onClick = onRemoveClick) {
+                    IconButton(onClick = onRemoveClick) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "移除机器人",
@@ -357,7 +370,7 @@ private fun BotPermissionDialog(
     onDismiss: () -> Unit,
     onPermissionChange: (BotPermissionField, Boolean) -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("机器人管理权限") },
         text = {
@@ -398,12 +411,12 @@ private fun BotPermissionDialog(
                     onCheckedChange = { onPermissionChange(BotPermissionField.GroupTagManage, it) }
                 )
                 if (isUpdating) {
-                    YhLinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
             }
         },
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("关闭")
             }
         }
@@ -423,7 +436,7 @@ private fun PermissionCheckboxRow(
             .clickable(enabled = enabled) { onCheckedChange(!checked) },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        YhCheckbox(
+        Checkbox(
             checked = checked,
             onCheckedChange = if (enabled) onCheckedChange else null,
             enabled = enabled
@@ -455,7 +468,7 @@ fun InviteBotDialog(
         }
     }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("邀请机器人") },
         text = {
@@ -465,7 +478,7 @@ fun InviteBotDialog(
                     .heightIn(max = 400.dp)
             ) {
                 // 搜索框
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier.fillMaxWidth(),
@@ -505,7 +518,7 @@ fun InviteBotDialog(
         },
         confirmButton = {},
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -519,10 +532,11 @@ fun InviteBotItem(
 ) {
     val context = LocalContext.current
     
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onInvite)
+            .clickable(onClick = onInvite),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier

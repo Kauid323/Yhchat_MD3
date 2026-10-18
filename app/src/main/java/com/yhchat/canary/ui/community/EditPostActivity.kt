@@ -18,11 +18,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -34,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,17 +56,6 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.R
 import com.yhchat.canary.data.di.RepositoryFactory
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -218,12 +222,14 @@ fun EditPostScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             // 顶部应用
-            YhTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = "编辑文章",
@@ -232,7 +238,7 @@ fun EditPostScreen(
                     )
                 },
                 navigationIcon = {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         if (title != originalTitle || content != originalContent || 
                             (if (isMarkdownMode) 2 else 1) != originalContentType) {
                             showExitDialog = true
@@ -247,7 +253,7 @@ fun EditPostScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = { isMarkdownMode = !isMarkdownMode }
                     ) {
                         Icon(
@@ -259,7 +265,7 @@ fun EditPostScreen(
                     }
 
                     // 保存按钮
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (title.isNotBlank() && content.isNotBlank()) {
                                 viewModel.editPost(
@@ -274,7 +280,7 @@ fun EditPostScreen(
                         enabled = title.isNotBlank() && content.isNotBlank() && !editPostState.isLoading
                     ) {
                         if (editPostState.isLoading) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp
                             )
@@ -285,7 +291,12 @@ fun EditPostScreen(
                             )
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
@@ -297,11 +308,14 @@ fun EditPostScreen(
             
         // 错误提示
         editPostState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                         .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
                         text = error,
@@ -313,11 +327,14 @@ fun EditPostScreen(
         }
 
         draftSaveState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = error,
@@ -332,12 +349,12 @@ fun EditPostScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .yhTopBarNestedScroll()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
                         label = { Text("文章标题") },
@@ -348,7 +365,7 @@ fun EditPostScreen(
                 }
 
                 item {
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = content,
                         onValueChange = { content = it },
                         label = {
@@ -372,9 +389,12 @@ fun EditPostScreen(
 
                 if (isMarkdownMode) {
                     item {
-                        YhCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            )
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp)
@@ -400,7 +420,7 @@ fun EditPostScreen(
         
         // 退出确认对话框
         if (showExitDialog) {
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = { showExitDialog = false },
                 title = {
                     Text("保存草稿")
@@ -409,7 +429,7 @@ fun EditPostScreen(
                     Text("您有未保存的修改，是否保存为草稿？")
                 },
                 confirmButton = {
-                    YhTextButton(
+                    TextButton(
                         onClick = {
                             if (!draftSaveState.isSaving && (title.isNotBlank() || content.isNotBlank())) {
                                 pendingExitAfterDraftSave = true
@@ -426,7 +446,7 @@ fun EditPostScreen(
                         enabled = !draftSaveState.isSaving
                     ) {
                         if (draftSaveState.isSaving) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp
                             )
@@ -436,7 +456,7 @@ fun EditPostScreen(
                     }
                 },
                 dismissButton = {
-                    YhTextButton(
+                    TextButton(
                         onClick = {
                             if (!draftSaveState.isSaving) {
                                 showExitDialog = false

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.discover
 
 import android.content.Context
@@ -17,11 +19,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -34,15 +48,6 @@ import com.yhchat.canary.data.model.AddFriendRequest
 import com.yhchat.canary.data.model.BotDetail
 import com.yhchat.canary.data.model.BotDetailGroup
 import com.yhchat.canary.data.model.BotDetailRequest
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.chat.ChatActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
@@ -235,19 +240,30 @@ fun BotDetailScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "机器人详情",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "机器人详情",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { padding ->
@@ -262,7 +278,7 @@ fun BotDetailScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -280,7 +296,7 @@ fun BotDetailScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(onClick = onBackClick) {
+                            Button(onClick = onBackClick) {
                                 Text("返回")
                             }
                         }
@@ -291,15 +307,18 @@ fun BotDetailScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .yhTopBarNestedScroll(),
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // 机器人信息卡片
                         item {
-                            YhCard(
+                            Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                cornerRadius = 12.dp
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                )
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -384,13 +403,13 @@ fun BotDetailScreen(
                                     Spacer(modifier = Modifier.height(16.dp))
                                     
                                     // 添加按钮
-                                    YhButton(
+                                    Button(
                                         onClick = { addBot() },
                                         modifier = Modifier.fillMaxWidth(),
                                         enabled = !isAddingBot
                                     ) {
                                         if (isAddingBot) {
-                                            YhCircularProgressIndicator(
+                                            CircularProgressIndicator(
                                                 modifier = Modifier.size(20.dp),
                                                 strokeWidth = 2.dp
                                             )
@@ -445,9 +464,12 @@ fun GroupListItem(
     onAddClick: () -> Unit,
     onAvatarClick: () -> Unit = {}
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Row(
             modifier = Modifier
@@ -513,13 +535,13 @@ fun GroupListItem(
             Spacer(modifier = Modifier.width(8.dp))
             
             // 添加按钮
-            YhButton(
+            Button(
                 onClick = onAddClick,
                 enabled = !isAdding,
                 modifier = Modifier.height(36.dp)
             ) {
                 if (isAdding) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )

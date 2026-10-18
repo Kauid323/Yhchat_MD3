@@ -44,7 +44,26 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,21 +88,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFilterChip
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSegmentedControl
-import com.yhchat.canary.ui.adaptive.YhSlider
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -419,7 +423,7 @@ fun FloatingVoiceWindow(
                 .width(windowWidth)
                 .height(windowHeight)
         ) {
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .fillMaxSize()
                     .shadow(8.dp, RoundedCornerShape(12.dp)),
@@ -446,7 +450,7 @@ fun FloatingVoiceWindow(
                     onTabSelected = { selectedTab = it }
                 )
                 
-                YhHorizontalDivider()
+                HorizontalDivider()
                 
                 // 内容区域
                 when (selectedTab) {
@@ -594,7 +598,7 @@ fun WindowTitleBar(
             )
         }
         
-        YhIconButton(onClick = onClose) {
+        IconButton(onClick = onClose) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "关闭"
@@ -611,14 +615,22 @@ fun TabSelector(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    YhSegmentedControl(
-        labels = listOf("保存的音频", "文字转语音"),
-        selectedIndex = selectedTab,
-        onSelectedIndexChange = onTabSelected,
+    val labels = listOf("保存的音频", "文字转语音")
+    SingleChoiceSegmentedButtonRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-    )
+    ) {
+        labels.forEachIndexed { index, label ->
+            SegmentedButton(
+                selected = selectedTab == index,
+                onClick = { onTabSelected(index) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size)
+            ) {
+                Text(label)
+            }
+        }
+    }
 }
 
 /**
@@ -633,7 +645,7 @@ fun SavedAudiosTab(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
-            YhCircularProgressIndicator(
+            CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center)
             )
         } else if (audios.isEmpty()) {
@@ -643,7 +655,7 @@ fun SavedAudiosTab(
             ) {
                 Text("暂无保存的音频")
                 Spacer(modifier = Modifier.height(8.dp))
-                YhButton(onClick = onRefresh) {
+                Button(onClick = onRefresh) {
                     Text("刷新")
                 }
             }
@@ -672,10 +684,11 @@ fun AudioItemCard(
     audio: SavedAudioItem,
     onClick: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -751,7 +764,7 @@ fun TTSTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 输入框
-        YhOutlinedTextField(
+        OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             modifier = Modifier
@@ -776,9 +789,10 @@ fun TTSTab(
         
         // TTS状态指示器（成功时显示）
         if (error == null) {
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Row(
                     modifier = Modifier
@@ -820,9 +834,10 @@ fun TTSTab(
         
         // 错误提示
         if (error != null) {
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
@@ -933,10 +948,12 @@ fun TTSTab(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            YhButton(
+                            Button(
                                 onClick = onRetryInitialization,
                                 modifier = Modifier.weight(1f),
-                                containerColor = MaterialTheme.colorScheme.error
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
                             ) {
                                 Icon(
                                     imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
@@ -947,7 +964,7 @@ fun TTSTab(
                                 Text("重试")
                             }
                             
-                            YhOutlinedButton(
+                            OutlinedButton(
                                 onClick = onOpenTtsSettings,
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -963,7 +980,7 @@ fun TTSTab(
                         
                         // 快速尝试其他引擎（如果有多个可用引擎）
                         if (availableTtsEngines.size > 1) {
-                            YhHorizontalDivider()
+                            HorizontalDivider()
                             Text(
                                 text = "快速尝试其他引擎:",
                                 style = MaterialTheme.typography.labelSmall,
@@ -977,7 +994,7 @@ fun TTSTab(
                             ) {
                                 availableTtsEngines.filter { it.isInstalled }.take(5).forEach { engine ->
                                     if (engine.packageName != selectedTtsEngine) {
-                                        YhFilterChip(
+                                        FilterChip(
                                             selected = false,
                                             onClick = {
                                                 onEngineChange(engine.packageName)
@@ -1008,16 +1025,17 @@ fun TTSTab(
         
         // 进度条
         if (isPlaying && progress > 0) {
-            YhLinearProgressIndicator(
-                progress = progress,
+            LinearProgressIndicator(
+                progress = { progress },
                 modifier = Modifier.fillMaxWidth()
             )
         }
         
         // TTS参数控制
-        YhCard(
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1045,7 +1063,7 @@ fun TTSTab(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    YhSlider(
+                    Slider(
                         value = speechRate,
                         onValueChange = onSpeechRateChange,
                         valueRange = 0.5f..2.0f,
@@ -1070,7 +1088,7 @@ fun TTSTab(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    YhSlider(
+                    Slider(
                         value = pitch,
                         onValueChange = onPitchChange,
                         valueRange = 0.5f..2.0f,
@@ -1095,7 +1113,7 @@ fun TTSTab(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    YhSlider(
+                    Slider(
                         value = volume,
                         onValueChange = onVolumeChange,
                         valueRange = 0.0f..1.0f,
@@ -1104,7 +1122,7 @@ fun TTSTab(
                 }
                 
                 // 重置按钮
-                YhTextButton(
+                TextButton(
                     onClick = {
                         onSpeechRateChange(1.0f)
                         onPitchChange(1.0f)
@@ -1122,7 +1140,7 @@ fun TTSTab(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            YhButton(
+            Button(
                 onClick = if (isPlaying) onStopPreview else onPlayPreview,
                 enabled = text.isNotBlank() && error == null,
                 modifier = Modifier.weight(1f)
@@ -1135,13 +1153,13 @@ fun TTSTab(
                 Text(if (isPlaying) "停止" else "预览")
             }
             
-            YhButton(
+            Button(
                 onClick = onSynthesize,
                 enabled = text.isNotBlank() && !isSynthesizing && error == null,
                 modifier = Modifier.weight(1f)
             ) {
                 if (isSynthesizing) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )
@@ -1157,7 +1175,7 @@ fun TTSTab(
         }
         
         // TTS设置
-        YhTextButton(
+        TextButton(
             onClick = onOpenTtsSettings,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1246,9 +1264,12 @@ fun TtsEngineSelector(
     showEngineSelector: Boolean,
     onToggleEngineSelector: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -1306,7 +1327,7 @@ fun TtsEngineSelector(
             
             // 引擎选择区域（展开时显示）
             if (showEngineSelector) {
-                YhHorizontalDivider()
+                HorizontalDivider()
                 
                 // 自动识别的引擎列表
                 Text(
@@ -1321,7 +1342,7 @@ fun TtsEngineSelector(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // 添加"系统默认"选项
-                    YhSurface(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { 
@@ -1367,7 +1388,7 @@ fun TtsEngineSelector(
                     
                     if (availableEngines.isNotEmpty()) {
                         availableEngines.forEach { engine ->
-                            YhSurface(
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onEngineChange(engine.packageName) },
@@ -1426,7 +1447,7 @@ fun TtsEngineSelector(
                 }
                 
                 Spacer(modifier = Modifier.height(8.dp))
-                YhHorizontalDivider()
+                HorizontalDivider()
                 
                 // 自定义引擎包名输入
                 Column(
@@ -1440,7 +1461,7 @@ fun TtsEngineSelector(
                         color = MaterialTheme.colorScheme.primary
                     )
                     
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = customEnginePackage,
                         onValueChange = onCustomEnginePackageChange,
                         modifier = Modifier.fillMaxWidth(),
@@ -1449,7 +1470,7 @@ fun TtsEngineSelector(
                         singleLine = true,
                         trailingIcon = {
                             if (customEnginePackage.isNotBlank()) {
-                                YhIconButton(onClick = { onCustomEnginePackageChange("") }) {
+                                IconButton(onClick = { onCustomEnginePackageChange("") }) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = "清除"
@@ -1463,7 +1484,7 @@ fun TtsEngineSelector(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        YhButton(
+                        Button(
                             onClick = onApplyCustomEngine,
                             enabled = customEnginePackage.isNotBlank(),
                             modifier = Modifier.weight(1f)
@@ -1471,7 +1492,7 @@ fun TtsEngineSelector(
                             Text("应用自定义引擎")
                         }
                         
-                        YhOutlinedButton(
+                        OutlinedButton(
                             onClick = {
                                 onCustomEnginePackageChange("")
                                 onEngineChange("") // 空字符串表示系统默认
@@ -1502,7 +1523,7 @@ fun TtsEngineSelector(
                             "Multi TTS" to "org.nobody.multitts"
                         ).forEach { (label, packageName) ->
                             val engineInfo = availableEngines.find { it.packageName == packageName }
-                            YhFilterChip(
+                            FilterChip(
                                 selected = selectedEngine == packageName,
                                 onClick = {
                                     onCustomEnginePackageChange(packageName)

@@ -26,8 +26,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -51,15 +64,6 @@ import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.CommunityBoard
 import com.yhchat.canary.data.model.CommunityPost
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -117,13 +121,15 @@ fun SearchScreen(
         focusRequester.requestFocus()
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            YhTopAppBar(
+            TopAppBar(
                 title = {
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         placeholder = { Text("搜索文章和分区...") },
@@ -142,7 +148,7 @@ fun SearchScreen(
                         ),
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
-                                YhIconButton(onClick = { searchQuery = "" }) {
+                                IconButton(onClick = { searchQuery = "" }) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
                                         contentDescription = "清空"
@@ -153,7 +159,7 @@ fun SearchScreen(
                     )
                 },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -161,7 +167,7 @@ fun SearchScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (searchQuery.isNotBlank()) {
                                 viewModel.search(token, searchQuery.trim())
@@ -174,7 +180,12 @@ fun SearchScreen(
                             contentDescription = "搜索"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -185,11 +196,12 @@ fun SearchScreen(
         ) {
             // 错误提示
             searchState.error?.let { error ->
-                YhCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Text(
                         text = error,
@@ -204,7 +216,7 @@ fun SearchScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .yhTopBarNestedScroll(),
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -308,7 +320,7 @@ fun SearchScreen(
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                YhCircularProgressIndicator()
+                                CircularProgressIndicator()
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = "搜索...",
@@ -331,11 +343,11 @@ fun SearchBoardItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
@@ -370,9 +382,9 @@ fun SearchBoardItem(
                     
                     Spacer(modifier = Modifier.width(8.dp))
                     
-                    YhCard(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        cornerRadius = 8.dp
+                    Card(
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Text(
                             text = "分区",
@@ -399,9 +411,9 @@ fun SearchBoardItem(
             }
             
             if (board.isFollowed == "1") {
-                YhCard(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    cornerRadius = 8.dp
+                Card(
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text(
                         text = "已关注",
@@ -424,11 +436,11 @@ fun SearchPostItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -448,12 +460,14 @@ fun SearchPostItem(
                 
                 Spacer(modifier = Modifier.width(8.dp))
                 
-                YhCard(
-                    containerColor = if (post.contentType == 2)
-                        MaterialTheme.colorScheme.primaryContainer 
-                    else 
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    cornerRadius = 8.dp
+                Card(
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (post.contentType == 2)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Text(
                         text = if (post.contentType == 2) "MD" else "文本",

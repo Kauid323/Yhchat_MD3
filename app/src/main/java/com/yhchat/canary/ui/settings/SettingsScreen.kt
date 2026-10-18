@@ -20,8 +20,33 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,32 +74,6 @@ import com.yhchat.canary.data.repository.UserRepository
 import com.yhchat.canary.data.websocket.ConnectionState
 import com.yhchat.canary.data.websocket.WebSocketService
 import com.yhchat.canary.service.AudioPlayerService
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhFilterChip
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhListItem
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSlider
-import com.yhchat.canary.ui.adaptive.YhSettingsGroup
-import com.yhchat.canary.ui.adaptive.YhSettingsItemCell
-import com.yhchat.canary.ui.adaptive.YhSettingsSwitchItem
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTabRow
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.community.BoardDetailActivity
 import com.yhchat.canary.ui.community.PostDetailActivity
 import com.yhchat.canary.ui.components.rememberBooleanPreference
@@ -157,21 +157,32 @@ fun SettingsScreen(
     }
     
     var showLogoutDialog by remember { mutableStateOf(false) }
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            YhTopBar(
-                title = "设置",
-                large = true,
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "设置",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
@@ -179,7 +190,7 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(innerPadding),
             contentPadding = PaddingValues(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -317,12 +328,12 @@ fun SettingsScreen(
                             }
 
                             if (showNcmAccountDialog) {
-                                YhAlertDialog(
+                                AlertDialog(
                                     onDismissRequest = { showNcmAccountDialog = false },
                                     title = { Text("网易云账号管理") },
                                     text = { Text("当前已登录网易云音乐账号。\n如需更换或重新抓取Cookie，可点击“重新登录”；如需退出可点击“退出登录”。") },
                                     confirmButton = {
-                                        YhButton(onClick = {
+                                        Button(onClick = {
                                             showNcmAccountDialog = false
                                             com.yhchat.canary.ui.webview.WebViewActivity.startNcmLogin(context)
                                         }) {
@@ -330,7 +341,7 @@ fun SettingsScreen(
                                         }
                                     },
                                     dismissButton = {
-                                        YhTextButton(onClick = {
+                                        TextButton(onClick = {
                                             com.yhchat.canary.ncm.NcmAccountManager.clearCookie(context)
                                             ncmLoggedIn = false
                                             showNcmAccountDialog = false
@@ -498,7 +509,7 @@ fun SettingsScreen(
 
     // 退出登录确认对话框
     if (showLogoutDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = {
                 Text(
@@ -511,7 +522,7 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         showLogoutDialog = false
                         onLogout()
@@ -521,7 +532,7 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showLogoutDialog = false }
                 ) {
                     Text("取消")
@@ -583,8 +594,9 @@ private fun AccountSwitchBottomSheet(
     onDeleteAccount: (String) -> Unit,
     onSwitchAccount: (String) -> Unit
 ) {
-    YhBottomSheet(
-        onDismissRequest = onDismiss
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState()
     ) {
         val activity = LocalContext.current as? android.app.Activity
         val sheetColor = MaterialTheme.colorScheme.surface
@@ -609,12 +621,12 @@ private fun AccountSwitchBottomSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                YhTextButton(onClick = onAddAccount) {
+                TextButton(onClick = onAddAccount) {
                     Text("添加账号")
                 }
             }
 
-            YhHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
@@ -659,12 +671,11 @@ private fun AccountSwitchBottomSheet(
                                 )
                                 if (isCurrent) {
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    YhFilterChip(
+                                    FilterChip(
                                         selected = true,
                                         onClick = {},
-                                    ) {
-                                        Text("当前")
-                                    }
+                                        label = { Text("当前") }
+                                    )
                                 }
                             }
                             Text(
@@ -674,7 +685,7 @@ private fun AccountSwitchBottomSheet(
                             )
                         }
 
-                        YhIconButton(
+                        IconButton(
                             onClick = { onDeleteAccount(account.userId) }
                         ) {
                             Icon(
@@ -700,7 +711,7 @@ private fun AccountSwitchBottomSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(12.dp))
-                            YhButton(onClick = onAddAccount) {
+                            Button(onClick = onAddAccount) {
                                 Text("添加账号")
                             }
                         }
@@ -884,7 +895,7 @@ private fun TTSSpeechRateSettingItem(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            YhSlider(
+            Slider(
                 value = speechRate,
                 onValueChange = onSpeechRateChange,
                 valueRange = 0.5f..2.0f,
@@ -958,7 +969,7 @@ private fun TTSPitchSettingItem(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            YhSlider(
+            Slider(
                 value = pitch,
                 onValueChange = onPitchChange,
                 valueRange = 0.5f..2.0f,
@@ -1024,7 +1035,7 @@ private fun ThemeSettingsGroup(
     )
 
     if (showThemeDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showThemeDialog = false },
             title = { Text("选择主题模式") },
             text = {
@@ -1041,7 +1052,7 @@ private fun ThemeSettingsGroup(
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            YhRadioButton(
+                            RadioButton(
                                 selected = themeMode == value,
                                 onClick = null
                             )
@@ -1055,7 +1066,7 @@ private fun ThemeSettingsGroup(
                 }
             },
             confirmButton = {
-                YhTextButton(onClick = { showThemeDialog = false }) {
+                TextButton(onClick = { showThemeDialog = false }) {
                     Text("取消")
                 }
             }
@@ -1114,7 +1125,7 @@ private fun LongPressSendMarkdownSettingItem(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                YhSwitch(
+                Switch(
                     checked = enabled,
                     onCheckedChange = { checked ->
                         enabled = checked
@@ -1125,7 +1136,7 @@ private fun LongPressSendMarkdownSettingItem(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            YhSlider(
+            Slider(
                 value = seconds.toFloat(),
                 onValueChange = { seconds = it.toInt().coerceIn(1, 10) },
                 onValueChangeFinished = {
@@ -1237,7 +1248,7 @@ private fun FontSizeSettingItem(
             Spacer(modifier = Modifier.height(12.dp))
             
             // 滑动条
-            YhSlider(
+            Slider(
                 value = fontScale,
                 onValueChange = { newValue ->
                     fontScale = newValue
@@ -1335,7 +1346,7 @@ private fun GlobalScaleSettingItem(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                YhSlider(
+                Slider(
                     value = scale,
                     onValueChange = { newValue ->
                         val clamped = newValue.coerceIn(0.5f, 1.5f)
@@ -1415,7 +1426,7 @@ private fun MemoryAutoCleanSettingItem(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                YhSwitch(
+                Switch(
                     checked = enabled,
                     onCheckedChange = { checked ->
                         enabled = checked
@@ -1430,7 +1441,7 @@ private fun MemoryAutoCleanSettingItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = thresholdValueText,
                     onValueChange = { newValue ->
                         thresholdValueText = newValue
@@ -1449,18 +1460,18 @@ private fun MemoryAutoCleanSettingItem(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Box {
-                    YhOutlinedButton(
+                    OutlinedButton(
                         onClick = { unitExpanded = true },
                         enabled = enabled
                     ) {
                         Text(unit)
                     }
 
-                    YhDropdownMenu(
+                    DropdownMenu(
                         expanded = unitExpanded,
                         onDismissRequest = { unitExpanded = false }
                     ) {
-                        YhDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("MB") },
                             onClick = {
                                 unit = "MB"
@@ -1468,7 +1479,7 @@ private fun MemoryAutoCleanSettingItem(
                                 unitExpanded = false
                             }
                         )
-                        YhDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("GB") },
                             onClick = {
                                 unit = "GB"
@@ -1732,7 +1743,7 @@ private fun ColorPickerDialog(
         Color(0xFF000000)  // 黑色
     )
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -1779,7 +1790,7 @@ private fun ColorPickerDialog(
                 }
                 
                 // 颜色输入框
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = colorInput,
                     onValueChange = { input ->
                         colorInput = input.uppercase()
@@ -1865,7 +1876,7 @@ private fun ColorPickerDialog(
                 }
                 
                 // 重置按钮
-                YhTextButton(
+                TextButton(
                     onClick = {
                         selectedColor = Color(0xFF6200EE)
                         colorInput = "#6200EE"
@@ -1884,7 +1895,7 @@ private fun ColorPickerDialog(
             }
         },
         confirmButton = {
-            YhTextButton(
+            TextButton(
                 onClick = {
                     // 保存颜色
                     if (colorInput.matches(Regex("^#[0-9A-Fa-f]{6}$"))) {
@@ -1906,7 +1917,7 @@ private fun ColorPickerDialog(
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }
@@ -1965,7 +1976,7 @@ private fun WebPQualitySettingItem(
             Spacer(modifier = Modifier.height(12.dp))
             
             // 滑动条
-            YhSlider(
+            Slider(
                 value = webpQuality,
                 onValueChange = { newValue ->
                     webpQuality = newValue
@@ -2122,7 +2133,53 @@ fun SettingsGroup(
     items: List<@Composable () -> Unit>,
     modifier: Modifier = Modifier
 ) {
-    YhSettingsGroup(title = title, items = items, modifier = modifier)
+    if (items.isEmpty()) return
+
+    Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (!title.isNullOrEmpty()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+            )
+        }
+
+        val cornerRadius = 24.dp
+        val smallRadius = 4.dp
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            items.forEachIndexed { index, item ->
+                val shape = when {
+                    items.size == 1 -> RoundedCornerShape(cornerRadius)
+                    index == 0 -> RoundedCornerShape(
+                        topStart = cornerRadius,
+                        topEnd = cornerRadius,
+                        bottomStart = smallRadius,
+                        bottomEnd = smallRadius
+                    )
+                    index == items.size - 1 -> RoundedCornerShape(
+                        topStart = smallRadius,
+                        topEnd = smallRadius,
+                        bottomStart = cornerRadius,
+                        bottomEnd = cornerRadius
+                    )
+                    else -> RoundedCornerShape(smallRadius)
+                }
+
+                Surface(
+                    shape = shape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item()
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -2136,13 +2193,50 @@ fun SettingsItemCell(
     onClick: () -> Unit,
     isDestructive: Boolean = false
 ) {
-    YhSettingsItemCell(
-        icon = icon,
-        title = title,
-        subtitle = subtitle,
-        onClick = onClick,
-        isDestructive = isDestructive
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            modifier = Modifier.size(24.dp),
+            tint = if (isDestructive) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isDestructive) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
+    }
 }
 
 /**
@@ -2157,14 +2251,46 @@ fun SettingsSwitchItem(
     onCheckedChange: (Boolean) -> Unit,
     isError: Boolean = false
 ) {
-    YhSettingsSwitchItem(
-        icon = icon,
-        title = title,
-        subtitle = subtitle,
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        isError = isError
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            modifier = Modifier.size(24.dp),
+            tint = if (isError) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Switch(
+            checked = checked,
+            onCheckedChange = null
+        )
+    }
 }
 
 /**
@@ -2303,11 +2429,18 @@ private fun YhToolsPanel(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    YhTabRow(
-                        tabs = listOf("社区", "表情包", "WebSocket"),
-                        selectedTabIndex = selectedTab,
-                        onTabSelected = { selectedTab = it }
-                    )
+                    val toolsTabs = listOf("社区", "表情包", "WebSocket")
+                    SecondaryTabRow(
+                        selectedTabIndex = selectedTab.coerceIn(0, toolsTabs.lastIndex)
+                    ) {
+                        toolsTabs.forEachIndexed { index, label ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(label) }
+                            )
+                        }
+                    }
 
                     when (selectedTab) {
                         0 -> {
@@ -2315,7 +2448,7 @@ private fun YhToolsPanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = postIdInput,
                                     onValueChange = { postIdInput = it },
                                     modifier = Modifier.weight(1f),
@@ -2324,12 +2457,12 @@ private fun YhToolsPanel(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                YhButton(
+                                Button(
                                     onClick = {
                                         val postId = postIdInput.toIntOrNull()
                                         if (postId == null) {
                                             android.widget.Toast.makeText(context, "文章ID必须是数字", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@YhButton
+                                            return@Button
                                         }
                                         val intent = Intent(context, PostDetailActivity::class.java).apply {
                                             putExtra("post_id", postId)
@@ -2345,7 +2478,7 @@ private fun YhToolsPanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = boardIdInput,
                                     onValueChange = { boardIdInput = it },
                                     modifier = Modifier.weight(1f),
@@ -2354,12 +2487,12 @@ private fun YhToolsPanel(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                YhButton(
+                                Button(
                                     onClick = {
                                         val boardId = boardIdInput.toIntOrNull()
                                         if (boardId == null) {
                                             android.widget.Toast.makeText(context, "社区ID必须是数字", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@YhButton
+                                            return@Button
                                         }
                                         val intent = Intent(context, BoardDetailActivity::class.java).apply {
                                             putExtra("board_id", boardId)
@@ -2376,7 +2509,7 @@ private fun YhToolsPanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = stickerPackIdInput,
                                     onValueChange = { stickerPackIdInput = it },
                                     modifier = Modifier.weight(1f),
@@ -2384,12 +2517,12 @@ private fun YhToolsPanel(
                                     singleLine = true
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                YhButton(
+                                Button(
                                     onClick = {
                                         val stickerPackId = stickerPackIdInput.trim()
                                         if (stickerPackId.isBlank()) {
                                             android.widget.Toast.makeText(context, "表情包ID不能为空", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@YhButton
+                                            return@Button
                                         }
                                         StickerPackDetailActivity.start(context, stickerPackId)
                                     }
@@ -2404,19 +2537,19 @@ private fun YhToolsPanel(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                YhOutlinedButton(onClick = {
+                                OutlinedButton(onClick = {
                                     webSocketService.disconnect()
                                 }) {
                                     Text("停止")
                                 }
-                                YhOutlinedTextField(
+                                OutlinedTextField(
                                     value = wsPlatformInput,
                                     onValueChange = { wsPlatformInput = it },
                                     modifier = Modifier.width(140.dp),
                                     label = { Text("在线版本") },
                                     singleLine = true
                                 )
-                                YhButton(
+                                Button(
                                     onClick = {
                                         coroutineScope.launch {
                                             val tokenRepo = RepositoryFactory.getTokenRepository(context)

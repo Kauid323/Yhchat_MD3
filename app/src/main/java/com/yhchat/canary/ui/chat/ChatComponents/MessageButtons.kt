@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,7 +24,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.ChatMessage
-import com.yhchat.canary.ui.adaptive.YhButton
 import com.yhchat.canary.ui.chat.ChatViewModel
 import org.json.JSONArray
 
@@ -83,7 +84,7 @@ fun MessageButtons(
                 ) {
                     // 遍历每一行的按钮
                     buttonRow.forEach { btnData ->
-                        YhButton(
+                        Button(
                             onClick = {
                                 handleButtonClick(
                                     context = context,
@@ -96,9 +97,11 @@ fun MessageButtons(
                                 )
                             },
                             modifier = Modifier.weight(1f),
-                            containerColor = textColor.copy(alpha = 0.15f),
-                            contentColor = textColor,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = textColor.copy(alpha = 0.15f),
+                                contentColor = textColor
+                            )
                         ) {
                             Text(
                                 text = btnData.text,

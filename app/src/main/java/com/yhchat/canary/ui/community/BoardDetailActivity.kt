@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.community
 
 import android.content.Intent
@@ -29,8 +31,24 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,19 +70,6 @@ import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.CommunityBoard
 import com.yhchat.canary.data.model.CommunityPost
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFloatingActionButton
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
@@ -145,15 +151,21 @@ fun BoardDetailScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            YhTopBar(
-                title = boardDetailState.board?.name ?: boardName,
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = boardDetailState.board?.name ?: boardName,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -161,7 +173,7 @@ fun BoardDetailScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             val intent = Intent(context, SearchActivity::class.java).apply {
                                 putExtra("token", token)
@@ -174,11 +186,16 @@ fun BoardDetailScreen(
                             contentDescription = "搜索"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         floatingActionButton = {
-            YhFloatingActionButton(
+            FloatingActionButton(
                 onClick = {
                     val intent = Intent(context, CreatePostActivity::class.java).apply {
                         putExtra("board_id", boardId)
@@ -195,13 +212,14 @@ fun BoardDetailScreen(
             }
         }
     ) { paddingValues ->
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = boardDetailState.isLoading || postListState.isLoading,
             onRefresh = {
                 if (token.isNotBlank() && boardId > 0) {
                     viewModel.refresh(token, boardId)
                 }
             },
+            state = rememberPullToRefreshState(),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -209,7 +227,7 @@ fun BoardDetailScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .yhTopBarNestedScroll(),
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -234,9 +252,12 @@ fun BoardDetailScreen(
 
                 postListState.error?.let { error ->
                     item {
-                        YhCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            containerColor = MaterialTheme.colorScheme.errorContainer
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
                         ) {
                             Text(
                                 text = error,
@@ -285,7 +306,7 @@ fun BoardDetailScreen(
                                     .padding(vertical = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -319,7 +340,7 @@ fun BoardDetailScreen(
                                 .padding(32.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                         }
                     }
                 }
@@ -329,7 +350,7 @@ fun BoardDetailScreen(
     
     // 屏蔽用户对话框
     if (showBlockDialog && selectedPost != null) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { 
                 showBlockDialog = false
                 selectedPost = null
@@ -337,7 +358,7 @@ fun BoardDetailScreen(
             title = { Text("屏蔽用户") },
             text = { Text("确定要屏蔽用户 ${selectedPost?.senderNickname} 吗？屏蔽后将不再看到该用户的文章。") },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         selectedPost?.let { post ->
                             viewModel.blockUser(token, post.senderId)
@@ -348,7 +369,7 @@ fun BoardDetailScreen(
                     enabled = !blockState.isLoading
                 ) {
                     if (blockState.isLoading) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -358,7 +379,7 @@ fun BoardDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { 
                         showBlockDialog = false
                         selectedPost = null
@@ -380,12 +401,12 @@ fun BoardDetailScreen(
     
     // 屏蔽错误提示
     blockState.error?.let { error ->
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { viewModel.resetBlockState() },
             title = { Text("错误") },
             text = { Text(error) },
             confirmButton = {
-                YhTextButton(onClick = { viewModel.resetBlockState() }) {
+                TextButton(onClick = { viewModel.resetBlockState() }) {
                     Text("确定")
                 }
             }
@@ -406,9 +427,9 @@ fun BoardInfoCard(
 ) {
     var showImageViewer by remember(board.avatar) { mutableStateOf(false) }
 
-    YhCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -471,13 +492,13 @@ fun BoardInfoCard(
             }
             
             // 关注状态按钮
-            YhButton(
+            Button(
                 onClick = onFollowClick,
                 enabled = !followState.isLoading,
                 modifier = Modifier.height(32.dp)
             ) {
                 if (followState.isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 1.dp
                     )

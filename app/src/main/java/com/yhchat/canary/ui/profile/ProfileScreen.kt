@@ -45,8 +45,30 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -79,24 +101,6 @@ import com.yhchat.canary.data.model.UserProfile
 import com.yhchat.canary.data.repository.NavigationRepository
 import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.data.repository.UserRepository
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownSelector
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.isMiuixUi
 import com.yhchat.canary.ui.base.SystemBarUtils
 import com.yhchat.canary.ui.coin.CoinDetailActivity
 import com.yhchat.canary.ui.coin.CoinRecordActivity
@@ -232,11 +236,15 @@ fun ProfileScreen(
         modifier = modifier.fillMaxSize()
     ) {
         // 顶部应用栏
-        YhTopBar(
-            title = "我的",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "我的",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             actions = {
-                YhIconButton(
+                IconButton(
                     onClick = {
                         SettingsActivity.start(context, navigationRepository, tokenRepository)
                     }
@@ -246,7 +254,11 @@ fun ProfileScreen(
                         contentDescription = "设置"
                     )
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
 
         // 监听滚动状态，自动隐藏/显示导航栏
@@ -254,12 +266,13 @@ fun ProfileScreen(
             observeScrollForNavigation(listState, navigationState)
         }
 
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = uiState.isRefreshing || refreshing,
             onRefresh = {
                 refreshing = true
                 viewModel.refreshProfile()
             },
+            state = rememberPullToRefreshState(),
             modifier = Modifier.weight(1f)
         ) {
             LazyColumn(
@@ -275,7 +288,7 @@ fun ProfileScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            YhCircularProgressIndicator()
+                            CircularProgressIndicator()
                         }
                     }
                 }
@@ -299,7 +312,7 @@ fun ProfileScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(
+                            Button(
                                 onClick = { viewModel.loadUserProfile() }
                             ) {
                                 Text("重试")
@@ -435,7 +448,7 @@ private fun UserProfileContent(
         val profileHeaderCardColor = rememberProfileHeaderCardColor()
 
         // 头像和姓名部分
-        YhSurface(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
@@ -477,7 +490,7 @@ private fun UserProfileContent(
                     }
                     
                     // 修改头像指示器
-                    YhSurface(
+                    Surface(
                         modifier = Modifier
                             .size(24.dp)
                             .align(Alignment.BottomEnd),
@@ -497,7 +510,7 @@ private fun UserProfileContent(
                     
                     // 上传中指示器
                     if (changeAvatarState.isLoading) {
-                        YhSurface(
+                        Surface(
                             modifier = Modifier
                                 .size(80.dp)
                                 .clip(CircleShape),
@@ -506,7 +519,7 @@ private fun UserProfileContent(
                             Box(
                                 contentAlignment = Alignment.Center
                             ) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -527,7 +540,7 @@ private fun UserProfileContent(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    YhIconButton(
+                    IconButton(
                         onClick = onShowChangeNicknameDialog,
                         modifier = Modifier.size(32.dp)
                     ) {
@@ -637,7 +650,7 @@ private fun UserProfileContent(
                     title = "个人信息",
                     subtitle = "完善资料，体现自己个性",
                     trailingContent = {
-                        YhTextButton(onClick = onShowUserDataDialog) {
+                        TextButton(onClick = onShowUserDataDialog) {
                             Text("编辑")
                         }
                     }
@@ -654,7 +667,7 @@ private fun UserProfileContent(
                     title = "手机号",
                     subtitle = if (showFullPhone) userProfile.phone!! else formatPhoneNumber(userProfile.phone!!),
                     trailingContent = {
-                        YhIconButton(onClick = { showFullPhone = !showFullPhone }) {
+                        IconButton(onClick = { showFullPhone = !showFullPhone }) {
                             Icon(
                                 imageVector = if (showFullPhone) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                 contentDescription = if (showFullPhone) "隐藏手机号" else "显示手机号",
@@ -675,7 +688,7 @@ private fun UserProfileContent(
                     title = "邮箱",
                     subtitle = userProfile.email ?: "未绑定",
                     trailingContent = {
-                        YhTextButton(
+                        TextButton(
                             onClick = {
                                 val clazz = if (hasEmail) {
                                     EmailModificationActivity::class.java
@@ -786,16 +799,7 @@ private fun UserProfileContent(
 
 @Composable
 private fun rememberProfileHeaderCardColor(): Color {
-    if (!isMiuixUi) {
-        return MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return if (isDark) {
-        Color(0xFF1E1E20)
-    } else {
-        Color(0xFFF7F7F8)
-    }
+    return MaterialTheme.colorScheme.surfaceContainerHigh
 }
 
 @Composable
@@ -857,10 +861,9 @@ private fun CoinMenuBottomSheet(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    YhBottomSheet(
-        show = true,
-        title = "金币功能",
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState()
     ) {
         val activity = context as? Activity
         val sheetColor = MaterialTheme.colorScheme.surface
@@ -1011,15 +1014,13 @@ private fun UserDataEditBottomSheet(
         }
     }
 
-    YhBottomSheet(
-        show = true,
-        title = "个人信息",
-        fullScreen = true,
+    ModalBottomSheet(
         onDismissRequest = {
             if (!saveUserDataState.isLoading) {
                 onDismiss()
             }
-        }
+        },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         val activity = LocalContext.current as? Activity
         val sheetColor = MaterialTheme.colorScheme.surface
@@ -1050,7 +1051,7 @@ private fun UserDataEditBottomSheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                YhTextButton(
+                TextButton(
                     onClick = {
                         if (!saveUserDataState.isLoading) {
                             onDismiss()
@@ -1063,7 +1064,7 @@ private fun UserDataEditBottomSheet(
             }
 
             if (userDataState.isLoading) {
-                YhLinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
             userDataState.error?.let { error ->
@@ -1074,7 +1075,7 @@ private fun UserDataEditBottomSheet(
                 )
             }
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = introduction,
                 onValueChange = { introduction = it },
                 label = { Text("个人简介") },
@@ -1090,7 +1091,7 @@ private fun UserDataEditBottomSheet(
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    YhRadioButton(
+                    RadioButton(
                         selected = gender == "1",
                         onClick = { if (!saveUserDataState.isLoading) gender = "1" },
                         enabled = !saveUserDataState.isLoading
@@ -1100,7 +1101,7 @@ private fun UserDataEditBottomSheet(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    YhRadioButton(
+                    RadioButton(
                         selected = gender == "2",
                         onClick = { if (!saveUserDataState.isLoading) gender = "2" },
                         enabled = !saveUserDataState.isLoading
@@ -1110,7 +1111,7 @@ private fun UserDataEditBottomSheet(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    YhRadioButton(
+                    RadioButton(
                         selected = gender == "3",
                         onClick = { if (!saveUserDataState.isLoading) gender = "3" },
                         enabled = !saveUserDataState.isLoading
@@ -1152,7 +1153,7 @@ private fun UserDataEditBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                YhDropdownSelector(
+                ProfileDropdownSelector(
                     items = yearOptions.map { it.toString() },
                     selectedIndex = yearOptions.indexOf(selectedYear),
                     onSelectedIndexChange = { index ->
@@ -1163,7 +1164,7 @@ private fun UserDataEditBottomSheet(
                     enabled = !saveUserDataState.isLoading
                 )
 
-                YhDropdownSelector(
+                ProfileDropdownSelector(
                     items = monthOptions.map { it.toString() },
                     selectedIndex = monthOptions.indexOf(selectedMonth),
                     onSelectedIndexChange = { index ->
@@ -1174,7 +1175,7 @@ private fun UserDataEditBottomSheet(
                     enabled = !saveUserDataState.isLoading
                 )
 
-                YhDropdownSelector(
+                ProfileDropdownSelector(
                     items = dayOptions.map { it.toString() },
                     selectedIndex = dayOptions.indexOf(selectedDay),
                     onSelectedIndexChange = { index ->
@@ -1186,7 +1187,7 @@ private fun UserDataEditBottomSheet(
                 )
             }
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = province,
                 onValueChange = { province = it },
                 label = { Text("省") },
@@ -1194,7 +1195,7 @@ private fun UserDataEditBottomSheet(
                 enabled = !saveUserDataState.isLoading
             )
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = city,
                 onValueChange = { city = it },
                 label = { Text("市") },
@@ -1202,7 +1203,7 @@ private fun UserDataEditBottomSheet(
                 enabled = !saveUserDataState.isLoading
             )
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = district,
                 onValueChange = { district = it },
                 label = { Text("区") },
@@ -1210,7 +1211,7 @@ private fun UserDataEditBottomSheet(
                 enabled = !saveUserDataState.isLoading
             )
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = locationCode,
                 onValueChange = { locationCode = it },
                 label = { Text("地区编码") },
@@ -1220,9 +1221,9 @@ private fun UserDataEditBottomSheet(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            YhButton(
+            Button(
                 onClick = {
-                    if (saveUserDataState.isLoading) return@YhButton
+                    if (saveUserDataState.isLoading) return@Button
                     val birthday = if (selectedYear != null && selectedMonth != null && selectedDay != null) {
                         Calendar.getInstance().apply {
                             set(Calendar.YEAR, selectedYear!!)
@@ -1251,7 +1252,7 @@ private fun UserDataEditBottomSheet(
                 enabled = !saveUserDataState.isLoading
             ) {
                 if (saveUserDataState.isLoading) {
-                    YhCircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
                     Text("保存")
                 }
@@ -1281,7 +1282,7 @@ private fun ChangeInviteCodeDialog(
         }
     }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = { if (!changeInviteCodeState.isLoading) onDismiss() },
         title = {
             Text(
@@ -1298,7 +1299,7 @@ private fun ChangeInviteCodeDialog(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = newInviteCode,
                     onValueChange = { newInviteCode = it },
                     label = { Text("邀请码") },
@@ -1330,12 +1331,12 @@ private fun ChangeInviteCodeDialog(
             }
         },
         confirmButton = {
-            YhButton(
+            Button(
                 onClick = { onConfirm(newInviteCode) },
                 enabled = !changeInviteCodeState.isLoading && newInviteCode.isNotBlank() && !changeInviteCodeState.isSuccess
             ) {
                 if (changeInviteCodeState.isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )
@@ -1351,7 +1352,7 @@ private fun ChangeInviteCodeDialog(
             }
         },
         dismissButton = {
-            YhTextButton(
+            TextButton(
                 onClick = onDismiss,
                 enabled = !changeInviteCodeState.isLoading
             ) {
@@ -1382,7 +1383,7 @@ private fun ChangeNicknameDialog(
         }
     }
     
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = { if (!changeNicknameState.isLoading) onDismiss() },
         title = {
             Text(
@@ -1399,7 +1400,7 @@ private fun ChangeNicknameDialog(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = newNickname,
                     onValueChange = { newNickname = it },
                     label = { Text("用户名") },
@@ -1431,12 +1432,12 @@ private fun ChangeNicknameDialog(
             }
         },
         confirmButton = {
-            YhButton(
+            Button(
                 onClick = { onConfirm(newNickname) },
                 enabled = !changeNicknameState.isLoading && newNickname.isNotBlank() && !changeNicknameState.isSuccess
             ) {
                 if (changeNicknameState.isLoading) {
-                    YhCircularProgressIndicator(
+                    CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )
@@ -1452,7 +1453,7 @@ private fun ChangeNicknameDialog(
             }
         },
         dismissButton = {
-            YhTextButton(
+            TextButton(
                 onClick = onDismiss,
                 enabled = !changeNicknameState.isLoading
             ) {
@@ -1471,7 +1472,7 @@ private fun BetaInfoDialog(
     betaInfo: BetaInfo,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(
@@ -1510,7 +1511,7 @@ private fun BetaInfoDialog(
             }
         },
         confirmButton = {
-            YhButton(
+            Button(
                 onClick = onDismiss
             ) {
                 Text("我知道了")
@@ -1551,10 +1552,9 @@ private fun InviteCodeMenuBottomSheet(
 ) {
     val context = LocalContext.current
 
-    YhBottomSheet(
-        show = true,
-        title = "邀请码功能",
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState()
     ) {
         val activity = context as? Activity
         val sheetColor = MaterialTheme.colorScheme.surface
@@ -1626,6 +1626,68 @@ private fun InviteCodeMenuItem(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileDropdownSelector(
+    items: List<String>,
+    selectedIndex: Int,
+    onSelectedIndexChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "",
+    placeholder: String = "",
+    enabled: Boolean = true
+) {
+    val safeSelectedIndex = selectedIndex.takeIf { it in items.indices } ?: -1
+    val selectedValue = if (safeSelectedIndex >= 0) items[safeSelectedIndex] else ""
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { if (enabled && items.isNotEmpty()) expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selectedValue,
+            onValueChange = {},
+            readOnly = true,
+            enabled = enabled,
+            label = if (label.isNotBlank()) {
+                { Text(label) }
+            } else {
+                null
+            },
+            placeholder = if (placeholder.isNotBlank()) {
+                { Text(placeholder) }
+            } else {
+                null
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .menuAnchor(
+                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                    enabled = enabled
+                )
+                .fillMaxWidth()
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            items.forEachIndexed { index, item ->
+                DropdownMenuItem(
+                    text = { Text(item) },
+                    onClick = {
+                        onSelectedIndexChange(index)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 

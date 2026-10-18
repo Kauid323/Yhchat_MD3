@@ -54,6 +54,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:label="错误日志"
+            android:process=":crash"
             android:theme="@style/Theme.YhchatCanary" />
 
         <activity
@@ -206,6 +207,23 @@
             android:exported="false"
             android:label="外部分享"
             android:theme="@style/Theme.YhchatCanary" />
+
+        <!-- 选择会话并发送（文本 / 图片 / 附件 / 文章 / 转发消息） -->
+        <activity
+            android:name=".ui.share.SendToChatActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.YhchatCanary">
+
+            <!-- 接收系统分享：文本 / 图片 / 附件（其他 App 分享过来时出现在系统分享面板里） -->
+            <!-- */* 一个 filter 覆盖全部类型，避免同一个 Activity 在分享面板里出现多次 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".ui.settings.HtmlSettingsActivity"

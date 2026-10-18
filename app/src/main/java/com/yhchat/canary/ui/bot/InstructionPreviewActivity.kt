@@ -28,17 +28,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.data.model.BotInstruction
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class InstructionPreviewActivity : ComponentActivity() {
@@ -79,6 +81,7 @@ class InstructionPreviewActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InstructionPreviewScreen(
     instruction: BotInstruction,
@@ -86,19 +89,22 @@ fun InstructionPreviewScreen(
 ) {
     val customFields = remember { parseCustomFields(instruction.customJson) }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "指令预览 - ${instruction.name}",
-                large = false,
+            TopAppBar(
+                title = { Text("指令预览 - ${instruction.name}", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -111,9 +117,9 @@ fun InstructionPreviewScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 指令基本信息
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 12.dp
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -136,7 +142,7 @@ fun InstructionPreviewScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        YhSurface(
+                        Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
@@ -182,9 +188,9 @@ fun InstructionPreviewScreen(
             
             // 自定义字段预览（仅自定义输入指令）
             if (instruction.instructionType == 5 && customFields.isNotEmpty()) {
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -226,7 +232,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     options.forEach { option ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            YhRadioButton(selected = false, onClick = { })
+                            RadioButton(selected = false, onClick = { })
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(text = option, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -235,7 +241,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
             }
             
             CustomFieldType.INPUT -> {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = field.defaultValue,
                     onValueChange = { },
                     placeholder = if (field.placeholder.isNotBlank()) {
@@ -252,7 +258,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    YhSwitch(
+                    Switch(
                         checked = field.defaultValue == "1",
                         onCheckedChange = { },
                         enabled = false
@@ -270,7 +276,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     options.forEach { option ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            YhCheckbox(checked = false, onCheckedChange = { }, enabled = false)
+                            Checkbox(checked = false, onCheckedChange = { }, enabled = false)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(text = option, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -279,7 +285,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
             }
             
             CustomFieldType.TEXTAREA -> {
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = field.defaultValue,
                     onValueChange = { },
                     placeholder = if (field.placeholder.isNotBlank()) {
@@ -295,7 +301,7 @@ private fun CustomFieldPreview(field: InstructionFormField) {
             CustomFieldType.SELECT -> {
                 val options = field.options.split("#").filter { it.isNotBlank() }
                 
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = options.firstOrNull() ?: "请选择...",
                     onValueChange = { },
                     readOnly = true,

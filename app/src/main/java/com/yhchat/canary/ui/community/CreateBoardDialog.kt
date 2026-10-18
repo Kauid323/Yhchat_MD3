@@ -18,13 +18,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,12 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
 import com.yhchat.canary.utils.ImageUploadUtil
 import kotlinx.coroutines.launch
 
@@ -104,11 +106,11 @@ fun CreateBoardDialog(
     }
     
     Dialog(onDismissRequest = onDismiss) {
-        YhCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(),
-            cornerRadius = 16.dp
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -126,7 +128,7 @@ fun CreateBoardDialog(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    YhIconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "关闭"
@@ -166,10 +168,12 @@ fun CreateBoardDialog(
                                 contentScale = ContentScale.Crop
                             )
                         } else {
-                            YhCard(
+                            Card(
                                 modifier = Modifier.fillMaxSize(),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                cornerRadius = 40.dp
+                                shape = RoundedCornerShape(40.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
@@ -192,7 +196,7 @@ fun CreateBoardDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // 分区名称
-                YhOutlinedTextField(
+                OutlinedTextField(
                     value = boardName,
                     onValueChange = { boardName = it },
                     label = { Text("分区名称") },
@@ -219,7 +223,7 @@ fun CreateBoardDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    YhOutlinedButton(
+                    OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
                         enabled = !isLoading
@@ -227,15 +231,15 @@ fun CreateBoardDialog(
                         Text("取消")
                     }
                     
-                    YhButton(
+                    Button(
                         onClick = {
                             if (boardName.isBlank()) {
                                 errorMessage = "请输入分区名称"
-                                return@YhButton
+                                return@Button
                             }
                             if (avatarUrl.isBlank()) {
                                 errorMessage = "请选择分区头像"
-                                return@YhButton
+                                return@Button
                             }
                             
                             isLoading = true
@@ -265,7 +269,7 @@ fun CreateBoardDialog(
                         enabled = !isLoading && boardName.isNotBlank() && avatarUrl.isNotBlank()
                     ) {
                         if (isLoading) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp
                             )

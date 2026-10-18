@@ -24,8 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,8 +41,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.ChatMessage
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.Dispatchers
@@ -132,7 +132,7 @@ private fun ScreenshotContent(
     messages: List<ChatMessage>
 ) {
     YhchatCanaryTheme {
-        YhSurface(
+        Surface(
             modifier = Modifier
                 .width(imageWidth)
                 .wrapContentHeight()
@@ -151,7 +151,7 @@ private fun ScreenshotContent(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                YhHorizontalDivider(
+                HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
@@ -245,7 +245,7 @@ private fun RealMessageItemForScreenshot(
             }
 
             // 消息气泡
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .wrapContentWidth()
                     .clip(
@@ -330,7 +330,7 @@ private fun SenderNameAndTagsForScreenshot(
             )
 
             if (message.sender.chatType == 3) {
-                YhSurface(
+                Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -344,7 +344,7 @@ private fun SenderNameAndTagsForScreenshot(
             }
 
             tags.forEach { tag ->
-                YhSurface(
+                Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = parseTagColor(tag.color)
                 ) {

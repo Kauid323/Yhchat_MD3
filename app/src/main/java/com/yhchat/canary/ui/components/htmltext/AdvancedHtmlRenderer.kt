@@ -22,8 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +51,47 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
+/**
+ * HTML 的渲染源：[Tree] 表示可以交给高级渲染器正常渲染，
+ * [PlainText] 表示内容过大/过复杂，已降级为纯文本以避免崩溃。
+ */
+private sealed interface HtmlRenderSource {
+    data class Tree(val root: HtmlNode.Element) : HtmlRenderSource
+    data class PlainText(val text: String) : HtmlRenderSource
+}
+
+/**
+ * 准备渲染源。
+ *
+ * 会拦截下面这些危险输入，否则它们会导致 OOM 或递归栈溢出（表现为打开聊天就闪退）：
+ *  - 超长 HTML（粘贴整页网页）；
+ *  - 节点数量过多的 HTML；
+ *  - 嵌套层数过深的 HTML。
+ */
+private fun prepareHtmlRenderSource(html: String): HtmlRenderSource {
+    if (html.length > MAX_HTML_INPUT_LENGTH) {
+        return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
+    }
+    val root = runCatching { parseHtmlTree(html) }.getOrNull()
+        ?: return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
+    if (isHtmlTreeTooComplex(root)) {
+        return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
+    }
+    return HtmlRenderSource.Tree(root)
+}
+
+/**
+ * 构造降级用的纯文本，最多处理一段有限的原始内容，避免对大字符串做正则替换。
+ */
+private fun buildPlainTextFallback(html: String): String {
+    val rawLimit = MAX_HTML_INPUT_LENGTH
+    val raw = truncateAtSafeBoundary(html, rawLimit)
+    val text = runCatching { htmlToPlainText(raw, rawLimit) }.getOrDefault("")
+    val truncated = html.length > rawLimit || text.length > HTML_PLAIN_TEXT_LIMIT
+    val shown = truncateAtSafeBoundary(text, HTML_PLAIN_TEXT_LIMIT)
+    return if (truncated) "$shown\n\n…（内容过长，仅展示开头部分）" else shown
+}
+
 @Composable
 fun AdvancedHtmlRenderer(
     html: String,
@@ -58,17 +99,27 @@ fun AdvancedHtmlRenderer(
     onImageClick: ((String) -> Unit)? = null,
     onLinkClick: ((String) -> Unit)? = null
 ) {
-    val root = remember(html) { parseHtmlTree(html) }
-    val defaultTextColor = MaterialTheme.colorScheme.onSurface
-    Column(modifier = modifier) {
-        root.children.forEach { node ->
-            if (node is HtmlNode.Element && node.tag in NON_CONTENT_TAGS) return@forEach
-            RenderHtmlNode(
-                node = node,
-                inheritedText = CssStyle(fontSize = 14.sp, color = defaultTextColor),
-                onImageClick = onImageClick,
-                onLinkClick = onLinkClick
+    when (val source = remember(html) { prepareHtmlRenderSource(html) }) {
+        is HtmlRenderSource.PlainText -> {
+            Text(
+                text = source.text,
+                modifier = modifier,
+                color = MaterialTheme.colorScheme.onSurface
             )
+        }
+        is HtmlRenderSource.Tree -> {
+            val defaultTextColor = MaterialTheme.colorScheme.onSurface
+            Column(modifier = modifier) {
+                source.root.children.forEach { node ->
+                    if (node is HtmlNode.Element && node.tag in NON_CONTENT_TAGS) return@forEach
+                    RenderHtmlNode(
+                        node = node,
+                        inheritedText = CssStyle(fontSize = 14.sp, color = defaultTextColor),
+                        onImageClick = onImageClick,
+                        onLinkClick = onLinkClick
+                    )
+                }
+            }
         }
     }
 }

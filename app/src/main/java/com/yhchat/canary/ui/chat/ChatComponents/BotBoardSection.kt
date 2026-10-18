@@ -10,9 +10,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +25,6 @@ import com.yhchat.canary.proto.group.Bot_data
 import com.yhchat.canary.ui.chat.BotBoardContent
 import com.yhchat.canary.ui.chat.ChatUiState
 import com.yhchat.canary.ui.components.rememberBooleanPreference
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.chat.GroupBotBoardsSection as GroupBotBoardsSectionImpl
 
 /**
@@ -94,7 +94,7 @@ fun SingleBotBoardSection(
                     }
 
                     llmItem?.let {
-                        YhTextButton(
+                        TextButton(
                             onClick = { onOpenBotLlmParams(it.botId) },
                             modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
                         ) {

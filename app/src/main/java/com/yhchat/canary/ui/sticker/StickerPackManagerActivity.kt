@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.sticker
 
 import android.content.Context
@@ -32,7 +34,23 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -53,20 +72,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.StickerPack
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.SystemBarUtils
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import sh.calvin.reorderable.ReorderableItem
@@ -93,7 +98,7 @@ class StickerPackManagerActivity : ComponentActivity() {
                 val managerViewModel: StickerPackManagerViewModel = viewModel(
                     factory = StickerPackManagerViewModel.factory(repository)
                 )
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -128,13 +133,19 @@ private fun StickerPackManagerScreen(
         viewModel.loadStickerPacks()
     }
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "表情包设置",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "表情包设置",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -143,17 +154,17 @@ private fun StickerPackManagerScreen(
                 },
                 actions = {
                     Box {
-                        YhIconButton(onClick = { menuExpanded = true }) {
+                        IconButton(onClick = { menuExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "更多操作"
                             )
                         }
-                        YhDropdownMenu(
+                        DropdownMenu(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("创建表情包") },
                                 onClick = {
                                     menuExpanded = false
@@ -161,7 +172,7 @@ private fun StickerPackManagerScreen(
                                     showCreateDialog = true
                                 }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("导入表情包") },
                                 onClick = {
                                     menuExpanded = false
@@ -170,7 +181,12 @@ private fun StickerPackManagerScreen(
                             )
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -181,7 +197,7 @@ private fun StickerPackManagerScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    YhCircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
                 uiState.error != null && uiState.stickerPacks.isEmpty() -> {
@@ -194,7 +210,7 @@ private fun StickerPackManagerScreen(
                             text = uiState.error ?: "加载失败",
                             color = MaterialTheme.colorScheme.error
                         )
-                        YhTextButton(onClick = { viewModel.loadStickerPacks() }) {
+                        TextButton(onClick = { viewModel.loadStickerPacks() }) {
                             Text("重试")
                         }
                     }
@@ -219,7 +235,7 @@ private fun StickerPackManagerScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -237,7 +253,7 @@ private fun StickerPackManagerScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 12.dp)
-                                .yhTopBarNestedScroll(),
+                                .nestedScroll(scrollBehavior.nestedScrollConnection),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(
@@ -297,7 +313,7 @@ private fun StickerPackManagerScreen(
     }
 
     if (showCreateDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {
                 if (!isCreating) {
                     showCreateDialog = false
@@ -320,7 +336,7 @@ private fun StickerPackManagerScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = createPackName,
                         onValueChange = { createPackName = it },
                         placeholder = { Text("表情包名称") },
@@ -331,12 +347,12 @@ private fun StickerPackManagerScreen(
                 }
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         val name = createPackName.trim()
                         if (name.isEmpty()) {
                             Toast.makeText(context, "表情包名称不能为空", Toast.LENGTH_SHORT).show()
-                            return@YhTextButton
+                            return@TextButton
                         }
                         isCreating = true
                         viewModel.createStickerPack(
@@ -356,7 +372,7 @@ private fun StickerPackManagerScreen(
                     enabled = !isCreating && createPackName.isNotBlank()
                 ) {
                     if (isCreating) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -366,7 +382,7 @@ private fun StickerPackManagerScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showCreateDialog = false },
                     enabled = !isCreating
                 ) {
@@ -392,11 +408,14 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
 ) {
     val preview = stickerPack.stickerItems.firstOrNull()
 
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(elevation = elevation, shape = RoundedCornerShape(20.dp)),
-        cornerRadius = 20.dp
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Row(
             modifier = Modifier
@@ -471,7 +490,7 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                YhIconButton(
+                IconButton(
                     onClick = onMoveUp,
                     enabled = canMoveUp
                 ) {
@@ -480,7 +499,7 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
                         contentDescription = "上移"
                     )
                 }
-                YhIconButton(
+                IconButton(
                     onClick = onMoveDown,
                     enabled = canMoveDown
                 ) {
@@ -491,7 +510,7 @@ private fun ReorderableCollectionItemScope.StickerPackManagerItem(
                 }
             }
 
-            YhIconButton(onClick = onRemove) {
+            IconButton(onClick = onRemove) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "移除"

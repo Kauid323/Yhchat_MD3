@@ -14,7 +14,7 @@ import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.repository.NavigationRepository
 import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhSurface
+import androidx.compose.material3.Surface
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -63,7 +63,7 @@ class SettingsActivity : BaseActivity() {
         setContent {
             YhchatCanaryTheme {
                 val settingsViewModel: SettingsViewModel = viewModel()
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {

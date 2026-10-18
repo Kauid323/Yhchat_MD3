@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.yhchat.canary.ui.share
 
 import android.content.Context
@@ -32,7 +33,25 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,21 +69,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.local.ShareTargetPreference
 import com.yhchat.canary.data.repository.ExternalShareRepository
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.SystemBarUtils
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
 
@@ -82,7 +89,7 @@ class ExternalShareManagerActivity : ComponentActivity() {
         setContent {
             YhchatCanaryTheme {
                 SystemBarUtils.SetSystemNavigationBarColor(this@ExternalShareManagerActivity)
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -115,14 +122,20 @@ private fun ExternalShareManagerScreen(
     val globalPreference = preferences.firstOrNull { it.isGlobal }
     val chatPreferences = preferences.filter { !it.isGlobal }
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            YhTopBar(
-                title = "外部分享",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "外部分享",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -130,26 +143,29 @@ private fun ExternalShareManagerScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    // 顶栏主操作（新增分享目标）：MD3 Expressive 的填充按钮
+                    TopBarActionButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "新增分享目标",
                         onClick = {
                             editingPreference = null
                             scopeDraft = ShareScopeDraft()
                             showAppPicker = true
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "新增分享目标"
-                        )
-                    }
-                }
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(innerPadding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -259,12 +275,17 @@ private fun PreferenceSection(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            YhTextButton(onClick = onAdd) {
+            TextButton(onClick = onAdd) {
                 Text("添加")
             }
         }
 
-        YhCard(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
             if (preferences.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -293,7 +314,7 @@ private fun PreferenceSection(
                         onDelete = { onDelete(preference) }
                     )
                     if (index != preferences.lastIndex) {
-                        YhHorizontalDivider()
+                        HorizontalDivider()
                     }
                 }
             }
@@ -349,13 +370,13 @@ private fun SharePreferenceRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        YhIconButton(onClick = onEdit) {
+        IconButton(onClick = onEdit) {
             Icon(
                 imageVector = Icons.Default.Edit,
                 contentDescription = "编辑"
             )
         }
-        YhIconButton(onClick = onDelete) {
+        IconButton(onClick = onDelete) {
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = "删除",
@@ -374,10 +395,9 @@ private fun ShareTargetPickerSheet(
     onDismiss: () -> Unit,
     onSelected: (ExternalShareTargetApp) -> Unit
 ) {
-    YhBottomSheet(
-        title = if (editingPreference == null) "添加分享目标" else "编辑分享目标",
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        fullScreen = true
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
             modifier = Modifier
@@ -390,7 +410,7 @@ private fun ShareTargetPickerSheet(
                 onScopeDraftChange = onScopeDraftChange
             )
 
-            YhHorizontalDivider()
+            HorizontalDivider()
 
             if (apps.isEmpty()) {
                 Box(
@@ -446,7 +466,7 @@ private fun ScopeEditor(
                 .clickable(enabled = enabled) { onScopeDraftChange(scopeDraft.copy(isGlobal = true)) },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            YhRadioButton(
+            RadioButton(
                 selected = scopeDraft.isGlobal,
                 onClick = if (enabled) ({ onScopeDraftChange(scopeDraft.copy(isGlobal = true)) }) else null
             )
@@ -460,7 +480,7 @@ private fun ScopeEditor(
                 .clickable(enabled = enabled) { onScopeDraftChange(scopeDraft.copy(isGlobal = false)) },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            YhRadioButton(
+            RadioButton(
                 selected = !scopeDraft.isGlobal,
                 onClick = if (enabled) ({ onScopeDraftChange(scopeDraft.copy(isGlobal = false)) }) else null
             )
@@ -469,7 +489,7 @@ private fun ScopeEditor(
         }
 
         if (!scopeDraft.isGlobal) {
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = scopeDraft.chatId,
                 onValueChange = { onScopeDraftChange(scopeDraft.copy(chatId = it)) },
                 enabled = enabled,
@@ -521,7 +541,7 @@ private fun ShareAppRow(
             )
         }
         if (selected) {
-            YhButton(onClick = onClick) {
+            Button(onClick = onClick) {
                 Text("当前")
             }
         }
@@ -534,7 +554,8 @@ private fun queryShareApps(context: Context): List<ExternalShareTargetApp> {
         putExtra(Intent.EXTRA_TEXT, " ")
     }
     return context.packageManager.queryIntentActivitiesCompat(intent)
-        .filter { it.activityInfo?.packageName != null }
+        // 本应用自己也是 ACTION_SEND 的接收方（发送至），不要出现在「分享到外部应用」列表里
+        .filter { it.activityInfo?.packageName != null && it.activityInfo.packageName != context.packageName }
         .distinctBy { it.activityInfo.packageName }
         .map { info ->
             ExternalShareTargetApp(

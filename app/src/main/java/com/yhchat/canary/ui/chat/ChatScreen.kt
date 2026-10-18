@@ -13,12 +13,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -37,17 +47,10 @@ import com.yhchat.canary.BuildConfig
 import com.yhchat.canary.data.api.ApiClient
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.ChatMessage
-import com.yhchat.canary.data.model.MsgForwardReceive
 import com.yhchat.canary.ui.bot.BotDetailActivity
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFloatingActionButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.chat.ChatComponents.*
-import com.yhchat.canary.ui.community.SendToChatBottomSheet
+import com.yhchat.canary.ui.share.SendToChatActivity
+import com.yhchat.canary.ui.share.SendToChatContent
 import com.yhchat.canary.ui.components.ChatInputBar
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MultiSelectBottomBar
@@ -213,52 +216,12 @@ fun ChatScreen(
     var isMultiSelectMode by remember { mutableStateOf(false) }
     var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    var showForwardSheet by remember { mutableStateOf(false) }
-    var forwardTargetMessage by remember { mutableStateOf<com.yhchat.canary.data.model.ChatMessage?>(null) }
-    
-    // 多选转发状态
-    var showSendToChatBottomSheet by remember { mutableStateOf(false) }
-    var messagesToForward by remember { mutableStateOf<List<com.yhchat.canary.data.model.ChatMessage>>(emptyList()) }
-    
     // 生成图片预览状态
     var showImagePreviewDialog by remember { mutableStateOf(false) }
     var generatedImageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isGeneratingImage by remember { mutableStateOf(false) }
     var editingBotLlmParamsBotId by remember { mutableStateOf<String?>(null) }
 
-    if (showForwardSheet) {
-        val target = forwardTargetMessage
-        if (target != null) {
-            SendToChatBottomSheet(
-                onDismiss = {
-                    showForwardSheet = false
-                    forwardTargetMessage = null
-                },
-                title = "转发至",
-                sendButtonText = { count -> "发送($count)" },
-                onSend = { selected ->
-                    coroutineScope.launch {
-                        val receive = selected.map { contact ->
-                            MsgForwardReceive(chatId = contact.id, chatType = contact.type)
-                        }
-                        viewModel.forwardMessage(
-                            msgId = target.msgId,
-                            sourceChatType = chatType,
-                            receive = receive
-                        ).fold(
-                            onSuccess = {
-                                Toast.makeText(context, "转发成功", Toast.LENGTH_SHORT).show()
-                            },
-                            onFailure = { err ->
-                                Toast.makeText(context, "转发失败: ${err.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
-                }
-            )
-        }
-    }
-    
     // 读取内容设置：是否允许发送空文本消息
     val isSendTextAllowEmptySetting = context.getSharedPreferences("send_text_settings", Context.MODE_PRIVATE).getBoolean("send_text_allow_empty", false)
 
@@ -566,7 +529,7 @@ fun ChatScreen(
             )
         }
     
-    YhSurface(
+    Surface(
             modifier = Modifier.fillMaxSize(),
             color = if (uiState.chatBackgroundUrl != null) {
                 Color.Transparent
@@ -640,12 +603,15 @@ fun ChatScreen(
         
         // 错误信息
         uiState.error?.let { error ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .zIndex(2f)
                     .fillMaxWidth()
                     .padding(8.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Row(
                     modifier = Modifier
@@ -659,7 +625,7 @@ fun ChatScreen(
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.weight(1f)
                     )
-                    YhTextButton(
+                    TextButton(
                         onClick = { viewModel.clearError() }
                     ) {
                         Text("关闭")
@@ -669,9 +635,10 @@ fun ChatScreen(
         }
 
         // 消息列表（占据中间可用空间）
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = { viewModel.refreshLatestMessages() },
+            state = rememberPullToRefreshState(),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -683,7 +650,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             } else {
                 val groupOwnerId = uiState.groupInfo?.ownerId
@@ -738,8 +705,15 @@ fun ChatScreen(
                                 selectedMessageIds = setOf(message.msgId)
                             },
                             onForward = { msg ->
-                                forwardTargetMessage = msg
-                                showForwardSheet = true
+                                // 转发消息：打开「选择会话」Activity（不再是 bottom sheet）
+                                SendToChatActivity.start(
+                                    context = context,
+                                    content = SendToChatContent.ForwardMessage(
+                                        msgIds = listOf(msg.msgId),
+                                        sourceChatType = chatType
+                                    ),
+                                    title = "转发至"
+                                )
                             },
                             onImageClick = { imageUrl ->
                                 val gallery = if (chatImageGallery.isNotEmpty() && chatImageGallery.contains(imageUrl)) {
@@ -1049,7 +1023,7 @@ fun ChatScreen(
                                         .padding(16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator(
+                                    CircularProgressIndicator(
                                         modifier = Modifier.size(24.dp)
                                     )
                                 }
@@ -1088,7 +1062,7 @@ fun ChatScreen(
                     .wrapContentSize(Alignment.BottomEnd)
                     .padding(16.dp)
             ) {
-                YhFloatingActionButton(
+                FloatingActionButton(
                     onClick = {
                         coroutineScope.launch {
                             shouldStickToBottom = true
@@ -1157,11 +1131,17 @@ fun ChatScreen(
                 MultiSelectBottomBar(
                     selectedCount = selectedMessageIds.size,
                     onForward = {
-                        // 批量转发
+                        // 批量转发：打开「选择会话」Activity（不再是 bottom sheet）
                         if (selectedMessageIds.isNotEmpty()) {
                             val selectedMessages = messages.filter { selectedMessageIds.contains(it.msgId) }
-                            showSendToChatBottomSheet = true
-                            messagesToForward = selectedMessages
+                            SendToChatActivity.start(
+                                context = context,
+                                content = SendToChatContent.ForwardMessage(
+                                    msgIds = selectedMessages.map { it.msgId },
+                                    sourceChatType = chatType
+                                ),
+                                title = "转发至"
+                            )
                         }
                     },
                     onGenerateImage = {
@@ -1594,7 +1574,7 @@ fun ChatScreen(
     
     // 生成图片加载中指示器
     if (isGeneratingImage) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {},
             title = { Text("生成中...") },
             text = {
@@ -1602,7 +1582,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             },
             confirmButton = {}

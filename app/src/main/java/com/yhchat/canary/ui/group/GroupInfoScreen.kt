@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.group
 
 import androidx.compose.animation.animateContentSize
@@ -32,7 +34,22 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,19 +74,8 @@ import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.GroupDetail
 import com.yhchat.canary.data.model.GroupMemberInfo
 import com.yhchat.canary.data.repository.CacheRepository
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.components.ImageUtils
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.settings.SettingsCustomItem
 import com.yhchat.canary.ui.settings.SettingsGroup
 import com.yhchat.canary.ui.settings.SettingsItemCell
@@ -80,6 +87,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupInfoScreenRoot(
     groupId: String,
@@ -92,6 +100,7 @@ fun GroupInfoScreenRoot(
     onSearchChatClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -105,14 +114,18 @@ fun GroupInfoScreenRoot(
     }
 
     YhchatCanaryTheme {
-        YhScaffold(
+        Scaffold(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             topBar = {
-                YhTopBar(
-                    title = groupName,
-                    large = true,
+                LargeTopAppBar(
+                    title = {
+                        Text(
+                            text = groupName,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
                     navigationIcon = {
-                        YhIconButton(onClick = onBackClick) {
+                        IconButton(onClick = onBackClick) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回"
@@ -120,13 +133,19 @@ fun GroupInfoScreenRoot(
                         }
                     },
                     actions = {
-                        YhIconButton(onClick = onSettingsClick) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "群聊设置"
-                            )
-                        }
-                    }
+                        // 顶栏主操作（群聊设置）：MD3 Expressive 的填充按钮
+                        TopBarActionButton(
+                            icon = Icons.Default.Settings,
+                            contentDescription = "群聊设置",
+                            onClick = onSettingsClick
+                        )
+                    },
+                    scrollBehavior = scrollBehavior,
+                    // 顶部栏跟页面背景（Scaffold 的 surfaceContainer）保持一致，之前用 background 会比内容区还浅
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 )
             }
         ) { padding ->
@@ -137,7 +156,7 @@ fun GroupInfoScreenRoot(
             ) {
                 when {
                     uiState.isLoading -> {
-                        YhCircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     }
 
                     uiState.error != null -> {
@@ -153,7 +172,7 @@ fun GroupInfoScreenRoot(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(onClick = { viewModel.loadGroupInfo(groupId) }) {
+                            Button(onClick = { viewModel.loadGroupInfo(groupId) }) {
                                 Text("重试")
                             }
                         }
@@ -180,6 +199,7 @@ fun GroupInfoScreenRoot(
                             onInviteClick = { showInviteDialog = true },
                             onExitClick = { showExitGroupDialog = true },
                             onRefresh = { viewModel.loadGroupInfo(groupId) },
+                            scrollBehavior = scrollBehavior,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -282,6 +302,7 @@ private fun GroupInfoContent(
     onInviteClick: () -> Unit = {},
     onExitClick: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState()),
     modifier: Modifier = Modifier
 ) {
     var isNoNotify by remember(groupInfo.doNotDisturb) { mutableStateOf(groupInfo.doNotDisturb) }
@@ -307,7 +328,7 @@ private fun GroupInfoContent(
 
     LazyColumn(
         state = listState,
-        modifier = modifier.yhTopBarNestedScroll(),
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentPadding = PaddingValues(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
@@ -547,7 +568,7 @@ private fun GroupInfoContent(
     }
 
     if (showNicknameDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { if (!isUpdatingNickname) showNicknameDialog = false },
             title = { Text("设置我的群昵称") },
             text = {
@@ -558,7 +579,7 @@ private fun GroupInfoContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = nicknameInput,
                         onValueChange = { nicknameInput = it },
                         label = { Text("群昵称") },
@@ -568,7 +589,7 @@ private fun GroupInfoContent(
                 }
             },
             confirmButton = {
-                YhButton(
+                Button(
                     onClick = {
                         isUpdatingNickname = true
                         scope.launch(Dispatchers.IO) {
@@ -600,7 +621,7 @@ private fun GroupInfoContent(
                     enabled = !isUpdatingNickname
                 ) {
                     if (isUpdatingNickname) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
@@ -610,7 +631,7 @@ private fun GroupInfoContent(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { showNicknameDialog = false },
                     enabled = !isUpdatingNickname
                 ) {
@@ -683,7 +704,7 @@ private fun GroupHeaderSettingsItem(
                 )
             }
 
-            YhIconButton(onClick = onShareClick) {
+            IconButton(onClick = onShareClick) {
                 Icon(
                     imageVector = Icons.Default.Share,
                     contentDescription = "分享群聊",
@@ -732,12 +753,12 @@ private fun GroupSwitchSettingsItem(
             }
             Spacer(modifier = Modifier.width(8.dp))
             if (showLoading) {
-                YhCircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
             } else {
-                YhSwitch(
+                Switch(
                     checked = checked,
                     onCheckedChange = if (enabled) onCheckedChange else null,
                     enabled = enabled
@@ -753,7 +774,7 @@ fun ExitGroupDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -766,12 +787,12 @@ fun ExitGroupDialog(
             Text("确定要退出群聊「$groupName」吗？")
         },
         confirmButton = {
-            YhButton(onClick = onConfirm) {
+            Button(onClick = onConfirm) {
                 Text("退出")
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

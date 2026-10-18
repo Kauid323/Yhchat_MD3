@@ -15,8 +15,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,11 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.LiveRoomItem
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import com.yhchat.canary.ui.base.SystemBarUtils
 import com.yhchat.canary.ui.components.ImageUtils
 import java.text.SimpleDateFormat
@@ -40,6 +43,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveRoomsBottomSheet(
     rooms: List<LiveRoomItem>,
@@ -52,10 +56,9 @@ fun LiveRoomsBottomSheet(
 ) {
     val context = LocalContext.current
 
-    YhBottomSheet(
-        show = true,
-        title = null,
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState()
     ) {
         val activity = context as? Activity
         val sheetColor = MaterialTheme.colorScheme.surface
@@ -92,9 +95,12 @@ fun LiveRoomsBottomSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (error != null) {
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Row(
                         modifier = Modifier
@@ -108,7 +114,7 @@ fun LiveRoomsBottomSheet(
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.weight(1f)
                         )
-                        YhTextButton(onClick = onRetry) {
+                        TextButton(onClick = onRetry) {
                             Text("重试")
                         }
                     }
@@ -123,7 +129,7 @@ fun LiveRoomsBottomSheet(
                         .padding(vertical = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             } else if (rooms.isEmpty()) {
                 Box(
@@ -142,12 +148,14 @@ fun LiveRoomsBottomSheet(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     items(items = rooms, key = { room -> "${room.roomId}:${room.chatId}" }) { room ->
-                        YhCard(
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 10.dp),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            cornerRadius = 20.dp
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
                         ) {
                             Row(
                                 modifier = Modifier
@@ -186,12 +194,12 @@ fun LiveRoomsBottomSheet(
 
                                 Spacer(modifier = Modifier.size(12.dp))
 
-                                YhButton(
+                                Button(
                                     onClick = { onJoin(room) },
                                     enabled = joiningRoomId == null || joiningRoomId == room.roomId
                                 ) {
                                     if (joiningRoomId == room.roomId) {
-                                        YhCircularProgressIndicator(
+                                        CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp
                                         )

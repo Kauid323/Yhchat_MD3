@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.coin
 
 import android.os.Bundle
@@ -18,9 +20,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,23 +46,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.GoldCoinRecord
 import com.yhchat.canary.data.model.RewardRecord
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTabRow
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
@@ -92,20 +100,30 @@ fun CoinRecordScreen(
     }
     
     val uiState by viewModel.uiState.collectAsState()
-    
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "金币明细",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "金币明细",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -113,19 +131,25 @@ fun CoinRecordScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
         ) {
             // Tab导航栏
-            YhTabRow(
-                tabs = listOf("金币增减", "文章打赏", "评论打赏"),
+            SecondaryTabRow(
                 selectedTabIndex = pagerState.currentPage,
-                onTabSelected = { index ->
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(index)
-                    }
-                },
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                listOf("金币增减", "文章打赏", "评论打赏").forEachIndexed { index, title ->
+                    Tab(
+                        selected = index == pagerState.currentPage,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        text = { Text(title) }
+                    )
+                }
+            }
 
             // 内容区域
             HorizontalPager(
@@ -134,9 +158,10 @@ fun CoinRecordScreen(
             ) { page ->
                 val isRefreshing = uiState.loadingPage == page && uiState.isLoading
 
-                YhPullToRefresh(
+                PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = { viewModel.loadForPage(page, force = true) },
+                    state = rememberPullToRefreshState(),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     when {
@@ -145,7 +170,7 @@ fun CoinRecordScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                YhCircularProgressIndicator()
+                                CircularProgressIndicator()
                             }
                         }
 
@@ -162,7 +187,7 @@ fun CoinRecordScreen(
                                         text = uiState.error ?: "加载失败",
                                         color = MaterialTheme.colorScheme.error
                                     )
-                                    YhTextButton(
+                                    TextButton(
                                         onClick = {
                                             viewModel.loadForPage(page, force = true)
                                         }
@@ -223,8 +248,9 @@ private fun CoinRecordCard(record: GoldCoinRecord) {
     val date = Date(record.createTime * 1000)
     val isIncrease = record.changeAmount > 0
     
-    YhCard(
-        modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -338,8 +364,9 @@ private fun RewardRecordCard(reward: RewardRecord) {
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     val date = Date(reward.createTime * 1000)
     
-    YhCard(
-        modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier

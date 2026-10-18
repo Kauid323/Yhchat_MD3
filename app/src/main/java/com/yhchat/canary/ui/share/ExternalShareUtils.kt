@@ -84,6 +84,8 @@ object ExternalShareUtils {
             putExtra(Intent.EXTRA_TEXT, " ")
         }
         return context.packageManager.queryIntentActivitiesCompat(intent)
+            // 本应用自己也是 ACTION_SEND 的接收方（发送至），不要出现在「分享到外部应用」列表里
+            .filter { it.activityInfo.packageName != context.packageName }
             .distinctBy { it.activityInfo.packageName }
             .map { info ->
                 ExternalShareTargetApp(

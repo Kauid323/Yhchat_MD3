@@ -2,9 +2,7 @@ package com.yhchat.canary.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -17,15 +15,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
-import com.yhchat.canary.BuildConfig
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.components.rememberFloatPreference
 import com.yhchat.canary.ui.components.rememberIntPreference
 import com.yhchat.canary.ui.components.rememberStringPreference
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 private val DarkColorScheme = darkColorScheme(
     primary = ChatPrimaryDark,
@@ -69,100 +62,6 @@ private val LightColorScheme = lightColorScheme(
 
 val LocalGlobalScale = staticCompositionLocalOf { 1.0f }
 
-private val MiuixCompatibilityShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp)
-)
-
-@Composable
-private fun miuixMaterialColorScheme(
-    darkTheme: Boolean
-): androidx.compose.material3.ColorScheme {
-    val colors = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-    return if (darkTheme) {
-        darkColorScheme(
-            primary = colors.primary,
-            onPrimary = colors.onPrimary,
-            secondary = colors.secondary,
-            onSecondary = colors.onSecondary,
-            tertiary = colors.tertiaryContainer,
-            onTertiary = colors.onTertiaryContainer,
-            background = colors.background,
-            onBackground = colors.onBackground,
-            surface = colors.surface,
-            onSurface = colors.onSurface,
-            error = colors.error,
-            onError = colors.onError,
-            primaryContainer = colors.primaryContainer,
-            onPrimaryContainer = colors.onPrimaryContainer,
-            secondaryContainer = colors.secondaryContainer,
-            onSecondaryContainer = colors.onSecondaryContainer,
-            tertiaryContainer = colors.tertiaryContainer,
-            onTertiaryContainer = colors.onTertiaryContainer,
-            errorContainer = colors.errorContainer,
-            onErrorContainer = colors.onErrorContainer,
-            surfaceVariant = colors.surfaceContainer,
-            onSurfaceVariant = colors.onSurfaceContainerVariant,
-            outline = colors.outline,
-            outlineVariant = colors.dividerLine,
-            scrim = colors.windowDimming
-        )
-    } else {
-        lightColorScheme(
-            primary = colors.primary,
-            onPrimary = colors.onPrimary,
-            secondary = colors.secondary,
-            onSecondary = colors.onSecondary,
-            tertiary = colors.tertiaryContainer,
-            onTertiary = colors.onTertiaryContainer,
-            background = colors.background,
-            onBackground = colors.onBackground,
-            surface = colors.surface,
-            onSurface = colors.onSurface,
-            error = colors.error,
-            onError = colors.onError,
-            primaryContainer = colors.primaryContainer,
-            onPrimaryContainer = colors.onPrimaryContainer,
-            secondaryContainer = colors.secondaryContainer,
-            onSecondaryContainer = colors.onSecondaryContainer,
-            tertiaryContainer = colors.tertiaryContainer,
-            onTertiaryContainer = colors.onTertiaryContainer,
-            errorContainer = colors.errorContainer,
-            onErrorContainer = colors.onErrorContainer,
-            surfaceVariant = colors.surfaceContainer,
-            onSurfaceVariant = colors.onSurfaceContainerVariant,
-            outline = colors.outline,
-            outlineVariant = colors.dividerLine,
-            scrim = colors.windowDimming
-        )
-    }
-}
-
-@Composable
-private fun miuixMaterialTypography(): androidx.compose.material3.Typography {
-    val textStyles = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles
-    return androidx.compose.material3.Typography(
-        displayLarge = textStyles.title1,
-        displayMedium = textStyles.title2,
-        displaySmall = textStyles.title3,
-        headlineLarge = textStyles.title2,
-        headlineMedium = textStyles.title3,
-        headlineSmall = textStyles.title4,
-        titleLarge = textStyles.title3,
-        titleMedium = textStyles.headline1,
-        titleSmall = textStyles.headline2,
-        bodyLarge = textStyles.main,
-        bodyMedium = textStyles.body1,
-        bodySmall = textStyles.body2,
-        labelLarge = textStyles.button,
-        labelMedium = textStyles.footnote1,
-        labelSmall = textStyles.footnote2
-    )
-}
-
 @Composable
 fun YhchatCanaryTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -178,8 +77,7 @@ fun YhchatCanaryTheme(
     val customColorInt by rememberIntPreference("theme_settings", "custom_primary_color", -1)
     val monetEnabled by rememberBooleanPreference("display_settings", "enable_monet_colors", true)
     val fontScalePreference = fontScalePercent / 100f
-    val isMiuixStyle = BuildConfig.UI_STYLE == "miuix"
-    
+
     // 读取自定义主题颜色设置
     val useCustomColor = customColorInt != -1 && customColorInt != 0xFF6200EE.toInt()
     val customPrimaryColor = if (useCustomColor) Color(customColorInt) else null
@@ -201,50 +99,29 @@ fun YhchatCanaryTheme(
         LocalGlobalScale provides globalScale,
         LocalDensity provides scaledDensity
     ) {
-        if (isMiuixStyle) {
-            val miuixMode = when (themeMode) {
-                "light" -> ColorSchemeMode.Light
-                "dark" -> ColorSchemeMode.Dark
-                else -> ColorSchemeMode.System
+        val standardColorScheme = when {
+            monetEnabled && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (effectiveDarkTheme) {
+                    dynamicDarkColorScheme(context)
+                } else {
+                    dynamicLightColorScheme(context)
+                }
             }
-            val controller = ThemeController(
-                colorSchemeMode = miuixMode
-            )
-            MiuixTheme(
-                controller = controller
-            ) {
-                MaterialTheme(
-                    colorScheme = miuixMaterialColorScheme(darkTheme = effectiveDarkTheme),
-                    typography = miuixMaterialTypography(),
-                    shapes = MiuixCompatibilityShapes,
-                    content = content
+            customPrimaryColor != null -> {
+                val base = if (effectiveDarkTheme) DarkColorScheme else LightColorScheme
+                base.copy(
+                    primary = customPrimaryColor,
+                    primaryContainer = customPrimaryColor.copy(alpha = 0.3f),
+                    onPrimaryContainer = if (effectiveDarkTheme) customPrimaryColor.copy(alpha = 0.9f) else customPrimaryColor
                 )
             }
-        } else {
-            val standardColorScheme = when {
-                monetEnabled && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                    if (effectiveDarkTheme) {
-                        dynamicDarkColorScheme(context)
-                    } else {
-                        dynamicLightColorScheme(context)
-                    }
-                }
-                customPrimaryColor != null -> {
-                    val base = if (effectiveDarkTheme) DarkColorScheme else LightColorScheme
-                    base.copy(
-                        primary = customPrimaryColor,
-                        primaryContainer = customPrimaryColor.copy(alpha = 0.3f),
-                        onPrimaryContainer = if (effectiveDarkTheme) customPrimaryColor.copy(alpha = 0.9f) else customPrimaryColor
-                    )
-                }
-                effectiveDarkTheme -> DarkColorScheme
-                else -> LightColorScheme
-            }
-            MaterialTheme(
-                colorScheme = standardColorScheme,
-                typography = Typography,
-                content = content
-            )
+            effectiveDarkTheme -> DarkColorScheme
+            else -> LightColorScheme
         }
+        MaterialTheme(
+            colorScheme = standardColorScheme,
+            typography = Typography,
+            content = content
+        )
     }
 }

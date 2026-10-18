@@ -13,9 +13,14 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,11 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.di.RepositoryFactory
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhTopAppBar
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
@@ -98,14 +98,14 @@ fun MyPostsScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            YhTopAppBar(
+            TopAppBar(
                 title = {
                     if (isSearching) {
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
                             placeholder = { Text("搜索我的文章...") },
@@ -121,7 +121,7 @@ fun MyPostsScreen(
                     }
                 },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -130,7 +130,7 @@ fun MyPostsScreen(
                 },
                 actions = {
                     if (isSearching) {
-                        YhIconButton(
+                        IconButton(
                             onClick = {
                                 isSearching = false
                                 searchQuery = ""
@@ -142,7 +142,7 @@ fun MyPostsScreen(
                             )
                         }
                     } else {
-                        YhIconButton(onClick = { isSearching = true }) {
+                        IconButton(onClick = { isSearching = true }) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "搜索我的文章"
@@ -150,7 +150,7 @@ fun MyPostsScreen(
                         }
                     }
 
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             val intent = android.content.Intent(context, BlockedUsersActivity::class.java).apply {
                                 putExtra("token", token)
@@ -169,7 +169,7 @@ fun MyPostsScreen(
     ) { paddingValues ->
         
         // 内容区域
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = myPostListState.isRefreshing,
             onRefresh = { viewModel.refreshMyPostList(token) },
             modifier = Modifier

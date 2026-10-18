@@ -42,15 +42,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.BotInstruction
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class InstructionManagementActivity : ComponentActivity() {
@@ -114,13 +115,12 @@ fun InstructionManagementScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "$botName - 指令管理",
-                large = false,
+            TopAppBar(
+                title = { Text("$botName - 指令管理", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -128,7 +128,7 @@ fun InstructionManagementScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         InstructionEditActivity.start(context, botId, botName, null)
                     }) {
                         Icon(
@@ -136,7 +136,11 @@ fun InstructionManagementScreen(
                             contentDescription = "添加指令"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -151,7 +155,7 @@ fun InstructionManagementScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -169,7 +173,7 @@ fun InstructionManagementScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(onClick = { viewModel.loadInstructions(botId) }) {
+                            Button(onClick = { viewModel.loadInstructions(botId) }) {
                                 Text("重试")
                             }
                         }
@@ -190,7 +194,7 @@ fun InstructionManagementScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            YhButton(onClick = {
+                            Button(onClick = {
                                 InstructionEditActivity.start(context, botId, botName, null)
                             }) {
                                 Icon(Icons.Default.Add, contentDescription = null)
@@ -235,9 +239,9 @@ fun InstructionListItem(
     onPreview: () -> Unit,
     onDelete: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
@@ -255,7 +259,7 @@ fun InstructionListItem(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    YhSurface(
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
                     ) {
@@ -322,7 +326,7 @@ fun InstructionListItem(
             Spacer(modifier = Modifier.width(8.dp))
             
             // 预览按钮
-            YhIconButton(onClick = onPreview) {
+            IconButton(onClick = onPreview) {
                 Icon(
                     imageVector = Icons.Default.Visibility,
                     contentDescription = "预览",
@@ -331,7 +335,7 @@ fun InstructionListItem(
             }
             
             // 编辑按钮
-            YhIconButton(onClick = onEdit) {
+            IconButton(onClick = onEdit) {
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = "编辑",
@@ -340,7 +344,7 @@ fun InstructionListItem(
             }
             
             // 删除按钮
-            YhIconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "删除",

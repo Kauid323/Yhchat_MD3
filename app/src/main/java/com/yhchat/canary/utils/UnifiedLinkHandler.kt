@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import com.yhchat.canary.data.model.ChatAddInfo
 import com.yhchat.canary.data.model.ChatAddType
-import com.yhchat.canary.ui.adaptive.YhText
+import androidx.compose.material3.Text
 import com.yhchat.canary.ui.chat.ChatAddActivity
 import com.yhchat.canary.ui.community.BoardDetailActivity
 import com.yhchat.canary.ui.community.PostDetailActivity
@@ -778,6 +778,6 @@ fun ClickableLinkText(
         )
     } else {
         // 普通文本
-        YhText(text = text)
+        Text(text = text)
     }
 }

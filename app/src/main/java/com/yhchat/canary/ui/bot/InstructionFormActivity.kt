@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,14 +18,29 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,16 +58,6 @@ import com.yhchat.canary.data.model.Instruction
 import com.yhchat.canary.data.repository.SendMessagePayload
 import com.yhchat.canary.crash.CrashHandler
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhDropdownSelector
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -164,18 +170,17 @@ fun InstructionFormScreen(
     
     var isSending by remember { mutableStateOf(false) }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "/${instruction.name}",
-                large = false,
+            TopAppBar(
+                title = { Text("/${instruction.name}", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (!isSending) {
                                 scope.launch {
@@ -200,7 +205,7 @@ fun InstructionFormScreen(
                         enabled = !isSending
                     ) {
                         if (isSending) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp
                             )
@@ -208,7 +213,11 @@ fun InstructionFormScreen(
                             Icon(Icons.AutoMirrored.Filled.Send, "发送")
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -224,8 +233,11 @@ fun InstructionFormScreen(
         ) {
             // 表单说明
             if (instruction.hintText.isNotEmpty()) {
-                YhCard(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                    )
                 ) {
                     Text(
                         text = instruction.hintText,
@@ -260,8 +272,9 @@ fun FormFieldComponent(
     value: FormFieldValue?,
     onValueChange: (FormFieldValue) -> Unit
 ) {
-    YhCard(
-        modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -287,7 +300,7 @@ fun FormFieldComponent(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
-                                YhRadioButton(
+                                RadioButton(
                                     selected = selectedIndex == index,
                                     onClick = {
                                         onValueChange(
@@ -312,21 +325,21 @@ fun FormFieldComponent(
                 
                 "input" -> {
                     // 输入框
-                    YhOutlinedTextField(
-                        value = value?.value ?: "",
-                        onValueChange = { newValue ->
-                            onValueChange(
-                                FormFieldValue(
-                                    id = field.id,
-                                    type = field.type,
-                                    label = field.label,
-                                    value = newValue
+                        OutlinedTextField(
+                            value = value?.value ?: "",
+                            onValueChange = { newValue ->
+                                onValueChange(
+                                    FormFieldValue(
+                                        id = field.id,
+                                        type = field.type,
+                                        label = field.label,
+                                        value = newValue
+                                    )
                                 )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(field.propsValue["placeholder"] as? String ?: "") }
-                    )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(field.propsValue["placeholder"] as? String ?: "") }
+                        )
                 }
                 
                 "switch" -> {
@@ -338,7 +351,7 @@ fun FormFieldComponent(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         Text("开启")
-                        YhSwitch(
+                        Switch(
                             checked = isChecked,
                             onCheckedChange = { checked ->
                                 onValueChange(
@@ -356,7 +369,7 @@ fun FormFieldComponent(
                 
                 "textarea" -> {
                     // 多行输入框
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = value?.value ?: "",
                         onValueChange = { newValue ->
                             onValueChange(
@@ -380,25 +393,43 @@ fun FormFieldComponent(
                     // 下拉选择器
                     val options = (field.propsValue["options"] as? String ?: "").split("#").filter { it.isNotEmpty() }
                     val selectedIndex = value?.selectIndex ?: 0
-                    YhDropdownSelector(
-                        items = options,
-                        selectedIndex = selectedIndex,
-                        onSelectedIndexChange = { index ->
-                            options.getOrNull(index)?.let { option ->
-                                onValueChange(
-                                    FormFieldValue(
-                                        id = field.id,
-                                        type = field.type,
-                                        label = field.label,
-                                        selectIndex = index,
-                                        selectValue = option
-                                    )
+                    var dropdownExpanded by remember { mutableStateOf(false) }
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = options.getOrNull(selectedIndex) ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(field.propsValue["placeholder"] as? String ?: "") },
+                            trailingIcon = {
+                                IconButton(onClick = { dropdownExpanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                            }
+                        )
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            options.forEachIndexed { index, option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        onValueChange(
+                                            FormFieldValue(
+                                                id = field.id,
+                                                type = field.type,
+                                                label = field.label,
+                                                selectIndex = index,
+                                                selectValue = option
+                                            )
+                                        )
+                                        dropdownExpanded = false
+                                    }
                                 )
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = field.propsValue["placeholder"] as? String ?: ""
-                    )
+                        }
+                    }
                 }
                 
                 "checkbox" -> {
@@ -412,7 +443,7 @@ fun FormFieldComponent(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
-                                YhCheckbox(
+                                Checkbox(
                                     checked = selectedValues.contains(option),
                                     onCheckedChange = { checked ->
                                         val newSet = if (checked) {

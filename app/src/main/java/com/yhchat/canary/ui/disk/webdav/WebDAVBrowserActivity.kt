@@ -44,7 +44,22 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,23 +70,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.data.model.WebDAVFile
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhFilterChip
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.utils.WebDAVDownloadManager
@@ -120,7 +124,7 @@ class WebDAVBrowserActivity : BaseActivity() {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun WebDAVBrowserScreen(
     groupId: String,
@@ -129,6 +133,7 @@ fun WebDAVBrowserScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
@@ -158,13 +163,17 @@ fun WebDAVBrowserScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "$groupName 的 WebDAV",
-                large = false,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "$groupName 的 WebDAV",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -172,16 +181,21 @@ fun WebDAVBrowserScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(onClick = { WebDAVDownloadListActivity.start(context) }) {
+                    IconButton(onClick = { WebDAVDownloadListActivity.start(context) }) {
                         Icon(imageVector = Icons.Default.Download, contentDescription = "下载列表")
                     }
-                    YhIconButton(onClick = {
+                    IconButton(onClick = {
                         val intent = WebDAVSettingsActivity.intent(context, groupId, groupName)
                         settingsLauncher.launch(intent)
                     }) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "WebDAV 设置")
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -189,7 +203,7 @@ fun WebDAVBrowserScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .yhTopBarNestedScroll()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
         ) {
             when {
                 // 初始加载挂载点列表时显示加载中
@@ -198,7 +212,7 @@ fun WebDAVBrowserScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -216,7 +230,7 @@ fun WebDAVBrowserScreen(
                                 text = uiState.error ?: "加载失败",
                                 color = MaterialTheme.colorScheme.error
                             )
-                            YhButton(onClick = { viewModel.loadMountSettings(groupId) }) {
+                            Button(onClick = { viewModel.loadMountSettings(groupId) }) {
                                 Text("重试")
                             }
                         }
@@ -272,12 +286,14 @@ fun WebDAVBrowserScreen(
                     }
                     
                     // 分类标签栏
-                    YhCard(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                        cornerRadius = 16.dp
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        )
                     ) {
                         LazyRow(
                             modifier = Modifier
@@ -287,7 +303,7 @@ fun WebDAVBrowserScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             itemsIndexed(uiState.mountSettings) { index, mountSetting ->
-                                YhFilterChip(
+                                FilterChip(
                                     selected = uiState.selectedMountIndex == index,
                                     onClick = {
                                         viewModel.selectMount(index)
@@ -332,7 +348,7 @@ fun WebDAVBrowserScreen(
     
     // 下载确认对话框
     if (showDownloadDialog && fileToDownload != null) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {
                 showDownloadDialog = false
                 fileToDownload = null
@@ -355,7 +371,7 @@ fun WebDAVBrowserScreen(
                 }
             },
             confirmButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         fileToDownload?.let { file ->
                             WebDAVDownloadManager.startDownload(context, file)
@@ -369,7 +385,7 @@ fun WebDAVBrowserScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         showDownloadDialog = false
                         fileToDownload = null
@@ -400,7 +416,7 @@ private fun WebDAVFileListPage(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         }
         
@@ -417,7 +433,7 @@ private fun WebDAVFileListPage(
                         text = mountState.error ?: "加载失败",
                         color = MaterialTheme.colorScheme.error
                     )
-                    YhButton(onClick = { 
+                    Button(onClick = { 
                         val selectedMount = uiState.mountSettings.getOrNull(pageIndex)
                         if (selectedMount != null) {
                             viewModel.loadFiles(selectedMount, mountState.currentPath)
@@ -514,14 +530,14 @@ private fun WebDAVFileCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        cornerRadius = 8.dp
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
             modifier = Modifier

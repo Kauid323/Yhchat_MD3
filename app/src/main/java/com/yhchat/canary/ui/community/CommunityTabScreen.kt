@@ -38,8 +38,34 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,25 +91,8 @@ import coil.request.ImageRequest
 import com.yhchat.canary.data.model.CommunityBoard
 import com.yhchat.canary.data.model.CommunityPost
 import com.yhchat.canary.ui.community.CommunityPostCard
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhModalNavigationDrawer
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTabRow
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.components.ScrollAwareNavigationState
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.components.observeScrollForNavigation
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.settings.SettingsCustomItem
@@ -111,7 +120,7 @@ fun CommunityTabScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    var drawerOpen by rememberSaveable { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     // 获取布局设置
     val showHotTab by rememberBooleanPreference("layout_settings", "community_show_hot", true)
@@ -157,11 +166,11 @@ fun CommunityTabScreen(
     }
 
     fun openDrawer() {
-        drawerOpen = true
+        coroutineScope.launch { drawerState.open() }
     }
 
     fun closeDrawer() {
-        drawerOpen = false
+        coroutineScope.launch { drawerState.close() }
     }
 
     @Composable
@@ -169,17 +178,25 @@ fun CommunityTabScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            YhTabRow(
-                tabs = tabTitles,
+            SecondaryTabRow(
                 selectedTabIndex = selectedTab,
-                onTabSelected = { index ->
-                    selectedTab = index
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(index)
-                    }
-                },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                // 用透明背景，跟侧边栏（ModalDrawerSheet）的背景保持一致，避免出现一条颜色不同的横条
+                containerColor = Color.Transparent
+            ) {
+                tabTitles.forEachIndexed { index, title ->
+                    Tab(
+                        selected = index == selectedTab,
+                        onClick = {
+                            selectedTab = index
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        text = { Text(title) }
+                    )
+                }
+            }
 
             LaunchedEffect(token) {
                 if (token.isNotEmpty()) {
@@ -197,9 +214,10 @@ fun CommunityTabScreen(
                 val currentTabTitle = tabTitles.getOrNull(page) ?: ""
                 when (currentTabTitle) {
                     "热门" -> {
-                        YhPullToRefresh(
+                        PullToRefreshBox(
                             isRefreshing = boardListState.isRefreshing,
-                            onRefresh = { viewModel.refreshBoardList(token) }
+                            onRefresh = { viewModel.refreshBoardList(token) },
+                            state = rememberPullToRefreshState()
                         ) {
                             BoardListContent(
                                 boards = boardListState.boards,
@@ -221,9 +239,10 @@ fun CommunityTabScreen(
                         }
                     }
                     "全部" -> {
-                        YhPullToRefresh(
+                        PullToRefreshBox(
                             isRefreshing = allBoardListState.isRefreshing,
-                            onRefresh = { viewModel.refreshAllBoardList(token) }
+                            onRefresh = { viewModel.refreshAllBoardList(token) },
+                            state = rememberPullToRefreshState()
                         ) {
                             BoardListContent(
                                 boards = allBoardListState.boards,
@@ -245,9 +264,10 @@ fun CommunityTabScreen(
                         }
                     }
                     "关注" -> {
-                        YhPullToRefresh(
+                        PullToRefreshBox(
                             isRefreshing = followingBoardListState.isRefreshing,
-                            onRefresh = { viewModel.refreshFollowingBoardList(token) }
+                            onRefresh = { viewModel.refreshFollowingBoardList(token) },
+                            state = rememberPullToRefreshState()
                         ) {
                             BoardListContent(
                                 boards = followingBoardListState.boards,
@@ -284,22 +304,29 @@ fun CommunityTabScreen(
         }
     }
 
-    YhModalNavigationDrawer(
-        drawerOpen = drawerOpen,
-        onDismissRequest = { drawerOpen = false },
+    ModalNavigationDrawer(
+        drawerState = drawerState,
         drawerContent = {
-            DrawerBody()
+            // 必须包一层 ModalDrawerSheet：它负责侧边栏的宽度（240~360dp）、圆角、背景色和状态栏内边距。
+            // 直接放 Column 会被按整屏宽度测量，导致侧边栏全屏并且没有背景。
+            ModalDrawerSheet {
+                DrawerBody()
+            }
         },
         gesturesEnabled = true
     ) {
-        YhScaffold(
+        Scaffold(
             modifier = modifier.fillMaxSize(),
             topBar = {
-                YhTopBar(
-                    title = "社区",
-                    large = false,
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "社区",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
                     navigationIcon = {
-                        YhIconButton(onClick = { openDrawer() }) {
+                        IconButton(onClick = { openDrawer() }) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
                                 contentDescription = "打开侧边栏"
@@ -312,18 +339,22 @@ fun CommunityTabScreen(
                             onSelectedChange = { selectedFeed = it }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        YhIconButton(onClick = {
-                            val intent = Intent(context, SearchActivity::class.java).apply {
-                                putExtra("token", token)
+                        // 顶栏主操作（搜索）：MD3 Expressive 的填充按钮
+                        TopBarActionButton(
+                            icon = Icons.Default.Search,
+                            contentDescription = "全局搜索",
+                            onClick = {
+                                val intent = Intent(context, SearchActivity::class.java).apply {
+                                    putExtra("token", token)
+                                }
+                                context.startActivity(intent)
                             }
-                            context.startActivity(intent)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "全局搜索"
-                            )
-                        }
-                    }
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background
+                    )
                 )
             }
         ) { paddingValues ->
@@ -384,7 +415,7 @@ private fun FeedToggleChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhSurface(
+    Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(999.dp),
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
@@ -444,9 +475,10 @@ private fun CommunityFeedScreen(
                 }
             }
         }
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = latestState.isRefreshing,
             onRefresh = { onRefreshLatest() },
+            state = rememberPullToRefreshState(),
             modifier = modifier
         ) {
             when {
@@ -467,7 +499,7 @@ private fun CommunityFeedScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
 
@@ -493,7 +525,7 @@ private fun CommunityFeedScreen(
                                         .padding(vertical = 12.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator(
+                                    CircularProgressIndicator(
                                         modifier = Modifier.size(24.dp),
                                         strokeWidth = 2.dp
                                     )
@@ -533,9 +565,10 @@ private fun CommunityFeedScreen(
                 }
             }
         }
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = hotState.isRefreshing,
             onRefresh = { onRefreshHot() },
+            state = rememberPullToRefreshState(),
             modifier = modifier
         ) {
             when {
@@ -556,7 +589,7 @@ private fun CommunityFeedScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
 
@@ -582,7 +615,7 @@ private fun CommunityFeedScreen(
                                         .padding(vertical = 12.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator(
+                                    CircularProgressIndicator(
                                         modifier = Modifier.size(24.dp),
                                         strokeWidth = 2.dp
                                     )
@@ -815,7 +848,7 @@ fun MoreTabContent(
                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                         )
                                     } else {
-                                        YhSurface(
+                                        Surface(
                                             modifier = Modifier.fillMaxSize(),
                                             color = MaterialTheme.colorScheme.surfaceVariant,
                                             shape = CircleShape
@@ -842,7 +875,7 @@ fun MoreTabContent(
                                     )
                                 }
 
-                                YhTextButton(
+                                TextButton(
                                     onClick = {
                                         boardToManage = board
                                         manageVisibleRange = 0
@@ -880,10 +913,11 @@ fun MoreTabContent(
     }
 
     if (showManageBoardSheet && boardToManage != null) {
-        YhBottomSheet(
+        ModalBottomSheet(
             onDismissRequest = {
                 showManageBoardSheet = false
-            }
+            },
+            sheetState = rememberModalBottomSheetState()
         ) {
             val board = boardToManage
 
@@ -940,7 +974,7 @@ fun MoreTabContent(
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
                             )
                         } else {
-                            YhSurface(
+                            Surface(
                                 modifier = Modifier.fillMaxSize(),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                                 shape = CircleShape
@@ -948,7 +982,7 @@ fun MoreTabContent(
                         }
 
                         if (isUploadingAvatar) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp
                             )
@@ -988,9 +1022,9 @@ fun MoreTabContent(
                         )
                     }
 
-                    YhTextButton(
+                    TextButton(
                         onClick = {
-                            val current = board ?: return@YhTextButton
+                            val current = board ?: return@TextButton
                             isEditingBoard = !isEditingBoard
                             editedBoardName = current.name
                             editedAvatarUrl = current.avatar
@@ -1002,7 +1036,7 @@ fun MoreTabContent(
                 }
 
                 if (isEditingBoard) {
-                    YhOutlinedTextField(
+                    OutlinedTextField(
                         value = editedBoardName,
                         onValueChange = { input ->
                             if (input.length <= 10) {
@@ -1023,18 +1057,18 @@ fun MoreTabContent(
                         )
                     }
 
-                    YhButton(
+                    Button(
                         onClick = {
-                            val current = board ?: return@YhButton
+                            val current = board ?: return@Button
                             val name = editedBoardName.trim()
                             val avatar = editedAvatarUrl.trim()
                             if (name.isBlank()) {
                                 editError = "分区名称不能为空"
-                                return@YhButton
+                                return@Button
                             }
                             if (avatar.isBlank()) {
                                 editError = "分区头像不能为空"
-                                return@YhButton
+                                return@Button
                             }
                             isManaging = true
                             viewModel.editBoard(
@@ -1057,7 +1091,7 @@ fun MoreTabContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (isManaging) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp
                             )
@@ -1069,7 +1103,7 @@ fun MoreTabContent(
                     }
                 }
 
-                YhHorizontalDivider()
+                HorizontalDivider()
 
                 Text(
                     text = "可见范围",
@@ -1077,7 +1111,7 @@ fun MoreTabContent(
                 )
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhRadioButton(
+                        RadioButton(
                             selected = manageVisibleRange == 0,
                             onClick = { manageVisibleRange = 0 }
                         )
@@ -1085,7 +1119,7 @@ fun MoreTabContent(
                         Text("所有人可见")
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhRadioButton(
+                        RadioButton(
                             selected = manageVisibleRange == 1,
                             onClick = { manageVisibleRange = 1 }
                         )
@@ -1100,7 +1134,7 @@ fun MoreTabContent(
                 )
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhRadioButton(
+                        RadioButton(
                             selected = managePublishAuthority == 0,
                             onClick = { managePublishAuthority = 0 }
                         )
@@ -1108,7 +1142,7 @@ fun MoreTabContent(
                         Text("所有人都可以发文章和评论")
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhRadioButton(
+                        RadioButton(
                             selected = managePublishAuthority == 1,
                             onClick = { managePublishAuthority = 1 }
                         )
@@ -1116,7 +1150,7 @@ fun MoreTabContent(
                         Text("仅所有者发文章，任何人可评论")
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhRadioButton(
+                        RadioButton(
                             selected = managePublishAuthority == 2,
                             onClick = { managePublishAuthority = 2 }
                         )
@@ -1133,9 +1167,9 @@ fun MoreTabContent(
                     )
                 }
 
-                YhButton(
+                Button(
                     onClick = {
-                        val board = boardToManage ?: return@YhButton
+                        val board = boardToManage ?: return@Button
                         isManaging = true
                         viewModel.manageBoard(
                             token = token,
@@ -1156,7 +1190,7 @@ fun MoreTabContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isManaging) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
@@ -1167,7 +1201,7 @@ fun MoreTabContent(
                     }
                 }
 
-                YhHorizontalDivider()
+                HorizontalDivider()
 
                 deleteError?.let { err ->
                     Text(
@@ -1177,7 +1211,7 @@ fun MoreTabContent(
                     )
                 }
 
-                YhButton(
+                Button(
                     onClick = {
                         deleteError = null
                         showDeleteBoardDialog = true
@@ -1186,7 +1220,7 @@ fun MoreTabContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isDeletingBoard) {
-                        YhCircularProgressIndicator(
+                        CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
@@ -1201,7 +1235,7 @@ fun MoreTabContent(
 
         if (showDeleteBoardDialog) {
             val current = boardToManage
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = {
                     if (!isDeletingBoard) {
                         showDeleteBoardDialog = false
@@ -1212,9 +1246,9 @@ fun MoreTabContent(
                     Text("确定要删除分区「${current?.name.orEmpty()}」吗？删除后不可恢复。")
                 },
                 confirmButton = {
-                    YhButton(
+                    Button(
                         onClick = {
-                            val b = current ?: return@YhButton
+                            val b = current ?: return@Button
                             isDeletingBoard = true
                             deleteError = null
                             viewModel.deleteBoard(
@@ -1238,7 +1272,7 @@ fun MoreTabContent(
                     }
                 },
                 dismissButton = {
-                    YhTextButton(
+                    TextButton(
                         onClick = { showDeleteBoardDialog = false },
                         enabled = !isDeletingBoard
                     ) {
@@ -1260,11 +1294,11 @@ fun MoreOptionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1320,11 +1354,14 @@ fun BoardListContent(
     ) {
         // 错误提示
         error?.let { errorMessage ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = errorMessage,
@@ -1376,7 +1413,7 @@ fun BoardListContent(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
             }
@@ -1407,11 +1444,14 @@ fun MyPostListContent(
     ) {
         // 错误提示
         error?.let { errorMessage ->
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Text(
                     text = errorMessage,
@@ -1479,7 +1519,7 @@ fun MyPostListContent(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
             }
@@ -1501,13 +1541,14 @@ fun MyPostItem(
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = { showContextMenu = true }
-            )
+            ),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1622,12 +1663,12 @@ fun MyPostItem(
         
         // 删除确认对话框
         if (showDeleteDialog) {
-            YhAlertDialog(
+            AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
                 title = { Text("删除文章") },
                 text = { Text("确定要删除这篇文章吗？删除后无法恢复。") },
                 confirmButton = {
-                    YhTextButton(
+                    TextButton(
                         onClick = {
                             showDeleteDialog = false
                             onDelete()
@@ -1637,7 +1678,7 @@ fun MyPostItem(
                     }
                 },
                 dismissButton = {
-                    YhTextButton(onClick = { showDeleteDialog = false }) {
+                    TextButton(onClick = { showDeleteDialog = false }) {
                         Text("取消")
                     }
                 }
@@ -1655,14 +1696,14 @@ fun PostContextMenu(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text("操作选项")
         },
         text = {
             Column {
-                YhTextButton(
+                TextButton(
                     onClick = onEdit,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1680,7 +1721,7 @@ fun PostContextMenu(
                     }
                 }
                 
-                YhTextButton(
+                TextButton(
                     onClick = onDelete,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1705,7 +1746,7 @@ fun PostContextMenu(
         },
         confirmButton = {},
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

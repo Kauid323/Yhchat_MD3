@@ -256,6 +256,9 @@ jobs:
           ${FULL_CHANGELOG_LINE}
           EOF
 
+          # 云湖通知只展示最近 5 条 commit
+          BOT_COMMIT_LIST=$(printf '%s\n' "$COMMIT_LIST" | head -n 5)
+
           cat > bot-release-body.md <<EOF
           ## Build Information
           - **Version**: ${{ steps.version.outputs.release_name }}
@@ -273,7 +276,7 @@ jobs:
           ${CHANGELOG}
 
           ## Commit List
-          ${COMMIT_LIST}
+          ${BOT_COMMIT_LIST}
 
           ${FULL_CHANGELOG_LINE}
           EOF
@@ -419,3 +422,30 @@ jobs:
             -X POST "https://chat-go.jwzhd.com/open-apis/v1/bot/send?token=${BOT_SEND_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$SUMMARY_PAYLOAD" || true
+
+  notify-failure:
+    if: ${{ always() && (needs.build.result == 'failure' || needs.release.result == 'failure') }}
+    runs-on: ubuntu-latest
+    needs: [build, release]
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Notify bot about failure
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_LABEL: Release
+          BOT_SEND_TOKEN_VAR: ${{ vars.YHCHAT_BOT_SEND_TOKEN }}
+          BOT_SEND_TOKEN_SECRET: ${{ secrets.YHCHAT_BOT_SEND_TOKEN }}
+          BOT_RECV_ID_VAR: ${{ vars.YHCHAT_BOT_RECV_ID }}
+          BOT_RECV_ID_SECRET: ${{ secrets.YHCHAT_BOT_RECV_ID }}
+          BOT_RECV_TYPE_VAR: ${{ vars.YHCHAT_BOT_RECV_TYPE }}
+          BOT_RECV_TYPE_SECRET: ${{ secrets.YHCHAT_BOT_RECV_TYPE }}
+        run: bash .github/scripts/bot-notify-failure.sh

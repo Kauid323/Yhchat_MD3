@@ -43,16 +43,18 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yhchat.canary.ui.components.ImageUtils
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class BotEditActivity : ComponentActivity() {
@@ -140,13 +142,12 @@ private fun BotEditScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "编辑机器人",
-                large = false,
+            TopAppBar(
+                title = { Text("编辑机器人", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -155,12 +156,12 @@ private fun BotEditScreen(
                 },
                 actions = {
                     // 保存按钮
-                    YhIconButton(
+                    IconButton(
                         onClick = { viewModel.saveBotInfo() },
                         enabled = !uiState.isSaving && !uiState.isLoading
                     ) {
                         if (uiState.isSaving) {
-                            YhCircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp
                             )
@@ -171,7 +172,11 @@ private fun BotEditScreen(
                             )
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -182,7 +187,7 @@ private fun BotEditScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
         } else {
             Column(
@@ -194,9 +199,9 @@ private fun BotEditScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 头像区域
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -235,7 +240,7 @@ private fun BotEditScreen(
                             )
                             
                             // 相机图标
-                            YhSurface(
+                            Surface(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clickable {
@@ -264,7 +269,7 @@ private fun BotEditScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -279,9 +284,9 @@ private fun BotEditScreen(
                 }
                 
                 // 基本信息卡片
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -296,7 +301,7 @@ private fun BotEditScreen(
                         )
                         
                         // 机器人ID（只读）
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = botId,
                             onValueChange = {},
                             label = { Text("机器人ID") },
@@ -306,7 +311,7 @@ private fun BotEditScreen(
                         )
                         
                         // 头像URL
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = uiState.avatarUrl,
                             onValueChange = { viewModel.updateAvatarUrl(it) },
                             label = { Text("头像URL") },
@@ -315,7 +320,7 @@ private fun BotEditScreen(
                         )
                         
                         // 机器人名称
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = uiState.nickname,
                             onValueChange = { viewModel.updateNickname(it) },
                             label = { Text("机器人名称") },
@@ -324,7 +329,7 @@ private fun BotEditScreen(
                         )
                         
                         // 机器人简介
-                        YhOutlinedTextField(
+                        OutlinedTextField(
                             value = uiState.introduction,
                             onValueChange = { viewModel.updateIntroduction(it) },
                             label = { Text("机器人简介") },
@@ -336,9 +341,9 @@ private fun BotEditScreen(
                 }
                 
                 // 隐私设置卡片
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -372,7 +377,7 @@ private fun BotEditScreen(
                                 )
                             }
                             
-                            YhSwitch(
+                            Switch(
                                 checked = uiState.isPrivate,
                                 onCheckedChange = { viewModel.updatePrivate(it) }
                             )

@@ -40,9 +40,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,8 +74,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIconButton
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
@@ -176,10 +177,12 @@ fun ImageViewer(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    YhIconButton(
+                    IconButton(
                         onClick = onDismiss,
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White
+                        )
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -195,33 +198,39 @@ fun ImageViewer(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        YhIconButton(
+                        IconButton(
                             onClick = {
                                 val page = pagerState.currentPage
                                 refreshKeys[page] = (refreshKeys[page] ?: 0) + 1
                             },
-                            containerColor = Color.Transparent,
-                            contentColor = Color.White
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = Color.White
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "刷新"
                             )
                         }
-                        YhIconButton(
+                        IconButton(
                             onClick = { downloadImageToGallery(context, currentImageUrl) },
-                            containerColor = Color.Transparent,
-                            contentColor = Color.White
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = Color.White
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Download,
                                 contentDescription = "保存"
                             )
                         }
-                        YhIconButton(
+                        IconButton(
                             onClick = { shareImage(context, currentImageUrl) },
-                            containerColor = Color.Transparent,
-                            contentColor = Color.White
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = Color.White
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Share,
@@ -362,7 +371,7 @@ private fun ZoomableImagePage(
 
         when (painter.state) {
             is AsyncImagePainter.State.Loading -> {
-                YhCircularProgressIndicator()
+                CircularProgressIndicator()
             }
 
             is AsyncImagePainter.State.Error -> {
@@ -692,7 +701,7 @@ private fun TgsImagePage(
     )
 
     if (composition == null) {
-        YhCircularProgressIndicator()
+        CircularProgressIndicator()
         return
     }
 

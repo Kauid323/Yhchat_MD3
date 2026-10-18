@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.components
 
 import android.Manifest
@@ -61,16 +63,18 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import kotlinx.coroutines.launch
 
 /**
@@ -401,7 +405,7 @@ fun ChatInputBar(
             }
             
             // 整体输入框背景 - 圆角矩形，包含所有按钮和输入框
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -418,7 +422,7 @@ fun ChatInputBar(
                 ) {
                     // 加号按钮
                     if (showAddButton) {
-                        YhIconButton(
+                        IconButton(
                             onClick = { 
                                 showAttachMenu = !showAttachMenu
                                 showExpressionPicker = false
@@ -444,7 +448,7 @@ fun ChatInputBar(
                     
                     // 麦克风按钮
                     if (showMicButton) {
-                        YhIconButton(
+                        IconButton(
                             onClick = { 
                                 isVoiceMode = !isVoiceMode
                                 showAttachMenu = false
@@ -479,7 +483,7 @@ fun ChatInputBar(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // 长按说话按钮
-                            YhSurface(
+                            Surface(
                                 modifier = Modifier
                                 .weight(1f)
                                 .height(36.dp)
@@ -579,7 +583,7 @@ fun ChatInputBar(
                             }
                             
                             // 从存储选取按钮
-                            YhOutlinedButton(
+                            OutlinedButton(
                                 onClick = {
                                     audioPickerLauncher.launch(arrayOf("audio/*"))
                                 },
@@ -588,7 +592,9 @@ fun ChatInputBar(
                                     .weight(1f)
                                     .height(36.dp),
                                 shape = RoundedCornerShape(18.dp),
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -669,7 +675,7 @@ fun ChatInputBar(
 
                         // 当输入内容过多（超过2行或含换行或字数多）时，显示展开按钮
                         if (inputLineCount >= 2 || text.contains("\n") || text.length > 50) {
-                            YhIconButton(
+                            IconButton(
                                 onClick = {
                                     expandedEditorText = text
                                     showExpandedEditor = true
@@ -693,7 +699,7 @@ fun ChatInputBar(
                     
                     // 指令按钮 - 群聊 或 机器人私聊
                     if (showInstructionButton && onInstructionClick != null && (groupId != null || botId != null)) {
-                        YhIconButton(
+                        IconButton(
                             onClick = { 
                                 showInstructionPicker = !showInstructionPicker
                                 showAttachMenu = false
@@ -718,7 +724,7 @@ fun ChatInputBar(
                     
                     // 表情按钮
                     if (showExpressionButton) {
-                        YhIconButton(
+                        IconButton(
                             onClick = { 
                                 showExpressionPicker = !showExpressionPicker
                                 showAttachMenu = false
@@ -951,7 +957,7 @@ private fun VoiceToTextChoiceDialog(
     onConvertToText: () -> Unit,
     onCancel: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = { if (!isConverting) onCancel() },
         title = {
             Text(
@@ -967,7 +973,7 @@ private fun VoiceToTextChoiceDialog(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                     Text(
                         text = progress,
                         style = MaterialTheme.typography.bodyMedium,
@@ -984,10 +990,10 @@ private fun VoiceToTextChoiceDialog(
         confirmButton = {
             if (!isConverting) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    YhTextButton(onClick = onDirectSend) {
+                    TextButton(onClick = onDirectSend) {
                         Text("直接发送")
                     }
-                    YhButton(onClick = onConvertToText) {
+                    Button(onClick = onConvertToText) {
                         Text("转文字")
                     }
                 }
@@ -995,7 +1001,7 @@ private fun VoiceToTextChoiceDialog(
         },
         dismissButton = {
             if (!isConverting) {
-                YhTextButton(onClick = onCancel) {
+                TextButton(onClick = onCancel) {
                     Text("取消")
                 }
             }
@@ -1011,7 +1017,7 @@ fun InstructionBar(
     instruction: com.yhchat.canary.data.model.Instruction,
     onClearInstruction: () -> Unit
 ) {
-    YhSurface(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1043,7 +1049,7 @@ fun InstructionBar(
                 }
             }
             
-            YhIconButton(
+            IconButton(
                 onClick = onClearInstruction,
                 modifier = Modifier.size(24.dp)
             ) {
@@ -1066,10 +1072,9 @@ private fun ExpandedInputEditorSheet(
     onTextChange: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    YhBottomSheet(
-        title = "展开输入",
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        fullScreen = true
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
             modifier = Modifier
@@ -1078,7 +1083,7 @@ private fun ExpandedInputEditorSheet(
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            YhSurface(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)

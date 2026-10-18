@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -5,6 +7,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.AttachFile
@@ -41,13 +45,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 
 /**
  * 引用消息显示栏
@@ -58,7 +63,7 @@ fun QuotedMessageBar(
     onClearQuote: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhSurface(
+    Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
@@ -101,7 +106,7 @@ fun QuotedMessageBar(
             }
             
             // 右侧：关闭按钮
-            YhIconButton(
+            IconButton(
                 onClick = onClearQuote,
                 modifier = Modifier.size(32.dp)
             ) {
@@ -137,26 +142,27 @@ fun AttachmentMenu(
 ) {
     if (!expanded) return
 
-    var expandedSection by remember {
-        mutableStateOf(
-            if (onTextClick != null && onHtmlClick != null && onMarkdownClick != null) "messageType" else "attachments"
-        )
-    }
+    // 三个分组各自独立记忆展开状态：默认全部展开，收起/展开任意一个都不影响其它分组
+    // （之前是一个 expandedSection 字符串 → 手风琴式，只能开一个）
+    var attachmentsExpanded by remember { mutableStateOf(true) }
+    var messageTypeExpanded by remember { mutableStateOf(true) }
+    var defaultTypeExpanded by remember { mutableStateOf(true) }
 
-    YhBottomSheet(
-        title = "发送与消息类型",
+    ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        fullScreen = true
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth()
+                // 全部展开时内容会超过一屏，所以这里要能滚
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 第一块：附件
-            YhSurface(
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -164,12 +170,12 @@ fun AttachmentMenu(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     AttachmentSectionHeader(
                         title = "附件",
-                        expanded = expandedSection == "attachments",
+                        expanded = attachmentsExpanded,
                         showDivider = false,
-                        onClick = { expandedSection = if (expandedSection == "attachments") "" else "attachments" }
+                        onClick = { attachmentsExpanded = !attachmentsExpanded }
                     )
                     AnimatedVisibility(
-                        visible = expandedSection == "attachments",
+                        visible = attachmentsExpanded,
                         enter = expandVertically(),
                         exit = shrinkVertically()
                     ) {
@@ -190,7 +196,7 @@ fun AttachmentMenu(
 
             // 第二块：当前消息类型
             if (onTextClick != null && onHtmlClick != null && onMarkdownClick != null) {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -198,12 +204,12 @@ fun AttachmentMenu(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         AttachmentSectionHeader(
                             title = "当前消息类型",
-                            expanded = expandedSection == "messageType",
+                            expanded = messageTypeExpanded,
                             showDivider = false,
-                            onClick = { expandedSection = if (expandedSection == "messageType") "" else "messageType" }
+                            onClick = { messageTypeExpanded = !messageTypeExpanded }
                         )
                         AnimatedVisibility(
-                            visible = expandedSection == "messageType",
+                            visible = messageTypeExpanded,
                             enter = expandVertically(),
                             exit = shrinkVertically()
                         ) {
@@ -244,7 +250,7 @@ fun AttachmentMenu(
 
             // 第三块：默认消息类型
             if (onDefaultMessageTypeChange != null) {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -252,12 +258,12 @@ fun AttachmentMenu(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         AttachmentSectionHeader(
                             title = "默认消息类型",
-                            expanded = expandedSection == "defaultType",
+                            expanded = defaultTypeExpanded,
                             showDivider = false,
-                            onClick = { expandedSection = if (expandedSection == "defaultType") "" else "defaultType" }
+                            onClick = { defaultTypeExpanded = !defaultTypeExpanded }
                         )
                         AnimatedVisibility(
-                            visible = expandedSection == "defaultType",
+                            visible = defaultTypeExpanded,
                             enter = expandVertically(),
                             exit = shrinkVertically()
                         ) {
@@ -331,7 +337,7 @@ private fun AttachmentSectionHeader(
             )
         }
         if (showDivider) {
-            YhHorizontalDivider(modifier = Modifier.padding(top = 14.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = 14.dp))
         }
     }
 }
@@ -376,14 +382,14 @@ private fun AttachmentSheetRow(
             }
         }
         if (showDivider) {
-            YhHorizontalDivider(modifier = Modifier.padding(top = 14.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = 14.dp))
         }
     }
 }
 
 @Composable
 private fun MenuCheckedIndicator(checked: Boolean) {
-    YhCheckbox(
+    Checkbox(
         checked = checked,
         onCheckedChange = null,
         enabled = false,

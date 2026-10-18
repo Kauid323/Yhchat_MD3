@@ -32,28 +32,33 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomSheet
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhRichListItem
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.YhVerticalDivider
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.yhchat.canary.ui.components.HtmlWebView
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.MarkdownText
 import com.yhchat.canary.ui.components.ReportDialog
+import com.yhchat.canary.ui.components.SheetMenuGroup
+import com.yhchat.canary.ui.components.SheetMenuItem
+import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.proto.bot.board
 import com.yhchat.canary.proto.bot.bot_info
@@ -163,12 +168,14 @@ private fun BotDetailScreen(
         }
     }
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "机器人详情",
+            LargeTopAppBar(
+                title = { Text("机器人详情", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -176,10 +183,18 @@ private fun BotDetailScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(onClick = { showMoreSheet = true }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "更多")
-                    }
-                }
+                    // 顶栏主操作（更多）：MD3 Expressive 的填充按钮
+                    TopBarActionButton(
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = "更多",
+                        onClick = { showMoreSheet = true }
+                    )
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -191,7 +206,7 @@ private fun BotDetailScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator()
+                    CircularProgressIndicator()
                 }
             }
             uiState.error != null -> {
@@ -217,7 +232,7 @@ private fun BotDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        YhButton(
+                        Button(
                             onClick = {
                                 viewModel.loadBotDetail(botId)
                                 viewModel.loadBoardInfo(botId, chatType)
@@ -234,7 +249,9 @@ private fun BotDetailScreen(
                     botInfo = uiState.botInfo!!,
                     boardInfo = uiState.boardInfo,
                     isBoardLoading = uiState.isBoardLoading,
-                    modifier = Modifier.padding(paddingValues),
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
                     listState = listState,
                     isInAddressBook = uiState.isInAddressBook,
                     isCheckingAddressBook = uiState.isCheckingAddressBook,
@@ -301,143 +318,145 @@ private fun BotDetailScreen(
     
     // MoreBottomSheet
     if (showMoreSheet) {
-        YhBottomSheet(
-            show = true,
-            onDismissRequest = { showMoreSheet = false }
+        // 点菜单项不再自动关掉弹窗：只有「会跳转到其它页面」的项才关闭，
+        // 弹对话框（机器人信息/分享/清空确认/举报/删除确认）和开关保持打开。
+        ModalBottomSheet(
+            onDismissRequest = { showMoreSheet = false },
+            sheetState = rememberModalBottomSheetState()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SheetSectionHeader(title = "互动")
-
-                SheetActionItem(
-                    icon = Icons.Default.ManageSearch,
-                    title = "搜索聊天记录",
-                    onClick = {
-                        showMoreSheet = false
-                        com.yhchat.canary.ui.group.ChatSearchActivity.start(
-                            context,
-                            botId,
-                            3,
-                            uiState.botInfo?.data?.name ?: botName
-                        )
-                    }
-                )
-
-                SheetActionItem(
-                    icon = Icons.Default.Search,
-                    title = "机器人信息",
-                    onClick = {
-                        showMoreSheet = false
-                        showBotInfoDialog = true
-                    }
-                )
-
-                SheetActionItem(
-                    icon = Icons.Default.Share,
-                    title = "分享机器人",
-                    onClick = {
-                        showMoreSheet = false
-                        showShareDialog = true
-                    }
-                )
-
-                if (!uiState.isCheckingAddressBook && uiState.isInAddressBook) {
-                    SheetActionItem(
-                        icon = Icons.Default.Settings,
-                        title = "机器人设置",
+                SheetMenuGroup {
+                    SheetMenuItem(
+                        icon = Icons.Default.ManageSearch,
+                        title = "搜索聊天记录",
                         onClick = {
                             showMoreSheet = false
-                            BotManagementActivity.start(
+                            com.yhchat.canary.ui.group.ChatSearchActivity.start(
                                 context,
                                 botId,
+                                3,
                                 uiState.botInfo?.data?.name ?: botName
                             )
                         }
                     )
-                }
 
-                SheetActionItem(
-                    icon = Icons.Default.DeleteSweep,
-                    title = "清空上下文",
-                    enabled = !uiState.isClearingContext,
-                    isDestructive = true,
-                    onClick = {
-                        showMoreSheet = false
-                        showClearContextDialog = true
-                    }
-                )
+                    SheetMenuItem(
+                        icon = Icons.Default.Search,
+                        title = "机器人信息",
+                        onClick = {
+                            showBotInfoDialog = true
+                        }
+                    )
 
-                SheetActionItem(
-                    icon = Icons.Default.Report,
-                    title = "举报",
-                    onClick = {
-                        showMoreSheet = false
-                        showReportDialog = true
-                    }
-                )
+                    SheetMenuItem(
+                        icon = Icons.Default.Share,
+                        title = "分享机器人",
+                        onClick = {
+                            showShareDialog = true
+                        }
+                    )
 
-                SheetActionItem(
-                    icon = Icons.Default.Wallpaper,
-                    title = "聊天背景",
-                    onClick = {
-                        showMoreSheet = false
-                        com.yhchat.canary.ui.background.ChatBackgroundActivity.start(
-                            context,
-                            botId,
-                            botName
+                    if (!uiState.isCheckingAddressBook && uiState.isInAddressBook) {
+                        SheetMenuItem(
+                            icon = Icons.Default.Settings,
+                            title = "机器人设置",
+                            onClick = {
+                                showMoreSheet = false
+                                BotManagementActivity.start(
+                                    context,
+                                    botId,
+                                    uiState.botInfo?.data?.name ?: botName
+                                )
+                            }
                         )
                     }
-                )
 
-                YhRichListItem(
-                    headlineContent = { Text("免打扰") },
-                    supportingContent = {
-                        Text(if (uiState.isNoNotify) "已开启" else "未开启")
-                    },
-                    leadingContent = {
-                        Icon(
-                            imageVector = if (uiState.isNoNotify) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingContent = {
-                        if (uiState.isSettingNoNotify) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            YhSwitch(
-                                checked = uiState.isNoNotify,
-                                onCheckedChange = { checked ->
-                                    if (uiState.isSettingNoNotify) return@YhSwitch
-                                    viewModel.setNoNotify(botId, checked)
-                                },
-                                enabled = !uiState.isSettingNoNotify
+                    SheetMenuItem(
+                        icon = Icons.Default.DeleteSweep,
+                        title = "清空上下文",
+                        enabled = !uiState.isClearingContext,
+                        isDestructive = true,
+                        onClick = {
+                            showClearContextDialog = true
+                        }
+                    )
+
+                    SheetMenuItem(
+                        icon = Icons.Default.Report,
+                        title = "举报",
+                        onClick = {
+                            showReportDialog = true
+                        }
+                    )
+
+                    SheetMenuItem(
+                        icon = Icons.Default.Wallpaper,
+                        title = "聊天背景",
+                        onClick = {
+                            showMoreSheet = false
+                            com.yhchat.canary.ui.background.ChatBackgroundActivity.start(
+                                context,
+                                botId,
+                                botName
                             )
                         }
-                    },
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-                YhHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    )
 
-                SheetActionItem(
-                    icon = Icons.Default.Delete,
-                    title = "删除机器人",
-                    isDestructive = true,
-                    onClick = {
-                        showMoreSheet = false
-                        showDeleteDialog = true
-                    }
-                )
+                    SheetMenuItem(
+                        icon = if (uiState.isNoNotify) {
+                            Icons.Default.NotificationsOff
+                        } else {
+                            Icons.Default.Notifications
+                        },
+                        title = "免打扰",
+                        subtitle = if (uiState.isNoNotify) "已开启" else "未开启",
+                        enabled = !uiState.isSettingNoNotify,
+                        onClick = {
+                            if (uiState.isSettingNoNotify) return@SheetMenuItem
+                            viewModel.setNoNotify(botId, !uiState.isNoNotify)
+                        },
+                        trailing = {
+                            if (uiState.isSettingNoNotify) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Switch(
+                                    checked = uiState.isNoNotify,
+                                    onCheckedChange = { checked ->
+                                        if (uiState.isSettingNoNotify) return@Switch
+                                        viewModel.setNoNotify(botId, checked)
+                                    },
+                                    enabled = !uiState.isSettingNoNotify
+                                )
+                            }
+                        }
+                    )
+                }
+
+                SheetMenuGroup {
+                    SheetMenuItem(
+                        icon = Icons.Default.Delete,
+                        title = "删除机器人",
+                        isDestructive = true,
+                        onClick = {
+                            showDeleteDialog = true
+                        }
+                    )
+                }
             }
         }
     }
     
     // 删除机器人确认对话框
     if (showDeleteDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = {
                 Text(
@@ -450,7 +469,7 @@ private fun BotDetailScreen(
                 Text("确定要删除机器人「$botName」吗？")
             },
             confirmButton = {
-                YhButton(
+                Button(
                     onClick = {
                         showDeleteDialog = false
                         viewModel.deleteBot(botId)
@@ -460,7 +479,7 @@ private fun BotDetailScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = { showDeleteDialog = false }) {
+                TextButton(onClick = { showDeleteDialog = false }) {
                     Text("取消")
                 }
             }
@@ -468,7 +487,7 @@ private fun BotDetailScreen(
     }
 
     if (showClearContextDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = {
                 if (!uiState.isClearingContext) {
                     showClearContextDialog = false
@@ -485,7 +504,7 @@ private fun BotDetailScreen(
                 Text("确定要清空机器人「$botName」的上下文吗？此操作会移除历史对话上下文。")
             },
             confirmButton = {
-                YhButton(
+                Button(
                     onClick = {
                         viewModel.clearBotContext(botId)
                         showClearContextDialog = false
@@ -493,14 +512,14 @@ private fun BotDetailScreen(
                     enabled = !uiState.isClearingContext
                 ) {
                     if (uiState.isClearingContext) {
-                        YhCircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
                         Text("清空")
                     }
                 }
             },
             dismissButton = {
-                YhTextButton(
+                TextButton(
                     onClick = { if (!uiState.isClearingContext) showClearContextDialog = false }
                 ) {
                     Text("取消")
@@ -508,52 +527,6 @@ private fun BotDetailScreen(
             }
         )
     }
-}
-
-@Composable
-private fun SheetSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp)
-    )
-}
-
-@Composable
-private fun SheetActionItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    isDestructive: Boolean = false
-) {
-    val containerColor = MaterialTheme.colorScheme.surface
-    val baseTextColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    val baseIconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    val alpha = if (enabled) 1f else 0.45f
-
-    YhRichListItem(
-        headlineContent = {
-            Text(
-                text = title,
-                color = baseTextColor.copy(alpha = alpha)
-            )
-        },
-        leadingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = baseIconColor.copy(alpha = alpha)
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-        containerColor = containerColor,
-        onClick = if (enabled) onClick else null
-    )
-    YhHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 }
 
 @Composable
@@ -574,16 +547,17 @@ private fun BotDetailContent(
     LazyColumn(
         state = listState,
         modifier = modifier
-            .fillMaxSize()
-            .yhTopBarNestedScroll(),
+            .fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 28.dp,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                )
             ) {
                 Column(
                     modifier = Modifier
@@ -592,7 +566,7 @@ private fun BotDetailContent(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        YhSurface(
+                        Surface(
                             modifier = Modifier.size(86.dp),
                             shape = CircleShape,
                             shadowElevation = 0.dp,
@@ -637,18 +611,18 @@ private fun BotDetailContent(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        YhButton(
+                        Button(
                             onClick = onPrimaryAction,
                             shape = RoundedCornerShape(18.dp),
                             enabled = !isCheckingAddressBook && !isAddingBot
                         ) {
                             if (isCheckingAddressBook || isAddingBot) {
-                                YhCircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             } else {
                                 Text(if (isInAddressBook) "进入聊天" else "添加")
                             }
                         }
-                        YhOutlinedButton(
+                        OutlinedButton(
                             onClick = onShowInfo,
                             shape = RoundedCornerShape(18.dp)
                         ) {
@@ -697,7 +671,7 @@ private fun BotDetailContent(
                         value = botInfo.data.headcount.toString(),
                         modifier = Modifier.weight(1f)
                     )
-                    YhVerticalDivider(
+                    VerticalDivider(
                         modifier = Modifier
                             .height(60.dp)
                             .padding(horizontal = 16.dp),
@@ -730,7 +704,7 @@ private fun BotDetailContent(
             if (boardData != null && boardData.content.isNotBlank()) {
                 item {
                     BotInfoSectionCard(title = "看板信息") {
-                        YhSurface(
+                        Surface(
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -780,7 +754,7 @@ private fun BotDetailContent(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
                             Text(
                                 "加载看板信息中...",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -799,9 +773,9 @@ private fun BotInfoSectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 24.dp
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -824,10 +798,10 @@ private fun BotInfoDialog(
     botInfo: bot_info,
     onDismiss: () -> Unit
 ) {
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("确定")
             }
         },
@@ -892,7 +866,7 @@ private fun EnhancedStatisticItem(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        YhSurface(
+        Surface(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
             modifier = Modifier.size(48.dp)

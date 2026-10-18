@@ -17,10 +17,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,16 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhRadioButton
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhSwitch
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -61,7 +64,7 @@ class HtmlSettingsActivity : ComponentActivity() {
         
         setContent {
             YhchatCanaryTheme {
-                YhSurface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
@@ -135,11 +138,15 @@ fun HtmlSettingsScreen(
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        YhTopBar(
-            title = "HTML设置",
-            large = false,
+        TopAppBar(
+            title = {
+                Text(
+                    text = "HTML设置",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             navigationIcon = {
-                YhIconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "返回"
@@ -147,7 +154,7 @@ fun HtmlSettingsScreen(
                 }
             },
             actions = {
-                YhTextButton(
+                TextButton(
                     onClick = {
                         // 重置
                         enableJavaScript = true
@@ -160,7 +167,11 @@ fun HtmlSettingsScreen(
                 ) {
                     Text("重置")
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background
+            )
         )
         
         LazyColumn(
@@ -193,7 +204,7 @@ fun HtmlSettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                YhSwitch(
+                                Switch(
                                     checked = enableJavaScript,
                                     onCheckedChange = { 
                                         enableJavaScript = it
@@ -202,7 +213,7 @@ fun HtmlSettingsScreen(
                                 )
                             }
                             
-                            YhHorizontalDivider()
+                            HorizontalDivider()
                             
                             // 缩放设置
                             Row(
@@ -221,7 +232,7 @@ fun HtmlSettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                YhSwitch(
+                                Switch(
                                     checked = allowZoom,
                                     onCheckedChange = { 
                                         allowZoom = it
@@ -230,7 +241,7 @@ fun HtmlSettingsScreen(
                                 )
                             }
                             
-                            YhHorizontalDivider()
+                            HorizontalDivider()
                             
                             // 图片加载设置
                             Row(
@@ -249,7 +260,7 @@ fun HtmlSettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                YhSwitch(
+                                Switch(
                                     checked = loadImages,
                                     onCheckedChange = { 
                                         loadImages = it
@@ -285,7 +296,7 @@ fun HtmlSettingsScreen(
                                             .padding(vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        YhRadioButton(
+                                        RadioButton(
                                             selected = cacheMode == value,
                                             onClick = { 
                                                 cacheMode = value
@@ -301,7 +312,7 @@ fun HtmlSettingsScreen(
                                 }
                             }
                             
-                            YhHorizontalDivider()
+                            HorizontalDivider()
                             
                             // User Agent
                             Column {
@@ -318,7 +329,7 @@ fun HtmlSettingsScreen(
                                             .padding(vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        YhRadioButton(
+                                        RadioButton(
                                             selected = userAgent == value,
                                             onClick = { 
                                                 userAgent = value
@@ -340,9 +351,12 @@ fun HtmlSettingsScreen(
             
             // 说明信息
             item {
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp)
@@ -377,9 +391,9 @@ private fun HtmlSettingsCard(
     content: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 16.dp
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier

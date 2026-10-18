@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yhchat.canary.ui.webview
 
 import android.annotation.SuppressLint
@@ -40,7 +42,22 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -51,24 +68,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.yhchat.canary.crash.CrashHandler
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhBottomAppBar
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhDropdownMenu
-import com.yhchat.canary.ui.adaptive.YhDropdownMenuItem
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.utils.UnifiedLinkHandler
@@ -219,14 +224,20 @@ fun WebViewScreen(
         }
     }
 
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
             Column {
-                YhTopBar(
-                    title = uiState.title,
-                    large = false,
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = uiState.title,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
                     navigationIcon = {
-                        YhIconButton(onClick = onBack) {
+                        IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "关闭"
@@ -234,14 +245,14 @@ fun WebViewScreen(
                         }
                     },
                     actions = {
-                        YhIconButton(onClick = { viewModel.setMenuVisible(true) }) {
+                        IconButton(onClick = { viewModel.setMenuVisible(true) }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "更多")
                         }
-                        YhDropdownMenu(
+                        DropdownMenu(
                             expanded = uiState.showMenu,
                             onDismissRequest = { viewModel.setMenuVisible(false) }
                         ) {
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("刷新") },
                                 onClick = {
                                     viewModel.setMenuVisible(false)
@@ -249,7 +260,7 @@ fun WebViewScreen(
                                 },
                                 leadingIcon = { Icon(Icons.Default.Refresh, null) }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("在浏览器中打开") },
                                 onClick = {
                                     viewModel.setMenuVisible(false)
@@ -261,7 +272,7 @@ fun WebViewScreen(
                                 },
                                 leadingIcon = { Icon(Icons.Default.OpenInBrowser, null) }
                             )
-                            YhDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("复制链接") },
                                 onClick = {
                                     viewModel.setMenuVisible(false)
@@ -276,8 +287,8 @@ fun WebViewScreen(
                                 },
                                 leadingIcon = { Icon(Icons.Default.ContentCopy, null) }
                             )
-                            YhHorizontalDivider()
-                            YhDropdownMenuItem(
+                            HorizontalDivider()
+                            DropdownMenuItem(
                                 text = { Text("关闭") },
                                 onClick = {
                                     viewModel.setMenuVisible(false)
@@ -286,37 +297,42 @@ fun WebViewScreen(
                                 leadingIcon = { Icon(Icons.Default.Close, null) }
                             )
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background
+                    ),
+                    scrollBehavior = scrollBehavior
                 )
                 // 进度条
                 if (uiState.progress < 1.0f) {
-                    YhLinearProgressIndicator(
-                        progress = uiState.progress,
+                    LinearProgressIndicator(
+                        progress = { uiState.progress },
                         modifier = Modifier.fillMaxWidth().height(2.dp)
                     )
                 }
             }
         },
         bottomBar = {
-            YhBottomAppBar(
+            BottomAppBar(
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
             ) {
-                    YhIconButton(
+                    IconButton(
                         onClick = { webView?.goBack() },
                         enabled = uiState.canGoBack,
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "后退")
                     }
-                    YhIconButton(
+                    IconButton(
                         onClick = { webView?.goForward() },
                         enabled = uiState.canGoForward,
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "前进")
                     }
-                    YhIconButton(
+                    IconButton(
                         onClick = {
                             if (uiState.progress < 1.0f) {
                                 webView?.stopLoading()
@@ -466,7 +482,7 @@ fun WebViewScreen(
 
     // 外部跳转拦截对话框
     if (uiState.showJumpDialog) {
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { viewModel.dismissJumpDialog() },
             title = { Text("外部应用跳转请求") },
             text = { 
@@ -483,7 +499,7 @@ fun WebViewScreen(
                 }
             },
             confirmButton = {
-                YhButton(onClick = {
+                Button(onClick = {
                     val jumpUrl = uiState.pendingJumpUrl
                     viewModel.dismissJumpDialog()
                     try {
@@ -504,7 +520,7 @@ fun WebViewScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = { viewModel.dismissJumpDialog() }) {
+                TextButton(onClick = { viewModel.dismissJumpDialog() }) {
                     Text("忽略")
                 }
             }
@@ -517,7 +533,7 @@ fun WebViewScreen(
             uiState.pendingContentDisposition,
             uiState.pendingMimeType
         )
-        YhAlertDialog(
+        AlertDialog(
             onDismissRequest = { viewModel.dismissDownloadDialog() },
             title = { Text("下载文件") },
             text = {
@@ -534,13 +550,13 @@ fun WebViewScreen(
                 }
             },
             confirmButton = {
-                YhButton(onClick = {
+                Button(onClick = {
                     val downloadUrl = uiState.pendingDownloadUrl
                     val mimeType = uiState.pendingMimeType
                     viewModel.dismissDownloadDialog()
                     if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) {
                         Toast.makeText(context, "外部存储不可用", Toast.LENGTH_LONG).show()
-                        return@YhButton
+                        return@Button
                     }
                     try {
                         val request = DownloadManager.Request(downloadUrl.toUri()).apply {
@@ -564,7 +580,7 @@ fun WebViewScreen(
                 }
             },
             dismissButton = {
-                YhTextButton(onClick = { viewModel.dismissDownloadDialog() }) {
+                TextButton(onClick = { viewModel.dismissDownloadDialog() }) {
                     Text("取消")
                 }
             }

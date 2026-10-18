@@ -21,9 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +39,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.service.AudioPlayerService
 import com.yhchat.canary.service.FileDownloadService
-import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.PermissionUtils
 import kotlinx.coroutines.launch
@@ -105,7 +105,7 @@ fun VideoDownloadMessageView(
     val context = LocalContext.current
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.NotStarted) }
 
-    YhSurface(
+    Surface(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
@@ -216,7 +216,7 @@ fun AudioMessageView(
         // 可在此同步当前播放状态
     }
 
-    YhSurface(
+    Surface(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .clickable {

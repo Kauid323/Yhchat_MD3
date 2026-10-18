@@ -9,15 +9,32 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -30,18 +47,6 @@ import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.AddFriendRequest
 import com.yhchat.canary.data.model.RecommendBot
 import com.yhchat.canary.data.model.RecommendGroup
-import com.yhchat.canary.ui.adaptive.YhAlertDialog
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhPullToRefresh
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTextButton
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
 import com.yhchat.canary.ui.chat.ChatActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.rememberBooleanPreference
@@ -54,11 +59,13 @@ import kotlinx.coroutines.launch
 /**
  * 发现界面
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoverScreen(
     modifier: Modifier = Modifier,
     navigationState: com.yhchat.canary.ui.components.ScrollAwareNavigationState? = null
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val discoverRepo = remember { RepositoryFactory.getDiscoverRepository(context) }
@@ -111,17 +118,30 @@ fun DiscoverScreen(
             }
     }
 
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(title = "发现", large = false)
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "发现",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
+            )
         }
     ) { padding ->
-        YhPullToRefresh(
+        PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = {
                 refreshing = true
                 viewModel.refreshAll()
             },
+            state = rememberPullToRefreshState(),
             modifier = Modifier.fillMaxSize()
         ) {
         LazyColumn(
@@ -129,7 +149,7 @@ fun DiscoverScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(padding)
-                .yhTopBarNestedScroll(),
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -196,7 +216,7 @@ fun DiscoverScreen(
                             )
                         }
 
-                        YhIconButton(onClick = { DiscoverGroupsActivity.start(context) }) {
+                        IconButton(onClick = { DiscoverGroupsActivity.start(context) }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "更多"
@@ -216,7 +236,7 @@ fun DiscoverScreen(
                                 .height(200.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            YhCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
                         }
                     }
                 } else if (groups.isNotEmpty()) {
@@ -241,7 +261,7 @@ fun DiscoverScreen(
                                         .padding(16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    YhCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                             }
                         }
@@ -264,7 +284,7 @@ fun DiscoverScreen(
                 }
             }
         }
-        } // YhPullToRefresh
+        } // PullToRefreshBox
     }
 
     // 群聊详情弹窗
@@ -388,9 +408,9 @@ fun DiscoverSectionCard(
     onMoreClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -418,7 +438,7 @@ fun DiscoverSectionCard(
                     )
                 }
 
-                YhIconButton(onClick = onMoreClick) {
+                IconButton(onClick = onMoreClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "更多"
@@ -436,7 +456,7 @@ fun DiscoverSectionCard(
                         .height(120.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    YhCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
                 }
             } else {
                 Box(
@@ -459,10 +479,11 @@ fun GroupDiscoverCard(
 ) {
     val context = LocalContext.current
     var showImageViewer by remember(group.avatarUrl) { mutableStateOf(false) }
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -549,10 +570,11 @@ fun BotDiscoverCard(
 ) {
     val context = LocalContext.current
     var showImageViewer by remember(bot.avatarUrl) { mutableStateOf(false) }
-    YhCard(
+    Card(
         modifier = Modifier
             .width(140.dp)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -624,7 +646,7 @@ fun BotDetailDialog(
 ) {
     val context = LocalContext.current
     var showImageViewer by remember(bot.avatarUrl) { mutableStateOf(false) }
-    YhAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("机器人详情") },
         text = {
@@ -699,12 +721,12 @@ fun BotDetailDialog(
             }
         },
         confirmButton = {
-            YhButton(onClick = onAdd) {
+            Button(onClick = onAdd) {
                 Text("添加机器人")
             }
         },
         dismissButton = {
-            YhTextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss) {
                 Text("取消")
             }
         }

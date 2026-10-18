@@ -19,8 +19,10 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +38,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.CommunityPost
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhSurface
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ImageViewer
 
@@ -51,7 +51,7 @@ fun CommunityPostCard(
 ) {
     var showImageViewer by remember(post.senderAvatar) { mutableStateOf(false) }
 
-    YhCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -91,7 +91,7 @@ fun CommunityPostCard(
                         )
                         if (post.isSticky != 0) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            YhSurface(
+                            Surface(
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = MaterialTheme.shapes.small
                             ) {
@@ -105,7 +105,7 @@ fun CommunityPostCard(
                         }
                         if (post.isVip == 1) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            YhSurface(
+                            Surface(
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = MaterialTheme.shapes.small
                             ) {
@@ -127,7 +127,7 @@ fun CommunityPostCard(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                YhSurface(
+                Surface(
                     color = if (post.contentType == 2)
                         MaterialTheme.colorScheme.primaryContainer
                     else

@@ -38,16 +38,21 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.model.ChatBackground
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhLinearProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
-import com.yhchat.canary.ui.adaptive.yhTopBarNestedScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
@@ -88,6 +93,7 @@ class ChatBackgroundActivity : BaseActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatBackgroundScreen(
     chatId: String,
@@ -114,13 +120,14 @@ fun ChatBackgroundScreen(
         }
     }
     
-    YhScaffold(
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "$chatName 的聊天背景",
-                large = false,
+            TopAppBar(
+                title = { Text("$chatName 的聊天背景", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -128,7 +135,7 @@ fun ChatBackgroundScreen(
                     }
                 },
                 actions = {
-                    YhIconButton(
+                    IconButton(
                         onClick = { imagePickerLauncher.launch("image/*") },
                         enabled = !uiState.isUploading
                     ) {
@@ -137,7 +144,12 @@ fun ChatBackgroundScreen(
                             contentDescription = "上传背景"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -147,12 +159,14 @@ fun ChatBackgroundScreen(
                 .padding(paddingValues)
         ) {
             // 提示信息
-            YhCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                cornerRadius = 12.dp
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
             ) {
                 Text(
                     text = "💡 设置chatId为\"all\"可以设置全局背景\n特定聊天背景优先级更高",
@@ -167,7 +181,7 @@ fun ChatBackgroundScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -184,7 +198,7 @@ fun ChatBackgroundScreen(
                                 text = uiState.error ?: "加载失败",
                                 color = MaterialTheme.colorScheme.error
                             )
-                            YhButton(onClick = { viewModel.loadBackgrounds() }) {
+                            Button(onClick = { viewModel.loadBackgrounds() }) {
                                 Text("重试")
                             }
                         }
@@ -195,7 +209,7 @@ fun ChatBackgroundScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .yhTopBarNestedScroll(),
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -263,7 +277,7 @@ fun ChatBackgroundScreen(
             
             // 上传进度提示
             if (uiState.isUploading) {
-                YhLinearProgressIndicator(
+                LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -285,9 +299,9 @@ private fun BackgroundCard(
     onDelete: (ChatBackground) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 12.dp
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -323,7 +337,7 @@ private fun BackgroundCard(
                     )
                 }
                 
-                YhIconButton(onClick = { onDelete(background) }) {
+                IconButton(onClick = { onDelete(background) }) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "删除",

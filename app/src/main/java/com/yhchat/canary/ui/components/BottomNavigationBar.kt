@@ -1,10 +1,12 @@
 package com.yhchat.canary.ui.components
 
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.yhchat.canary.data.model.NavigationItem
-import com.yhchat.canary.ui.adaptive.YhNavigationBar
-import com.yhchat.canary.ui.adaptive.YhNavigationBarItem
 
 /**
  * 底部导航栏组件
@@ -16,13 +18,13 @@ fun BottomNavigationBar(
     onScreenChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    YhNavigationBar(
+    NavigationBar(
         modifier = modifier
     ) {
         visibleItems.forEach { item ->
-            YhNavigationBarItem(
-                icon = item.getIcon(),
-                label = item.title,
+            NavigationBarItem(
+                icon = { Icon(item.getIcon(), contentDescription = item.title) },
+                label = { Text(item.title) },
                 selected = currentScreen == item.id,
                 onClick = {
                     onScreenChange(item.id)

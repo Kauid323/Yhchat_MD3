@@ -35,14 +35,14 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.GroupMemberInfo
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCheckbox
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedTextField
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import kotlinx.coroutines.delay
 
 @Composable
@@ -85,7 +85,7 @@ fun GroupMemberMentionPicker(
         )
     }
 
-    YhSurface(
+    Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -99,18 +99,18 @@ fun GroupMemberMentionPicker(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                YhIconButton(onClick = onDismiss) {
+                IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "关闭")
                 }
                 Text("选择群成员", style = MaterialTheme.typography.titleSmall)
-                YhButton(onClick = onDismiss) {
+                Button(onClick = onDismiss) {
                     Text("确定")
                 }
             }
 
-            YhHorizontalDivider()
+            HorizontalDivider()
 
-            YhOutlinedTextField(
+            OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
                 leadingIcon = {
@@ -127,7 +127,7 @@ fun GroupMemberMentionPicker(
                 singleLine = true
             )
 
-            YhHorizontalDivider()
+            HorizontalDivider()
 
             when {
                 isLoading -> {
@@ -199,7 +199,7 @@ private fun GroupMemberMentionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        YhCheckbox(
+        Checkbox(
             checked = isSelected,
             onCheckedChange = { checked ->
                 if (checked && !isSelected) {
@@ -227,7 +227,7 @@ private fun GroupMemberMentionRow(
 
             if (badgeText != null) {
                 Spacer(modifier = Modifier.height(4.dp))
-                YhSurface(
+                Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = badgeColor
                 ) {

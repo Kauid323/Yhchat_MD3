@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.yhchat.canary.ui.components
 
 import android.content.Context
@@ -21,8 +22,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import com.yhchat.canary.ui.adaptive.YhText as Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,11 +46,6 @@ import androidx.lifecycle.viewModelScope
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.model.Instruction
 import com.yhchat.canary.data.repository.GroupRepository
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhClickableSurface
-import com.yhchat.canary.ui.adaptive.YhSurface
-import com.yhchat.canary.ui.adaptive.YhTextButton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,7 +75,7 @@ fun InstructionPicker(
     
     val uiState by viewModel.uiState.collectAsState()
     
-    YhSurface(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(300.dp),
@@ -87,7 +89,7 @@ fun InstructionPicker(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        YhCircularProgressIndicator()
+                        CircularProgressIndicator()
                     }
                 }
                 
@@ -104,7 +106,7 @@ fun InstructionPicker(
                                 text = uiState.error ?: "加载失败",
                                 color = MaterialTheme.colorScheme.error
                             )
-                            YhTextButton(onClick = {
+                            TextButton(onClick = {
                                 when {
                                     groupId != null -> viewModel.loadGroupInstructions(groupId)
                                     botId != null -> viewModel.loadBotInstructions(botId)
@@ -163,7 +165,7 @@ fun InstructionPicker(
                                     val containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
                                     val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                     
-                                    YhClickableSurface(
+                                    Surface(
                                         onClick = {
                                             coroutineScope.launch {
                                                 pagerState.animateScrollToPage(index)
@@ -228,11 +230,14 @@ private fun InstructionItem(
     instruction: Instruction,
     onClick: () -> Unit
 ) {
-    YhCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -252,7 +257,7 @@ private fun InstructionItem(
                 
                 // 权限标识
                 if (instruction.auth > 0) {
-                    YhSurface(
+                    Surface(
                         color = when (instruction.auth) {
                             2 -> MaterialTheme.colorScheme.primaryContainer
                             3 -> MaterialTheme.colorScheme.secondaryContainer

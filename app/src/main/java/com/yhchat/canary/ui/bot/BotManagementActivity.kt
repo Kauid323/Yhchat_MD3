@@ -39,17 +39,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.adaptive.YhButton
-import com.yhchat.canary.ui.adaptive.YhCard
-import com.yhchat.canary.ui.adaptive.YhClickableSurface
-import com.yhchat.canary.ui.adaptive.YhCircularProgressIndicator
-import com.yhchat.canary.ui.adaptive.YhHorizontalDivider
-import com.yhchat.canary.ui.adaptive.YhIcon as Icon
-import com.yhchat.canary.ui.adaptive.YhIconButton
-import com.yhchat.canary.ui.adaptive.YhOutlinedButton
-import com.yhchat.canary.ui.adaptive.YhScaffold
-import com.yhchat.canary.ui.adaptive.YhText as Text
-import com.yhchat.canary.ui.adaptive.YhTopBar
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 /**
@@ -130,19 +133,22 @@ private fun BotManagementScreen(
         }
     }
     
-    YhScaffold(
+    Scaffold(
         topBar = {
-            YhTopBar(
-                title = "管理机器人",
-                large = false,
+            TopAppBar(
+                title = { Text("管理机器人", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    YhIconButton(onClick = onBackClick) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { paddingValues ->
@@ -156,9 +162,12 @@ private fun BotManagementScreen(
         ) {
             // 错误提示
             if (uiState.error != null) {
-                YhCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
                         text = uiState.error ?: "",
@@ -169,9 +178,9 @@ private fun BotManagementScreen(
             }
             
             // 机器人基本信息卡片
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 12.dp
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -194,9 +203,9 @@ private fun BotManagementScreen(
             }
             
             // 管理选项卡片
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 12.dp
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -220,7 +229,7 @@ private fun BotManagementScreen(
                         }
                     )
                     
-                    YhHorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     
                     // 机器人设置
                     ManagementOption(
@@ -232,7 +241,7 @@ private fun BotManagementScreen(
                         }
                     )
 
-                    YhHorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     ManagementOption(
                         icon = Icons.Default.Memory,
@@ -243,7 +252,7 @@ private fun BotManagementScreen(
                         }
                     )
 
-                    YhHorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     
                     // 进入聊天
                     ManagementOption(
@@ -260,7 +269,7 @@ private fun BotManagementScreen(
                         }
                     )
                     
-                    YhHorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     // 编辑机器人
                     ManagementOption(
@@ -275,9 +284,9 @@ private fun BotManagementScreen(
             }
             
             // 机器人控制卡片
-            YhCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 12.dp
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -296,13 +305,13 @@ private fun BotManagementScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // 停用/启用机器人按钮
-                        YhButton(
+                        Button(
                             onClick = { viewModel.toggleBotStop(botId) },
                             modifier = Modifier.weight(1f),
                             enabled = !uiState.isStoppingBot && !uiState.isLoading && !uiState.isDeletingBot
                         ) {
                             if (uiState.isStoppingBot) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -314,13 +323,13 @@ private fun BotManagementScreen(
                         }
                         
                         // 删除机器人按钮
-                        YhOutlinedButton(
+                        OutlinedButton(
                             onClick = { viewModel.deleteBot(botId) },
                             modifier = Modifier.weight(1f),
                             enabled = !uiState.isDeletingBot && !uiState.isLoading && !uiState.isStoppingBot
                         ) {
                             if (uiState.isDeletingBot) {
-                                YhCircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -346,7 +355,7 @@ private fun ManagementOption(
     iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier
 ) {
-    YhClickableSurface(
+    Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         color = androidx.compose.ui.graphics.Color.Transparent

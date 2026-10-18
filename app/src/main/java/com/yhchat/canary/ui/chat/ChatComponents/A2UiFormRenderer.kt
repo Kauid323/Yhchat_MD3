@@ -22,7 +22,7 @@ import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiChildren
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.model.A2UiSpec
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.parser.updateA2UiDataModel
 import com.yhchat.canary.ui.chat.ChatComponents.a2ui.renderer.RenderA2UiComponent
-import com.yhchat.canary.ui.adaptive.YhSurface
+import androidx.compose.material3.Surface
 
 @Composable
 internal fun A2UiFormMessage(
@@ -34,7 +34,7 @@ internal fun A2UiFormMessage(
     val horizontalScrollState = rememberScrollState()
     val surfaceWidth = remember(spec) { spec.preferredSurfaceWidthDp() }
     
-    YhSurface(
+    Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)

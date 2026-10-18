@@ -1,0 +1,2 @@
+# Shell scripts must keep LF endings so they run on GitHub Actions' Linux runners.
+*.sh text eol=lf
