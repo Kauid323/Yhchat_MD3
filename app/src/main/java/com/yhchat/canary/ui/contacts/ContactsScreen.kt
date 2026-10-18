@@ -50,6 +50,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -79,11 +80,19 @@ import com.yhchat.canary.ui.search.SearchActivity
 fun ContactsScreen(
     modifier: Modifier = Modifier,
     viewModel: ContactsViewModel = hiltViewModel(),
-    navigationState: com.yhchat.canary.ui.components.ScrollAwareNavigationState? = null
+    navigationState: com.yhchat.canary.ui.components.ScrollAwareNavigationState? = null,
+    reloadKey: Int = 0
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+
+    // 点击通讯录导航图标（reloadKey 变化）时重新请求「申请/邀请列表」
+    LaunchedEffect(reloadKey) {
+        if (reloadKey > 0) {
+            viewModel.loadFriendRequestList()
+        }
+    }
     
     // 布局设置
     val showRequests by rememberBooleanPreference("layout_settings", "contacts_show_requests", true)

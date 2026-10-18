@@ -122,6 +122,10 @@ class ContactsViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow(ContactsUiState())
     val uiState: StateFlow<ContactsUiState> = _uiState.asStateFlow()
+
+    // 刚同意/拒绝过的申请（requestId -> result）：服务端 request-list 同步有延迟时，
+    // 先用本地结果，等服务端返回非 0 再丢弃，避免 UI 闪回「待处理」
+    private val localProcessedResults = mutableMapOf<Int, Int>()
     
     init {
         loadContacts()
@@ -242,12 +246,21 @@ class ContactsViewModel @Inject constructor(
     fun toggleFriendRequestsExpanded() {
         val newExpanded = !_uiState.value.friendRequestsExpanded
         _uiState.value = _uiState.value.copy(friendRequestsExpanded = newExpanded)
+        Log.d(tag, "申请/邀请列表：展开状态 -> $newExpanded")
         if (newExpanded && !_uiState.value.friendRequestsLoading && _uiState.value.friendRequests.isEmpty()) {
             loadFriendRequestList()
+        } else if (newExpanded) {
+            Log.d(
+                tag,
+                "申请/邀请列表：跳过加载（loading=${_uiState.value.friendRequestsLoading}, " +
+                    "已有 ${_uiState.value.friendRequests.size} 条, total=${_uiState.value.friendRequestTotal}, " +
+                    "pending=${_uiState.value.friendRequestPending}）"
+            )
         }
     }
 
     fun loadFriendRequestList() {
+        Log.d(tag, "📤 申请/邀请列表：请求 POST v1/friend/request-list")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(friendRequestsLoading = true)
             friendRepository.getFriendRequestList().fold(
@@ -267,7 +280,7 @@ class ContactsViewModel @Inject constructor(
                             targetType = r.targetType,
                             targetId = r.targetId,
                             receiverId = r.receiverId,
-                            result = r.result,
+                            result = resolveResult(r.requestId, r.result),
                             processedAt = r.processedAt,
                             inviteAt = r.inviteAt,
                             inviteAtStr = r.inviteAtStr,
@@ -280,15 +293,43 @@ class ContactsViewModel @Inject constructor(
                         if (blockedSet.isEmpty()) true
                         else it.inviterId !in blockedSet && it.receiverId !in blockedSet
                     }
+                    val filteredOut = resp.requestsCount - list.size
+                    val filteredNote = if (filteredOut > 0) "（被黑名单过滤掉 $filteredOut 条）" else ""
+                    Log.d(
+                        tag,
+                        "📥 申请/邀请列表：接口返回 total=${resp.total}, pending=${resp.pending}, " +
+                            "原始 ${resp.requestsCount} 条，屏蔽过滤后 ${list.size} 条$filteredNote"
+                    )
+                    // 详情弹窗里的那条可能是点开时的旧快照，用新列表里的同一条刷新它，
+                    // 否则同意/拒绝后弹窗不会变成「已通过/已拒绝」
+                    val previousSelected = _uiState.value.selectedFriendRequest
+                    val refreshedSelected = previousSelected?.let { selected ->
+                        val fresh = list.firstOrNull { it.requestId == selected.requestId }
+                        when {
+                            // 服务端不再返回这条（已被清理）→ 保留本地状态
+                            fresh == null -> selected
+                            // 本地已经处理过，服务端还没同步回来 → 别退回「待处理」
+                            selected.result != 0 && fresh.result == 0 -> selected
+                            else -> fresh
+                        }
+                    }
+                    if (previousSelected != null && refreshedSelected?.result != previousSelected.result) {
+                        Log.d(
+                            tag,
+                            "🔄 详情弹窗刷新: requestId=${previousSelected.requestId}, " +
+                                "result ${previousSelected.result} -> ${refreshedSelected?.result}"
+                        )
+                    }
                     _uiState.value = _uiState.value.copy(
                         friendRequestsLoading = false,
                         friendRequests = list,
                         friendRequestTotal = resp.total,
-                        friendRequestPending = resp.pending
+                        friendRequestPending = resp.pending,
+                        selectedFriendRequest = refreshedSelected
                     )
                 },
                 onFailure = { e ->
-                    Log.e(tag, "❌ 请求/邀请列表加载失败", e)
+                    Log.e(tag, "❌ 申请/邀请列表加载失败: ${e.message}", e)
                     _uiState.value = _uiState.value.copy(friendRequestsLoading = false)
                 }
             )
@@ -299,22 +340,64 @@ class ContactsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedFriendRequest = item)
     }
 
+    /**
+     * 列表里的 result：服务端还没同步回来（仍是 0）而本地刚处理过的，先用本地结果，
+     * 等服务端返回非 0 后丢弃本地记录
+     */
+    private fun resolveResult(requestId: Int, serverResult: Int): Int {
+        val localResult = localProcessedResults[requestId] ?: return serverResult
+        if (serverResult != 0) {
+            localProcessedResults.remove(requestId)
+            return serverResult
+        }
+        return localResult
+    }
+
+    /**
+     * 同意/拒绝成功后先在本地打上结果，弹窗和列表立刻显示「已通过/已拒绝」，
+     * 不用等服务端 request-list 回来（服务端没同步回来时也不会被退回「待处理」）
+     */
+    private fun applyProcessedResult(requestId: Int, agree: Int) {
+        val state = _uiState.value
+        val hit = state.friendRequests.any { it.requestId == requestId } ||
+            state.selectedFriendRequest?.requestId == requestId
+        if (!hit) return
+
+        Log.d(tag, "✏️ 本地标记处理结果: requestId=$requestId, result=$agree")
+        localProcessedResults[requestId] = agree
+        _uiState.value = state.copy(
+            friendRequests = state.friendRequests.map {
+                if (it.requestId == requestId) it.copy(result = agree) else it
+            },
+            selectedFriendRequest = state.selectedFriendRequest?.let {
+                if (it.requestId == requestId) it.copy(result = agree) else it
+            }
+        )
+    }
+
     fun agreeSelectedFriendRequest() {
         val item = _uiState.value.selectedFriendRequest ?: return
         if (_uiState.value.friendRequestProcessing) return
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(friendRequestProcessing = true)
+            Log.d(
+                tag,
+                "📤 处理申请：requestId=${item.requestId}, agree=1, groupInvite=${item.usesGroupAgreeInvite}"
+            )
             friendRepository.agreeApply(
                 id = item.requestId, 
                 agree = 1, 
                 usesGroupAgreeInvite = item.usesGroupAgreeInvite
             ).fold(
                 onSuccess = {
+                    Log.d(tag, "✅ 已通过申请 requestId=${item.requestId}，重新拉取列表")
+                    applyProcessedResult(item.requestId, agree = 1)
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                     loadFriendRequestList()
                 },
-                onFailure = {
+                onFailure = { e ->
+                    Log.e(tag, "❌ 通过申请失败 requestId=${item.requestId}: ${e.message}", e)
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                 }
             )
@@ -327,16 +410,23 @@ class ContactsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(friendRequestProcessing = true)
+            Log.d(
+                tag,
+                "📤 处理申请：requestId=${item.requestId}, agree=2, groupInvite=${item.usesGroupAgreeInvite}"
+            )
             friendRepository.agreeApply(
                 id = item.requestId, 
                 agree = 2,
                 usesGroupAgreeInvite = item.usesGroupAgreeInvite
             ).fold(
                 onSuccess = {
+                    Log.d(tag, "✅ 已拒绝申请 requestId=${item.requestId}，重新拉取列表")
+                    applyProcessedResult(item.requestId, agree = 2)
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                     loadFriendRequestList()
                 },
-                onFailure = {
+                onFailure = { e ->
+                    Log.e(tag, "❌ 拒绝申请失败 requestId=${item.requestId}: ${e.message}", e)
                     _uiState.value = _uiState.value.copy(friendRequestProcessing = false)
                 }
             )

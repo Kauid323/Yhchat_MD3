@@ -38,8 +38,11 @@ import com.yhchat.canary.proto.chat_ws_go.stream_message
 import com.yhchat.canary.ui.chat.ChatActivity
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.*
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -97,6 +100,20 @@ class WebSocketService @Inject constructor(
         extraBufferCapacity = 100
     )
     val draftUpdates: SharedFlow<DraftUpdate> = _draftUpdates.asSharedFlow()
+
+    // 申请/邀请红点 - WS 收到 invite_apply 时点亮，进入通讯录时由界面清除
+    private val _inviteApplyUnread = MutableStateFlow(false)
+    val inviteApplyUnread: StateFlow<Boolean> = _inviteApplyUnread.asStateFlow()
+
+    /**
+     * 清除申请/邀请红点（点击通讯录导航图标时调用）
+     */
+    fun clearInviteApplyUnread() {
+        if (_inviteApplyUnread.value) {
+            Log.d(tag, "🔕 清除申请/邀请红点")
+            _inviteApplyUnread.value = false
+        }
+    }
     
     // 黑名单仓库
     private val blocklistRepository by lazy { com.yhchat.canary.data.repository.BlocklistRepository(context) }
@@ -570,6 +587,14 @@ class WebSocketService @Inject constructor(
                             ))
                         }
                     }
+                }
+                
+                "invite_apply" -> {
+                    // 有人申请/邀请我（好友申请、群聊/机器人邀请）
+                    // 协议里这条推送只有 info.seq / info.cmd，没有申请人信息，所以只点亮红点，
+                    // 真正的数据由通讯录的「申请/邀请列表」重新请求获取
+                    Log.d(tag, "🔔 收到申请/邀请推送 (invite_apply), seq=$seq")
+                    _inviteApplyUnread.value = true
                 }
                 
                 else -> {

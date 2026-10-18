@@ -34,6 +34,7 @@ import coil.Coil
 import coil.ImageLoader
 import coil.request.CachePolicy
 import com.yhchat.canary.data.di.RepositoryFactory
+import com.yhchat.canary.data.websocket.WebSocketService
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.chat.ChatAddActivity
 import com.yhchat.canary.ui.chat.ChatScreen
@@ -62,6 +63,7 @@ import com.yhchat.canary.utils.UnifiedLinkHandler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
+import javax.inject.Inject
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
@@ -75,6 +77,10 @@ import kotlin.toString
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity() {
+    
+    /** WebSocket 服务：用于申请/邀请红点状态 */
+    @Inject
+    lateinit var webSocketService: WebSocketService
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -214,6 +220,12 @@ class MainActivity : BaseActivity() {
         val navigationConfig by navigationRepository.navigationConfig.collectAsStateWithLifecycle()
         val visibleNavItems = navigationConfig.items.filter { it.isVisible }.sortedBy { it.order }
 
+        // 申请/邀请红点：WS 收到 invite_apply 推送时点亮，点击通讯录导航图标后清除
+        val inviteApplyUnread by webSocketService.inviteApplyUnread.collectAsStateWithLifecycle()
+        val navBadgeItemIds = if (inviteApplyUnread) setOf("contacts") else emptySet()
+        // 点击通讯录导航图标时自增，通知通讯录页重新请求「申请/邀请列表」
+        var contactsReloadKey by rememberSaveable { mutableStateOf(0) }
+
         // 同步ViewModel状态到本地状态
         LaunchedEffect(savedToken) {
             savedToken?.let { token = it }
@@ -296,6 +308,15 @@ class MainActivity : BaseActivity() {
                     forceDisableLargeScreenMode = forceDisableLargeScreenMode
                 )
 
+                // 导航项点击：点击通讯录时清除申请红点并让申请列表重新请求
+                val onNavItemClick: (String) -> Unit = { screen ->
+                    if (screen == "contacts") {
+                        webSocketService.clearInviteApplyUnread()
+                        contactsReloadKey++
+                    }
+                    currentScreen = screen
+                }
+
                 if (isLargeScreen) {
                     // 大屏设备：使用Row布局，侧边栏在左边
                     Row(modifier = Modifier.fillMaxSize()) {
@@ -303,10 +324,9 @@ class MainActivity : BaseActivity() {
                         AdaptiveNavigationBar(
                             currentScreen = currentPageItem,
                             visibleItems = visibleNavItems,
-                            onScreenChange = { screen ->
-                                currentScreen = screen
-                            },
-                            isVisible = true
+                            onScreenChange = onNavItemClick,
+                            isVisible = true,
+                            badgeItemIds = navBadgeItemIds
                         )
                         
                         // 主内容区域
@@ -681,7 +701,8 @@ class MainActivity : BaseActivity() {
                                         }
                                         "contacts" -> {
                                             ContactsScreen(
-                                                navigationState = navigationState
+                                                navigationState = navigationState,
+                                                reloadKey = contactsReloadKey
                                             )
                                         }
                                         "discover" -> {
@@ -799,7 +820,8 @@ class MainActivity : BaseActivity() {
                                             }
                                             "contacts" -> {
                                                 ContactsScreen(
-                                                    navigationState = navigationState
+                                                    navigationState = navigationState,
+                                                    reloadKey = contactsReloadKey
                                                 )
                                             }
                                             "discover" -> {
@@ -861,10 +883,9 @@ class MainActivity : BaseActivity() {
                         AdaptiveNavigationBar(
                             currentScreen = currentPageItem,
                             visibleItems = visibleNavItems,
-                            onScreenChange = { screen ->
-                                currentScreen = screen
-                            },
+                            onScreenChange = onNavItemClick,
                             isVisible = navigationState.isVisible,
+                            badgeItemIds = navBadgeItemIds,
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }

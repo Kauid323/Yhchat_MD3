@@ -10,7 +10,9 @@ import com.yhchat.canary.proto.user.address_book_list
 import com.yhchat.canary.proto.user.address_book_list_send
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import retrofit2.Response
 import javax.inject.Inject
 
 /**
@@ -44,6 +46,35 @@ class FriendRepository @Inject constructor(
             Log.e(tag, "❌ [$api] $detail")
         }
     }
+
+    /** protobuf 之类的二进制内容用十六进制看 */
+    private fun bytePreview(bytes: ByteArray, limit: Int = 256): String {
+        if (bytes.isEmpty()) return "(空)"
+        val head = if (bytes.size > limit) bytes.copyOf(limit) else bytes
+        val hex = head.joinToString(" ") { "%02X".format(it) }
+        val suffix = if (bytes.size > limit) " …(共 ${bytes.size} bytes)" else ""
+        return "$hex$suffix"
+    }
+
+    /** 顺带给出可读片段，方便一眼看出是不是 JSON / 错误页 */
+    private fun asciiPreview(bytes: ByteArray, limit: Int = 200): String {
+        if (bytes.isEmpty()) return "(空)"
+        return bytes.copyOf(minOf(bytes.size, limit)).joinToString("") { byte ->
+            val c = byte.toInt().toChar()
+            if (c.code in 32..126) c.toString() else "."
+        }
+    }
+
+    /** 请求头（token 只留前 6 位） */
+    private fun requestHeaders(request: Request): String =
+        request.headers.names().joinToString(", ") { name ->
+            val value = request.header(name).orEmpty()
+            if (name.equals("token", ignoreCase = true)) "$name=${maskToken(value)}" else "$name=$value"
+        }
+
+    /** 响应头 */
+    private fun responseHeaders(response: Response<*>): String =
+        response.headers().names().joinToString(", ") { name -> "$name=${response.headers()[name]}" }
 
     /**
      * 申请添加好友/群聊/机器人
@@ -79,6 +110,7 @@ class FriendRepository @Inject constructor(
      * 获取所有聊天对象（通讯录）
      */
     suspend fun getAddressBookList(): Result<address_book_list> {
+        val startedAt = System.currentTimeMillis()
         return try {
             val tokenFlow = tokenRepository.getToken()
             val token = tokenFlow.first()?.token
@@ -105,14 +137,29 @@ class FriendRepository @Inject constructor(
             
             logResponse(
                 "getAddressBookList",
-                "HTTP ${response.code()}, message=${response.message()}, contentType=${response.headers()["Content-Type"]}"
+                "HTTP ${response.code()} ${response.message()} (${System.currentTimeMillis() - startedAt}ms), " +
+                    "url=${response.raw().request.url}, " +
+                    "reqHeaders=[${requestHeaders(response.raw().request)}], " +
+                    "respHeaders=[${responseHeaders(response)}]"
             )
             
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
-                    logResponse("getAddressBookList", "响应体 ${bytes.size} bytes")
-                    val addressBook = address_book_list.parseFrom(bytes)
+                    logResponse(
+                        "getAddressBookList",
+                        "响应体 ${bytes.size} bytes, hex=${bytePreview(bytes)}, ascii=${asciiPreview(bytes)}"
+                    )
+                    val addressBook = try {
+                        address_book_list.parseFrom(bytes)
+                    } catch (e: Exception) {
+                        logFailure(
+                            "getAddressBookList",
+                            "protobuf 解析失败，原始字节 hex=${bytePreview(bytes)}",
+                            e
+                        )
+                        return Result.failure(Exception("解析失败: ${e.message}"))
+                    }
                     
                     Log.d(tag, "📥 响应状态码: ${addressBook.status.code}")
                     Log.d(tag, "📥 响应消息: ${addressBook.status.msg}")
@@ -149,49 +196,86 @@ class FriendRepository @Inject constructor(
     }
 
     suspend fun getFriendRequestList(): Result<request_list> {
+        val api = "getFriendRequestList"
+        val startedAt = System.currentTimeMillis()
         return try {
             val token = tokenRepository.getToken().first()?.token
             if (token.isNullOrEmpty()) {
-                logFailure("getFriendRequestList", "Token 为空，终止请求")
+                logFailure(api, "Token 为空，终止请求")
                 return Result.failure(Exception("用户未登录"))
             }
 
-            val requestBody = ByteArray(0).toRequestBody("application/x-protobuf".toMediaType())
+            val requestBytes = ByteArray(0)
+            val requestBody = requestBytes.toRequestBody("application/x-protobuf".toMediaType())
             logRequest(
-                "getFriendRequestList",
-                "token=${maskToken(token)}, contentType=application/x-protobuf, bytes=${requestBody.contentLength()}"
+                api,
+                "POST v1/friend/request-list, token=${maskToken(token)}, " +
+                    "contentType=${requestBody.contentType()}, bytes=${requestBody.contentLength()}, " +
+                    "body=${bytePreview(requestBytes)}"
             )
+
             val response = apiService.getFriendRequestList(token, requestBody)
-            logResponse("getFriendRequestList", "HTTP ${response.code()}, message=${response.message()}")
+            logResponse(
+                api,
+                "HTTP ${response.code()} ${response.message()} (${System.currentTimeMillis() - startedAt}ms), " +
+                    "url=${response.raw().request.url}, " +
+                    "reqHeaders=[${requestHeaders(response.raw().request)}], " +
+                    "respHeaders=[${responseHeaders(response)}]"
+            )
 
             if (response.isSuccessful) {
                 response.body()?.let { responseBody ->
                     val bytes = responseBody.bytes()
-                    logResponse("getFriendRequestList", "响应体 ${bytes.size} bytes")
-                    val data = request_list.parseFrom(bytes)
+                    logResponse(
+                        api,
+                        "响应体 ${bytes.size} bytes, hex=${bytePreview(bytes)}, ascii=${asciiPreview(bytes)}"
+                    )
+
+                    if (bytes.isEmpty()) {
+                        logFailure(api, "HTTP ${response.code()} 但响应体是 0 bytes")
+                        return Result.failure(Exception("响应体为空"))
+                    }
+
+                    val data = try {
+                        request_list.parseFrom(bytes)
+                    } catch (e: Exception) {
+                        logFailure(api, "protobuf 解析失败，原始字节 hex=${bytePreview(bytes)}", e)
+                        return Result.failure(Exception("解析失败: ${e.message}"))
+                    }
+
                     Log.d(
                         tag,
-                        "📥 请求/邀请: status=${data.status.code}, msg=${data.status.msg}, total=${data.total}, pending=${data.pending}, count=${data.requestsCount}"
+                        "📥 [$api] 解析结果: status=${data.status.code}, msg=${data.status.msg}, " +
+                            "total=${data.total}, pending=${data.pending}, count=${data.requestsCount}"
                     )
+                    data.requestsList.forEachIndexed { index, item ->
+                        Log.d(
+                            tag,
+                            "📥 [$api] 申请[$index]: requestId=${item.requestId}, name=${item.name}, " +
+                                "groupName=${item.groupName}, botName=${item.botName}, " +
+                                "sourceType=${item.sourceType}, targetType=${item.targetType}, result=${item.result}"
+                        )
+                    }
+
                     if (data.status.code == 1) {
                         Result.success(data)
                     } else {
-                        logFailure("getFriendRequestList", "业务失败: ${data.status.msg}")
+                        logFailure(api, "业务失败: ${data.status.msg}")
                         Result.failure(Exception(data.status.msg))
                     }
                 } ?: run {
-                    logFailure("getFriendRequestList", "HTTP ${response.code()} 但响应体为空")
+                    logFailure(api, "HTTP ${response.code()} 但响应体为 null")
                     Result.failure(Exception("响应体为空"))
                 }
             } else {
                 logFailure(
-                    "getFriendRequestList",
+                    api,
                     "HTTP错误: ${response.code()}, 错误详情: ${response.errorBody()?.string()}"
                 )
                 Result.failure(Exception("获取失败: ${response.code()}"))
             }
         } catch (e: Exception) {
-            logFailure("getFriendRequestList", "获取请求列表异常", e)
+            logFailure(api, "请求异常（${System.currentTimeMillis() - startedAt}ms）", e)
             Result.failure(e)
         }
     }
@@ -201,6 +285,7 @@ class FriendRepository @Inject constructor(
         agree: Int = 1,
         usesGroupAgreeInvite: Boolean = false
     ): Result<BaseResponse> {
+        val startedAt = System.currentTimeMillis()
         return try {
             val token = tokenRepository.getToken().first()?.token
             if (token.isNullOrEmpty()) {
@@ -210,13 +295,23 @@ class FriendRepository @Inject constructor(
 
             val api = if (usesGroupAgreeInvite) "agreeInvite" else "agreeApply"
             val request = AgreeApplyRequest(id = id, agree = agree)
-            logRequest(api, "token=${maskToken(token)}, id=$id, agree=$agree, body=$request")
+            logRequest(
+                api,
+                "POST ${if (usesGroupAgreeInvite) "v1/group/agree-invite" else "v1/friend/agree-apply"}, " +
+                    "token=${maskToken(token)}, id=$id, agree=$agree, body=$request"
+            )
             val response = if (usesGroupAgreeInvite) {
                 apiService.agreeInvite(token, request)
             } else {
                 apiService.agreeApply(token, request)
             }
-            logResponse(api, "HTTP ${response.code()}, body=${response.body()}")
+            logResponse(
+                api,
+                "HTTP ${response.code()} ${response.message()} (${System.currentTimeMillis() - startedAt}ms), " +
+                    "url=${response.raw().request.url}, " +
+                    "reqHeaders=[${requestHeaders(response.raw().request)}], " +
+                    "body=${response.body()}"
+            )
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null && body.code == 1) {

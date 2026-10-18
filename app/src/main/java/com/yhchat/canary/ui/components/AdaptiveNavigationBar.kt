@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -30,6 +32,8 @@ import com.yhchat.canary.data.model.NavigationItem
  * - 小屏设备显示底部导航栏（NavigationBar）
  * - 支持滚动时自动隐藏
  * - Material Design 3 风格
+ *
+ * @param badgeItemIds 需要在图标右上角显示红点的导航项 id 集合
  */
 @Composable
 fun AdaptiveNavigationBar(
@@ -37,7 +41,8 @@ fun AdaptiveNavigationBar(
     visibleItems: List<NavigationItem>,
     onScreenChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    badgeItemIds: Set<String> = emptySet()
 ) {
     val configuration = LocalConfiguration.current
     val forceDisableLargeScreenMode by rememberBooleanPreference(
@@ -56,7 +61,8 @@ fun AdaptiveNavigationBar(
             currentScreen = currentScreen,
             visibleItems = visibleItems,
             onScreenChange = onScreenChange,
-            modifier = modifier
+            modifier = modifier,
+            badgeItemIds = badgeItemIds
         )
     } else {
         // 底部导航栏 - 手机模式，支持自动隐藏
@@ -65,8 +71,26 @@ fun AdaptiveNavigationBar(
             visibleItems = visibleItems,
             onScreenChange = onScreenChange,
             modifier = modifier,
-            isVisible = isVisible
+            isVisible = isVisible,
+            badgeItemIds = badgeItemIds
         )
+    }
+}
+
+/**
+ * 导航项图标，[hasBadge] 为 true 时在右上角叠一个红点
+ */
+@Composable
+private fun NavItemIcon(
+    item: NavigationItem,
+    hasBadge: Boolean
+) {
+    if (hasBadge) {
+        BadgedBox(badge = { Badge() }) {
+            Icon(item.getIcon(), contentDescription = item.title)
+        }
+    } else {
+        Icon(item.getIcon(), contentDescription = item.title)
     }
 }
 
@@ -78,7 +102,8 @@ private fun NavigationRailBar(
     currentScreen: String,
     visibleItems: List<NavigationItem>,
     onScreenChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    badgeItemIds: Set<String> = emptySet()
 ) {
     NavigationRail(
         modifier = modifier
@@ -88,7 +113,7 @@ private fun NavigationRailBar(
         
         visibleItems.forEach { item ->
             NavigationRailItem(
-                icon = { Icon(item.getIcon(), contentDescription = item.title) },
+                icon = { NavItemIcon(item, item.id in badgeItemIds) },
                 label = { Text(item.title) },
                 selected = currentScreen == item.id,
                 onClick = {
@@ -113,7 +138,8 @@ private fun AnimatedBottomNavigationBar(
     visibleItems: List<NavigationItem>,
     onScreenChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    badgeItemIds: Set<String> = emptySet()
 ) {
     // 使用Material风格的tween动画，模拟LibChecker的HideBottomViewOnScrollBehavior
     // LinearOutSlowInEasing = 缓出效果，更有缓冲感
@@ -131,7 +157,7 @@ private fun AnimatedBottomNavigationBar(
     ) {
         visibleItems.forEach { item ->
             NavigationBarItem(
-                icon = { Icon(item.getIcon(), contentDescription = item.title) },
+                icon = { NavItemIcon(item, item.id in badgeItemIds) },
                 label = { Text(item.title) },
                 selected = currentScreen == item.id,
                 onClick = {
