@@ -15,9 +15,12 @@ import com.yhchat.canary.data.repository.SendMessageMedia
 import com.yhchat.canary.data.repository.SendMessagePayload
 import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.ui.share.SendToChatContent
+import com.yhchat.canary.ui.share.SendToChatMediaItem
+import com.yhchat.canary.ui.share.SendToChatMediaKind
 import com.yhchat.canary.ui.share.SendToChatTarget
 import com.yhchat.canary.utils.FileUploadUtil
 import com.yhchat.canary.utils.ImageUploadUtil
+import com.yhchat.canary.utils.VideoUploadUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -37,9 +40,9 @@ data class SendToChatProgress(
 )
 
 /**
- * 「发送到会话」的发送逻辑：文本 / 图片 / 附件 / 文章 / 转发消息。
+ * 「发送到会话」的发送逻辑：文本 / 图片 / 视频 / 附件 / 文章 / 转发消息。
  *
- * 图片和附件会先上传到七牛（和聊天页发送附件用的是同一套工具），
+ * 图片、视频、附件会先上传到七牛（和聊天页发送时用的是同一套工具），
  * 上传完成后才发消息，所以进度可以在界面上显示。
  */
 @HiltViewModel
@@ -89,8 +92,7 @@ class SendToChatViewModel @Inject constructor(
         when (content) {
             is SendToChatContent.Text -> sendText(content.text, targets)
             is SendToChatContent.Post -> sendPost(content, targets)
-            is SendToChatContent.Images -> sendImages(content.uris, targets)
-            is SendToChatContent.Files -> sendFiles(content.uris, targets)
+            is SendToChatContent.Media -> sendMedia(content.items, targets)
             is SendToChatContent.ForwardMessage -> forwardMessages(content, targets)
         }
     }
@@ -134,31 +136,90 @@ class SendToChatViewModel @Inject constructor(
         }
     }
 
-    // ==================== 图片 ====================
+    // ==================== 图片 / 视频 / 附件 ====================
 
-    private suspend fun sendImages(uris: List<String>, targets: List<SendToChatTarget>) {
-        if (uris.isEmpty()) throw IllegalStateException("没有可发送的图片")
+    /**
+     * 逐条上传并发送。每条按自己的类型发：图片→图片消息，视频→视频消息，其余→附件消息。
+     */
+    private suspend fun sendMedia(items: List<SendToChatMediaItem>, targets: List<SendToChatTarget>) {
+        if (items.isEmpty()) throw IllegalStateException("没有可发送的内容")
 
-        uris.forEachIndexed { index, raw ->
-            val uri = raw.toShareUri()
-            setStatus(if (uris.size > 1) "正在上传图片 ${index + 1}/${uris.size}…" else "正在上传图片…")
+        items.forEachIndexed { index, item ->
+            val uri = item.uri.toShareUri()
+            val label = item.kind.label()
+            setStatus(
+                if (items.size > 1) "正在上传${label} ${index + 1}/${items.size}…" else "正在上传${label}…"
+            )
 
-            val uploadToken = getUploadToken("图片") { apiService.getQiniuImageToken(it) }
-            val uploaded = ImageUploadUtil.uploadImage(
-                context = context,
-                imageUri = uri,
-                uploadToken = uploadToken,
-                onProgress = { updateProgress(it) }
-            ).getOrElse { throw IllegalStateException("上传图片失败: ${it.message}") }
+            when (item.kind) {
+                SendToChatMediaKind.IMAGE -> {
+                    val uploadToken = getUploadToken("图片") { apiService.getQiniuImageToken(it) }
+                    val uploaded = ImageUploadUtil.uploadImage(
+                        context = context,
+                        imageUri = uri,
+                        uploadToken = uploadToken,
+                        onProgress = { updateProgress(it) }
+                    ).getOrElse { throw IllegalStateException("上传图片失败: ${it.message}") }
 
-            sendToAll("图片", targets) { target ->
-                messageRepository.sendMessage(
-                    chatId = target.chatId,
-                    chatType = target.chatType,
-                    payload = imagePayload(uploaded)
-                )
+                    sendToAll("图片", targets) { target ->
+                        messageRepository.sendMessage(
+                            chatId = target.chatId,
+                            chatType = target.chatType,
+                            payload = imagePayload(uploaded)
+                        )
+                    }
+                }
+
+                SendToChatMediaKind.VIDEO -> {
+                    val uploadToken = getUploadToken("视频") { apiService.getQiniuVideoToken(it) }
+                    val uploaded = VideoUploadUtil.uploadVideo(
+                        context = context,
+                        videoUri = uri,
+                        uploadToken = uploadToken,
+                        onProgress = { updateProgress(it) }
+                    ).getOrElse { throw IllegalStateException("上传视频失败: ${it.message}") }
+
+                    sendToAll("视频", targets) { target ->
+                        messageRepository.sendMessage(
+                            chatId = target.chatId,
+                            chatType = target.chatType,
+                            payload = videoPayload(uploaded, item.mimeType)
+                        )
+                    }
+                }
+
+                SendToChatMediaKind.FILE -> {
+                    val uploadToken = getUploadToken("文件") { apiService.getQiniuFileToken(it) }
+                    val uploaded = FileUploadUtil.uploadFile(
+                        context = context,
+                        fileUri = uri,
+                        uploadToken = uploadToken,
+                        onProgress = { updateProgress(it) }
+                    ).getOrElse { throw IllegalStateException("上传附件失败: ${it.message}") }
+
+                    val fileName = queryDisplayName(uri)
+
+                    sendToAll("附件", targets) { target ->
+                        messageRepository.sendMessage(
+                            chatId = target.chatId,
+                            chatType = target.chatType,
+                            payload = SendMessagePayload(
+                                contentType = CONTENT_TYPE_FILE,
+                                fileName = fileName,
+                                fileKey = uploaded.key,
+                                fileSize = uploaded.fsize
+                            )
+                        )
+                    }
+                }
             }
         }
+    }
+
+    private fun SendToChatMediaKind.label(): String = when (this) {
+        SendToChatMediaKind.IMAGE -> "图片"
+        SendToChatMediaKind.VIDEO -> "视频"
+        SendToChatMediaKind.FILE -> "附件"
     }
 
     private fun imagePayload(uploaded: QiniuUploadResponse): SendMessagePayload {
@@ -187,38 +248,24 @@ class SendToChatViewModel @Inject constructor(
         )
     }
 
-    // ==================== 附件 ====================
+    private fun videoPayload(
+        uploaded: QiniuUploadResponse,
+        mimeType: String?
+    ): SendMessagePayload {
+        val suffix = uploaded.key.substringAfterLast('.', "mp4").lowercase()
+        val fileType = mimeType?.takeIf { it.startsWith("video/") } ?: "video/mp4"
 
-    private suspend fun sendFiles(uris: List<String>, targets: List<SendToChatTarget>) {
-        if (uris.isEmpty()) throw IllegalStateException("没有可发送的附件")
-
-        uris.forEachIndexed { index, raw ->
-            val uri = raw.toShareUri()
-            setStatus(if (uris.size > 1) "正在上传附件 ${index + 1}/${uris.size}…" else "正在上传附件…")
-
-            val uploadToken = getUploadToken("文件") { apiService.getQiniuFileToken(it) }
-            val uploaded = FileUploadUtil.uploadFile(
-                context = context,
-                fileUri = uri,
-                uploadToken = uploadToken,
-                onProgress = { updateProgress(it) }
-            ).getOrElse { throw IllegalStateException("上传附件失败: ${it.message}") }
-
-            val fileName = queryDisplayName(uri)
-
-            sendToAll("附件", targets) { target ->
-                messageRepository.sendMessage(
-                    chatId = target.chatId,
-                    chatType = target.chatType,
-                    payload = SendMessagePayload(
-                        contentType = CONTENT_TYPE_FILE,
-                        fileName = fileName,
-                        fileKey = uploaded.key,
-                        fileSize = uploaded.fsize
-                    )
-                )
-            }
-        }
+        return SendMessagePayload(
+            contentType = CONTENT_TYPE_VIDEO,
+            videoKey = uploaded.key,
+            media = SendMessageMedia(
+                fileKey = uploaded.key,
+                fileType = fileType,
+                fileHash = uploaded.hash,
+                fileSize = uploaded.fsize,
+                fileSuffix = suffix
+            )
+        )
     }
 
     // ==================== 转发消息 ====================
@@ -316,5 +363,6 @@ class SendToChatViewModel @Inject constructor(
         const val CONTENT_TYPE_IMAGE = 2
         const val CONTENT_TYPE_FILE = 4
         const val CONTENT_TYPE_POST = 6
+        const val CONTENT_TYPE_VIDEO = 10
     }
 }

@@ -82,7 +82,7 @@ private val SEND_TABS = listOf("好友", "群聊", "机器人")
 /**
  * 「选择会话并发送」界面。
  *
- * 文本 / 图片 / 附件 / 文章 / 转发消息 都走这个 Activity，
+ * 文本 / 图片 / 视频 / 附件 / 文章 / 转发消息 都走这个 Activity，
  * 不再用 bottom sheet。调用方式见 [SendToChatActivity.start]。
  */
 @AndroidEntryPoint
@@ -94,8 +94,9 @@ class SendToChatActivity : BaseActivity() {
          *
          * ```
          * SendToChatActivity.start(context, SendToChatContent.Text("你好"))
-         * SendToChatActivity.start(context, SendToChatContent.Images(listOf(uri.toString())))
-         * SendToChatActivity.start(context, SendToChatContent.Files(listOf(uri.toString())))
+         * SendToChatActivity.start(context, SendToChatContent.images(listOf(uri.toString())))
+         * SendToChatActivity.start(context, SendToChatContent.videos(listOf(uri.toString())))
+         * SendToChatActivity.start(context, SendToChatContent.files(listOf(uri.toString())))
          * ```
          *
          * @param title 顶栏标题，默认「发送至」；转发场景可以传「转发至」
@@ -117,7 +118,7 @@ class SendToChatActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val content = SendToChatContent.fromIntent(intent)
+        val content = SendToChatContent.fromIntent(intent, contentResolver)
         if (content == null) {
             Toast.makeText(this, "没有可发送的内容", Toast.LENGTH_SHORT).show()
             finish()
