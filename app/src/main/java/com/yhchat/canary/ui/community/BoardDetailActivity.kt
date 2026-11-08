@@ -52,6 +52,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -871,8 +872,9 @@ private fun BoardBarTitle(
     boardAvatar: String?,
     onBoardClick: () -> Unit
 ) {
-    val avatarDock = rememberScrollProgress(BoardAvatarAnchor)
-    val nameDock = rememberScrollProgress(BoardNameAnchor)
+    // 锚点 key 用 Any 存，避免 rememberScrollProgress 的重载被解析到 away: Dp 那个版本
+    val avatarDock = rememberScrollProgress(BoardAvatarAnchor as Any)
+    val nameDock = rememberScrollProgress(BoardNameAnchor as Any)
     val openDetail = Modifier.clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,

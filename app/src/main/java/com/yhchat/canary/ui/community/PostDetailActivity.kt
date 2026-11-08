@@ -117,6 +117,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -147,6 +148,7 @@ import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MarkdownText
 import com.yhchat.canary.ui.share.SendToChatActivity
 import com.yhchat.canary.ui.share.SendToChatContent
+import com.yhchat.canary.ui.components.LocalPageScroll
 import com.yhchat.canary.ui.components.pageScroll
 import com.yhchat.canary.ui.components.rememberPageScrollState
 import com.yhchat.canary.ui.components.rememberScrollProgress
@@ -748,6 +750,7 @@ fun CommentItem(
     val context = LocalContext.current
     val rule = floorRuleColor()
     val replies = comment.replies.orEmpty()
+    val density = LocalDensity.current
 
     // 整层（楼层 + 回复）自己的布局坐标，回复靠它换算「我相对这层顶部有多高」
     var floorCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -999,8 +1002,9 @@ fun CommentItem(
                     onPlaced = { replyCoords ->
                         val floor = floorCoords
                         if (floor != null && floor.isAttached && replyCoords.isAttached) {
-                            val y = floor.localPositionOf(replyCoords, Offset.Zero).y +
-                                with(replyCoords.density) { ReplyAvatarCenter.toPx() }
+                            // LayoutCoordinates 本身不带 density，用 Item 里取好的那个换算 dp→px
+                            val avatarCenterPx = with(density) { ReplyAvatarCenter.toPx() }
+                            val y = floor.localPositionOf(replyCoords, Offset.Zero).y + avatarCenterPx
                             if (branchYs[reply.id] != y) branchYs[reply.id] = y
                         }
                     }
@@ -1723,7 +1727,7 @@ private fun PostDetailTopBar(
         val statusTop = statusBar.getTop(this)
         val hidden = ((foreground.height - statusTop) * hiddenFraction()).toInt()
         val background = measurables.first { it.layoutId == DetailBarLayer.Background }
-            .measure(Constraints.fixed(foreground.width, foreground.height + BoardBarEdgeExtend.roundToPx()))
+            .measure(Constraints.fixed(foreground.width, foreground.height + DetailBarEdgeExtend.roundToPx()))
 
         layout(foreground.width, foreground.height) {
             background.place(0, 0)
@@ -1739,6 +1743,9 @@ private enum class DetailBarLayer { Background, Foreground }
 
 /** 详情页顶栏行高 —— 跟分区页保持一致，收起距离才对得上。 */
 private val DetailBarRowHeight = 56.dp
+
+/** 玻璃往下伸出顶栏多少，让雾在硬边之前就开始。 */
+private val DetailBarEdgeExtend = 12.dp
 
 /**
  * 详情页顶栏的玻璃底：从上往下淡出到透明。
