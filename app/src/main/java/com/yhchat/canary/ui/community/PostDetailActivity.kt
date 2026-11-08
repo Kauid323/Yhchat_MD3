@@ -122,6 +122,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -1855,6 +1856,21 @@ fun PostDetailScreen(
     
     // 顶栏已改成三件式悬浮块，没有可折叠的 TopAppBar，也就不需要 scrollBehavior：
     // 留着一个没绑定控件的 nestedScroll 反而会吞掉列表的滑动事件。
+
+    // 「只看楼主」：只留楼主（这篇的作者）本人的评论。
+    // 楼层号按原始顺序算，过滤后不重新编号，看起来仍是 1L、5L、17L 这样跳着走。
+    val visibleComments = remember(commentListState.comments, filterLzOnly, postDetailState.post?.senderId) {
+        val all = commentListState.comments
+        val lzId = postDetailState.post?.senderId
+        if (!filterLzOnly || lzId.isNullOrEmpty()) all
+        else all.filter { it.senderId == lzId }
+    }
+
+    // 每条例子的原始楼层（在全部评论里的下标 + 1），过滤后仍用这个号
+    val floorIndexOf = remember(commentListState.comments) {
+        commentListState.comments.mapIndexed { index, c -> c.id to index + 1 }.toMap()
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -2088,14 +2104,6 @@ fun PostDetailScreen(
                             // 「只看楼主」时只留楼主本人的评论。楼主就是这篇的作者，
                             // 楼层号在所有评论里的原始位置不变（第几条就是几楼），
                             // 所以过滤后不会重新编号，看起来仍是 1L、5L、17L 这样跳着走。
-                            val visibleComments = remember(commentListState.comments, filterLzOnly, post.senderId) {
-                                if (!filterLzOnly) {
-                                    commentListState.comments
-                                } else {
-                                    commentListState.comments.filter { it.senderId == post.senderId }
-                                }
-                            }
-
                             item(key = "comment_header") {
                                 CommentSectionHeader(
                                     total = if (commentListState.total > 0) {
@@ -2141,9 +2149,8 @@ fun PostDetailScreen(
                             ) { index, comment ->
                                 CommentItem(
                                     comment = comment,
-                                    // 楼层 = 它在全部评论里的位置 + 1，过滤时也保持原楼号
-                                    floor = commentListState.comments.indexOfFirst { it.id == comment.id }
-                                        .let { if (it >= 0) it + 1 else index + 1 },
+                                    // 楼层 = 它在全部评论里的原始位置 + 1，过滤时也保持原楼号
+                                    floor = floorIndexOf[comment.id] ?: (index + 1),
                                     // 第一层的竖线从头像中心开始，后面的层从顶部接上
                                     startsRule = index == 0,
                                     isLz = comment.senderId == post.senderId,
