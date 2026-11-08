@@ -54,7 +54,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -196,8 +198,14 @@ fun CreatePostScreen(
     modifier: Modifier = Modifier
 ) {
     var title by remember { mutableStateOf(draftTitle) }
-    var content by remember { mutableStateOf(draftContent) }
+    // 正文用 TextFieldValue 而不是 String：Markdown 工具栏要往光标位置插符号，
+    // 纯 String 拿不到 selection，只能追加到末尾，那样工具栏基本没法用。
+    var content by remember { mutableStateOf(TextFieldValue(draftContent)) }
     var isMarkdownMode by remember { mutableStateOf(draftMarkdownMode) }
+
+    // 输入框是否已获得焦点。Markdown 工具栏只在编辑正文时贴在框上面，
+    // 没聚焦时它不该占着屏幕。
+    var contentFocused by remember { mutableStateOf(false) }
     
     val createPostState by viewModel.createPostState.collectAsState()
     val draftSaveState by draftViewModel.draftSaveState.collectAsState()
@@ -231,7 +239,7 @@ fun CreatePostScreen(
     
     // 处理返回按键
     BackHandler {
-        if (title.isNotBlank() || content.isNotBlank()) {
+        if (title.isNotBlank() || content.text.isNotBlank()) {
             showExitDialog = true
         } else {
             onBackClick()
@@ -254,7 +262,7 @@ fun CreatePostScreen(
             },
             navigationIcon = {
                 IconButton(onClick = {
-                    if (title.isNotBlank() || content.isNotBlank()) {
+                    if (title.isNotBlank() || content.text.isNotBlank()) {
                         showExitDialog = true
                     } else {
                         onBackClick()
@@ -291,17 +299,17 @@ fun CreatePostScreen(
                 // 发布按钮
                 IconButton(
                     onClick = {
-                        if (title.isNotBlank() && content.isNotBlank()) {
+                        if (title.isNotBlank() && content.text.isNotBlank()) {
                             viewModel.createPost(
                                 token = token,
                                 boardId = boardId,
                                 title = title.trim(),
-                                content = content.trim(),
+                                content = content.text.trim(),
                                 contentType = if (isMarkdownMode) 2 else 1
                             )
                         }
                     },
-                    enabled = title.isNotBlank() && content.isNotBlank() && !createPostState.isLoading
+                    enabled = title.isNotBlank() && content.text.isNotBlank() && !createPostState.isLoading
                 ) {
                     if (createPostState.isLoading) {
                         CircularProgressIndicator(
@@ -389,26 +397,38 @@ fun CreatePostScreen(
             }
 
             item {
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = {
-                        Text(if (isMarkdownMode) "文章内容 (Markdown)" else "文章内容")
-                    },
-                    placeholder = {
-                        Text(
-                            if (isMarkdownMode)
-                                "支持Markdown语法，如：\n# 标题\n**粗体**\n*斜体*\n- 列表"
-                            else
-                                "请输入文章内容.."
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillParentMaxHeight()
-                        .heightIn(min = 320.dp),
-                    minLines = 12
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Markdown 工具条贴在输入框正上方，只在 Markdown 模式且正在编辑时出现。
+                    // 放在输入框之前而不是之后：键盘顶起来时它正好在框的上沿，
+                    // 手指够得到，也不会挡住正文。
+                    MarkdownToolbar(
+                        value = content,
+                        onValueChange = { content = it },
+                        visible = isMarkdownMode && contentFocused
+                    )
+
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = {
+                            Text(if (isMarkdownMode) "文章内容 (Markdown)" else "文章内容")
+                        },
+                        placeholder = {
+                            Text(
+                                if (isMarkdownMode)
+                                    "支持Markdown语法，如：\n# 标题\n**粗体**\n*斜体*\n- 列表"
+                                else
+                                    "请输入文章内容.."
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillParentMaxHeight()
+                            .heightIn(min = 320.dp)
+                            .onFocusChanged { contentFocused = it.isFocused },
+                        minLines = 12
+                    )
+                }
             }
 
             if (isMarkdownMode) {
@@ -455,14 +475,14 @@ fun CreatePostScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (!draftSaveState.isSaving && (title.isNotBlank() || content.isNotBlank())) {
+                        if (!draftSaveState.isSaving && (title.isNotBlank() || content.text.isNotBlank())) {
                             pendingExitAfterDraftSave = true
                             draftViewModel.saveDraft(
                                 token = token,
                                 boardId = boardId,
                                 boardName = boardName,
                                 title = title.trim(),
-                                content = content.trim(),
+                                content = content.text.trim(),
                                 contentType = if (isMarkdownMode) 2 else 1,
                                 draftId = draftId
                             )

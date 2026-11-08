@@ -166,7 +166,20 @@ fun SettingsScreen(
     // 首页列表状态。搜索结果点「首页条目」时要靠它滚过去
     val listState = rememberLazyListState()
 
-    Scaffold(
+    // 搜索跳转后要闪一下的那一行的标题。null 表示没有
+    var highlightTitle by remember { mutableStateOf<String?>(null) }
+
+    // 跳过去之后把高亮清掉。不清的话那行会一直带着底色，
+    // 看起来像「选中」而不是「刚跳到这儿」。
+    LaunchedEffect(highlightTitle) {
+        if (highlightTitle != null) {
+            kotlinx.coroutines.delay(SettingsHighlightDurationMillis)
+            highlightTitle = null
+        }
+    }
+
+    CompositionLocalProvider(LocalSettingsHighlightTitle provides highlightTitle) {
+        Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
@@ -527,6 +540,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
+        }
     }
 
     // 设置搜索面板。query 非 null 时显示；点结果后关掉并跳转
@@ -549,6 +563,9 @@ fun SettingsScreen(
                         SettingsSection.itemIndex(key)?.let { index ->
                             coroutineScope.launch {
                                 listState.animateScrollToItem(index)
+                                // 滚动结束后再设高亮，让底色跟落点一起出现；
+                                // 提前设会在还在滚动时就亮起来，看着对不上
+                                highlightTitle = entry.title
                             }
                         }
                     }
@@ -2246,6 +2263,8 @@ fun SettingsItemCell(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 搜索跳过来时闪一下。用 CompositionLocal 判断，不用给几十个调用点加参数
+            .settingsSearchHighlight(title)
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2304,6 +2323,7 @@ fun SettingsSwitchItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .settingsSearchHighlight(title)
             .clickable { onCheckedChange(!checked) }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically

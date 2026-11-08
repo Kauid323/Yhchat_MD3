@@ -39,10 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 
 /**
  * 设置搜索面板。
@@ -62,17 +66,44 @@ internal fun SettingsSearchPanel(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+
+    // 面板底色，也是状态栏那块露出来的颜色
+    val panelColor = MaterialTheme.colorScheme.surfaceContainer
+    // 底色偏亮时状态栏图标用深色，偏暗时用浅色。
+    // 用 luminance 判断而不是 isSystemInDarkTheme —— 应用有自己的主题偏好，
+    // 系统深色但应用选了浅色时，按系统判断会把图标刷成白的、浮在白底上。
+    val lightStatusBarIcons = panelColor.luminance() > 0.5f
+
+    // 把对话框自己那个窗口的状态栏/导航栏设成透明，并把图标色按主题反过来。
+    // 只设 decorFitsSystemWindows = false 时窗口是铺开了，但窗口的状态栏底色
+    // 还是系统默认，深色主题下就压着一条灰。
+    LaunchedEffect(lightStatusBarIcons) {
+        val dialogWindow = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
+        dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
+        dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
+        WindowCompat.getInsetsController(dialogWindow, view).apply {
+            isAppearanceLightStatusBars = lightStatusBarIcons
+            isAppearanceLightNavigationBars = lightStatusBarIcons
+        }
+    }
 
     // 只在 query 变化时重算，避免每帧都跑一遍匹配
     val hits = remember(query) { SettingsSearch.search(query) }
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            // 窗口铺到状态栏下面。不这么设的话，Dialog 的窗口不含状态栏区域，
+            // 那里露出的是系统默认灰，而不是下面这层 Surface 的底色 ——
+            // 看起来就是「搜索一打开，状态栏变灰」。
+            decorFitsSystemWindows = false
+        )
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainer
+            color = panelColor
         ) {
             Column(
                 modifier = Modifier
