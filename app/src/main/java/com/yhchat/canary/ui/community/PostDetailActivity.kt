@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,9 +30,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -86,24 +87,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,7 +109,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -140,13 +137,13 @@ import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MarkdownText
-import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.share.SendToChatActivity
 import com.yhchat.canary.ui.share.SendToChatContent
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
 import com.yhchat.canary.utils.UnifiedLinkHandler
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import java.text.DecimalFormat
 import java.util.regex.Pattern
 
@@ -791,18 +788,18 @@ fun PostBottomActionBarDuo3(
 /*  评论区：楼层样式                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** 楼层左侧栏宽度：头像、楼层号、竖线都在这条栏里。 */
+/** 楼层左侧栏：楼栏宽 Gutter，整体从 GutterStart 开始，竖线落在楼栏中线上。 */
 private val FloorGutter = 52.dp
 private val FloorAvatarSize = 36.dp
 private val FloorGutterStart = 4.dp
 
-/** 回复的小头像，以及它在第一行上的中心高度（竖线从这里拐出去）。 */
+/** 回复的小头像，以及它在第一行上的中心高度（分支从这里拐出去）。 */
 private val ReplyAvatarSize = 22.dp
 private val ReplyAvatarCenter = 12.dp
 private val ReplyBranchRadius = 12.dp
 
-/** 竖线：很细，用文字色的一层淡染，不抢内容。 */
-private val FloorRuleWidth = 1.dp
+/** 竖线：细，用文字色的一层淡染，不抢内容。 */
+private val FloorRuleWidth = 1.25.dp
 private const val FloorRuleAlpha = 0.16f
 
 @Composable
@@ -819,6 +816,7 @@ fun CommentItem(
     comment: CommunityComment,
     floor: Int,
     startsRule: Boolean = false,
+    isLz: Boolean = false,
     canDelete: Boolean = false,
     onLikeClick: (Int) -> Unit = {},
     onReplyClick: (Int) -> Unit = {},
@@ -838,14 +836,19 @@ fun CommentItem(
                 .fillMaxWidth()
                 // 高度由右侧内容决定，左栏的竖线才好铺满
                 .height(IntrinsicSize.Min)
-                .padding(top = 10.dp, bottom = 6.dp)
         ) {
             // ===== 左栏：竖线 + 头像 + 楼层号 =====
-            Box(modifier = Modifier.width(FloorGutter).fillMaxHeight()) {
+            // 楼栏整体从 GutterStart 开始缩进，竖线落在楼栏中线上
+            Box(
+                modifier = Modifier
+                    .padding(start = FloorGutterStart)
+                    .width(FloorGutter)
+                    .fillMaxHeight()
+            ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     // 第一层从头像中心起画，后面的层从顶部接住上一层的线
                     val x = size.width / 2f
-                    val top = if (startsRule) FloorAvatarSize.toPx() / 2f else 0f
+                    val top = if (startsRule) (FloorAvatarSize / 2 + 10.dp).toPx() else 0f
                     drawLine(
                         color = rule,
                         start = Offset(x, top),
@@ -854,16 +857,15 @@ fun CommentItem(
                     )
                 }
 
-                // 头像在楼栏里居中，竖线正好从中穿过
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                // 头像居中于楼栏，楼层号压在它下沿（截图里牌子上边盖住头像底部一小截）
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
-                    AsyncImage(
-                        model = comment.senderAvatar,
-                        contentDescription = comment.senderNickname,
+                    Box(
                         modifier = Modifier
-                            .size(FloorAvatarSize)
                             .clip(CircleShape)
                             .clickable {
                                 UserDetailActivity.start(
@@ -871,11 +873,20 @@ fun CommentItem(
                                     userId = comment.senderId,
                                     userName = comment.senderNickname
                                 )
-                            },
-                        contentScale = ContentScale.Crop
-                    )
+                            }
+                            .padding(bottom = 14.dp)
+                    ) {
+                        AsyncImage(
+                            model = comment.senderAvatar,
+                            contentDescription = comment.senderNickname,
+                            modifier = Modifier
+                                .size(FloorAvatarSize)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
 
-                    // 楼层号胶囊：压在头像下沿，比头像宽一点也没关系，不出楼栏
+                    // 楼层号：压在头像下沿，可以比头像宽，但不出楼栏
                     FloorBadge(floor = floor)
                 }
             }
@@ -883,7 +894,11 @@ fun CommentItem(
             Spacer(modifier = Modifier.width(8.dp))
 
             // ===== 右侧：楼层正文 =====
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = 10.dp, bottom = 4.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = comment.senderNickname,
@@ -901,6 +916,21 @@ fun CommentItem(
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    // 楼主标：跟「只看楼主」呼应，一眼看出哪几层是他自己
+                    if (isLz) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "楼主",
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1013,23 +1043,27 @@ fun CommentItem(
 }
 
 /**
- * 压在头像下沿的楼层号：小胶囊，数字用等宽感更稳，楼层多了也不会把左栏撑开。
+ * 楼层号牌，形如 `15L`。
+ *
+ * 对照截图：一块**实心白/灰底的小圆角牌**，压在头像下沿，比头像略宽；
+ * 数字是深色粗体。不是描边胶囊，也不做「嵌进头像」的缺口 —— 就是一块独立的牌子。
+ * 宽度上限取楼栏宽，四位数以上的楼层保持单行不撑破左栏。
  */
 @Composable
 private fun FloorBadge(floor: Int) {
     Box(
         modifier = Modifier
-            .offset(y = (-7).dp)
-            .widthIn(max = FloorGutter - FloorGutterStart)
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+            .widthIn(min = FloorAvatarSize - 4.dp, max = FloorGutter)
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "${floor}F",
+            text = "${floor}L",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1
         )
     }
@@ -1071,24 +1105,30 @@ fun CommentReplyItem(
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
     ) {
-        // 分支：竖线走到开口高度，四分之一圆弧拐进回复，最后一条不再往下接
-        Canvas(modifier = Modifier.width(FloorGutter).fillMaxHeight()) {
-            val x = size.width / 2f
-            val y = ReplyAvatarCenter.toPx()
-            val r = ReplyBranchRadius.toPx()
-            val path = Path().apply {
-                moveTo(x, 0f)
-                lineTo(x, if (isLast) (y - r).coerceAtLeast(0f) else size.height)
-                arcTo(
-                    rect = Rect(x, y - 2 * r, x + 2 * r, y),
-                    startAngleDegrees = 180f,
-                    sweepAngleDegrees = -90f,
-                    forceMoveTo = false
-                )
-                lineTo(size.width, y)
-            }
-            drawPath(path, rule, style = Stroke(FloorRuleWidth.toPx()))
+        // 分支：竖线走到开口高度，四分之一圆弧拐进回复，最后一条不再往下接。
+    // 楼栏同样从 FloorGutterStart 起缩进，x 跟楼层的竖线严格重合。
+    Canvas(
+        modifier = Modifier
+            .padding(start = FloorGutterStart)
+            .width(FloorGutter)
+            .fillMaxHeight()
+    ) {
+        val x = size.width / 2f
+        val y = ReplyAvatarCenter.toPx()
+        val r = ReplyBranchRadius.toPx()
+        val path = Path().apply {
+            moveTo(x, 0f)
+            lineTo(x, if (isLast) (y - r).coerceAtLeast(0f) else size.height)
+            arcTo(
+                rect = Rect(x, y - 2 * r, x + 2 * r, y),
+                startAngleDegrees = 180f,
+                sweepAngleDegrees = -90f,
+                forceMoveTo = false
+            )
+            lineTo(size.width, y)
         }
+        drawPath(path, rule, style = Stroke(FloorRuleWidth.toPx()))
+    }
 
         Row(
             modifier = Modifier
@@ -1116,222 +1156,156 @@ fun CommentReplyItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
+            // 截图里回复是「昵称: 内容」排在同一段里，时间单独一行在下面
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = reply.senderNickname,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (reply.isVip == 1) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "VIP",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = reply.createTimeText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
                 SelectionContainer {
+                    // 昵称 + 冒号 + 内容 拼成一段，昵称加粗，读起来就是一问一答的一行
                     Text(
-                        text = reply.content,
+                        text = buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                append(reply.senderNickname)
+                                if (reply.isVip == 1) append(" VIP")
+                                append(": ")
+                            }
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) {
+                                append(reply.content)
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         lineHeight = 20.sp
                     )
                 }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = reply.createTimeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         }
     }
 }
 
 /**
- * 评论楼层表：全屏 sheet，顶部是标题 + 输入框，下面是按楼层排的评论列表。
- *
- * 楼层号按列表顺序从 1F 起算，加载更多之后接着往下编号，
- * 所以不会出现「翻页了楼层号又从 1F 开始」。
+ * 评论区标题：左边「评论 + 条数」，右边「复制原文」。
+ * 承接文章正文，所以上方留一点空白，跟正文形成段落感，不加分割线。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CommentFloorSheet(
-    comments: List<CommunityComment>,
-    isLoading: Boolean,
-    hasMore: Boolean,
+private fun CommentSectionHeader(
     total: Int,
-    inputText: String,
-    onInputTextChange: (String) -> Unit,
-    onSend: () -> Unit,
-    onLoadMore: () -> Unit,
-    onCopyPost: () -> Unit,
-    canDeleteComment: (CommunityComment) -> Boolean,
-    onLikeClick: (Int) -> Unit,
-    onDeleteClick: (CommunityComment) -> Unit,
-    onReportClick: (CommunityComment) -> Unit,
-    onDismiss: () -> Unit
+    visibleCount: Int,
+    filterLzOnly: Boolean,
+    onCopyPost: () -> Unit
 ) {
-    val listState = rememberLazyListState()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .navigationBarsPadding()
-        ) {
-            // ===== 标题栏 =====
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "评论",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (total > 0) "$total" else "${comments.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 3.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = onCopyPost) {
-                    Text("复制原文", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // ===== 输入框 =====
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = onInputTextChange,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                placeholder = { Text("写下你的评论…") },
-                maxLines = 3,
-                singleLine = false,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                trailingIcon = {
-                    if (inputText.isNotBlank()) {
-                        IconButton(onClick = onSend) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "发送",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(20.dp)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "评论",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (filterLzOnly) "$visibleCount/$total" else "$total",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = onCopyPost) {
+            Text("复制原文", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ===== 楼层列表 =====
-            if (comments.isEmpty() && isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
+/**
+ * 评论输入行：紧贴评论区标题下方，正文底部也能直接写。
+ */
+@Composable
+private fun CommentInputRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("写下你的评论…") },
+        maxLines = 3,
+        singleLine = false,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+        trailingIcon = {
+            if (value.isNotBlank()) {
+                IconButton(onClick = onSend) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "发送",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
-            } else if (comments.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "还没有评论",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "来说点什么，占个 1F",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
-                ) {
-                    itemsIndexed(
-                        items = comments,
-                        key = { _, comment -> comment.id }
-                    ) { index, comment ->
-                        CommentItem(
-                            comment = comment,
-                            // 楼层从 1F 起，跨页连续
-                            floor = index + 1,
-                            // 第一层的竖线从头像中心开始；后面的层从顶部接上上一层的线
-                            startsRule = index == 0,
-                            canDelete = canDeleteComment(comment),
-                            onLikeClick = onLikeClick,
-                            onDeleteClick = onDeleteClick,
-                            onReportClick = onReportClick
-                        )
-                    }
-
-                    if (hasMore) {
-                        item(key = "comment_load_more") {
-                            LaunchedEffect(Unit) { onLoadMore() }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Text(
-                                        text = "继续上滑加载更多",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+/** 评论区空态。 */
+@Composable
+private fun CommentEmptyState(lzOnly: Boolean = false) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lzOnly) "楼主还没有评论" else "还没有评论",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = if (lzOnly) "切到「全部」看看其他人的回复" else "来说点什么，占个 1L",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
+    }
+}
+
+/** 评论区加载更多页脚。 */
+@Composable
+private fun CommentLoadMoreFooter(isLoading: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text = "继续上滑加载更多",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -1585,6 +1559,207 @@ fun ShareDialog(
     )
 }
 
+/* -------------------------------------------------------------------------- */
+/*  详情页顶部：三件式悬浮栏                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** 顶栏各块的统一高度、阴影，以及列表顶部要留的空白。 */
+private val DetailChromeHeight = 40.dp
+private val DetailChromeElevation = 3.dp
+private val DetailChromeHeightTotal = 56.dp
+
+/**
+ * 文章详情的顶部悬浮栏，照截图排成三块独立的白面：
+ *   ① 圆形返回
+ *   ② 分区名胶囊（分区头像 + 名称），点它进分区
+ *   ③ 分段控件「全部 / 只看楼主」+ 圆点更多菜单
+ *
+ * 「只看楼主」筛的是**本篇评论**，楼主 = 这篇文章的作者。
+ * 三块各自白底 + 轻阴影，没有通栏背景，正文从它们下面滚过去也不会被压出一条灰带。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PostDetailFloatingBar(
+    boardName: String,
+    boardAvatar: String?,
+    filterLzOnly: Boolean,
+    onFilterChange: (Boolean) -> Unit,
+    onBackClick: () -> Unit,
+    onBoardClick: () -> Unit,
+    menuExpanded: Boolean,
+    onMenuClick: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    menuContent: @Composable ColumnScope.() -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DetailChromeSurface(
+            onClick = onBackClick,
+            modifier = Modifier.size(DetailChromeHeight)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        // 分区名胶囊：撑掉剩余宽度，名字太长就省略
+        DetailChromeSurface(
+            onClick = onBoardClick,
+            modifier = Modifier.weight(1f)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(DetailChromeHeight)
+                    .padding(start = 6.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = ImageUtils.createBoardImageRequest(
+                        context = LocalContext.current,
+                        url = boardAvatar.orEmpty()
+                    ),
+                    contentDescription = boardName,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = boardName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // 分段控件 + 更多
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            DetailChromeSurface {
+                Row(
+                    modifier = Modifier
+                        .height(DetailChromeHeight)
+                        .padding(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CommentFilterSegment(
+                        text = "全部",
+                        selected = !filterLzOnly,
+                        onClick = { onFilterChange(false) }
+                    )
+                    CommentFilterSegment(
+                        text = "只看楼主",
+                        selected = filterLzOnly,
+                        onClick = { onFilterChange(true) }
+                    )
+                }
+            }
+
+            DetailChromeSurface(
+                onClick = onMenuClick,
+                modifier = Modifier.size(DetailChromeHeight)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "更多操作",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = onMenuDismiss,
+                        content = menuContent
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 顶栏里的一块白面。给了 onClick 就是可点块。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailChromeSurface(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = DetailChromeElevation,
+            content = content
+        )
+    } else {
+        Surface(
+            modifier = modifier,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = DetailChromeElevation,
+            content = content
+        )
+    }
+}
+
+/**
+ * 「全部 / 只看楼主」里的一格：选中是灰底胶囊，未选中只是文字。
+ */
+@Composable
+private fun CommentFilterSegment(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                } else {
+                    Color.Transparent
+                }
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1
+        )
+    }
+}
+
 /**
  * 文章详情界面
  */
@@ -1605,10 +1780,14 @@ fun PostDetailScreen(
     
     // 评论输入状态
     var commentText by remember { mutableStateOf("") }
-    var showCommentInput by remember { mutableStateOf(false) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var searchResultCount by remember { mutableStateOf(0) }
+    // 「只看楼主」：筛的是本篇评论，楼主 = 这篇文章的作者（post.senderId），不是分区创建者
+    var filterLzOnly by rememberSaveable { mutableStateOf(false) }
+    // 详情页主列表，点底部「评论」按钮时滚到评论标题那一项
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     
     // 打赏对话框状态
     var showRewardDialog by remember { mutableStateOf(false) }
@@ -1674,8 +1853,8 @@ fun PostDetailScreen(
     }
     
     
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-
+    // 顶栏已改成三件式悬浮块，没有可折叠的 TopAppBar，也就不需要 scrollBehavior：
+    // 留着一个没绑定控件的 nestedScroll 反而会吞掉列表的滑动事件。
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -1694,7 +1873,10 @@ fun PostDetailScreen(
                         showRewardDialog = true
                     },
                     onCommentInputToggle = {
-                        showCommentInput = !showCommentInput
+                        // 评论区现在在正文下面，点评论就滚过去（评论标题是第 2 项：0=正文，1=标题）
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(1)
+                        }
                     },
                     isSearchExpanded = isSearchExpanded,
                     searchText = searchText,
@@ -1709,112 +1891,106 @@ fun PostDetailScreen(
                 )
             }
         },
+        // 按截图改成三件式悬浮栏：圆形返回 + 分区名胶囊 + 「全部 / 只看楼主」分段控件。
+        // 顶栏不再用 TopAppBar —— 那条通栏底色会把滚动中的正文压出一条灰带，
+        // 而截图里这三块都是各自独立的白色实心块，内容从它们之间穿过去。
+        // 「更多」菜单挂到标题栏右侧的圆形按钮上（收起为圆点菜单，不占额外空间）。
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "文章详情",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
+            PostDetailFloatingBar(
+                boardName = postDetailState.board?.name
+                    ?: postDetailState.post?.group?.name
+                    ?: "文章详情",
+                boardAvatar = postDetailState.board?.avatar
+                    ?: postDetailState.post?.group?.avatarUrl,
+                filterLzOnly = filterLzOnly,
+                onFilterChange = { filterLzOnly = it },
+                onBackClick = onBackClick,
+                onBoardClick = {
+                    postDetailState.board?.let { board ->
+                        val intent = Intent(context, BoardDetailActivity::class.java).apply {
+                            putExtra("board_id", board.id)
+                            putExtra("board_name", board.name)
+                            putExtra("token", if (isTokenLoaded) currentToken else "")
+                        }
+                        context.startActivity(intent)
                     }
                 },
-                actions = {
-                    // 顶栏主操作（更多）：MD3 Expressive 的填充按钮，
-                    // 返回按钮这类导航按钮保持无背景
-                    TopBarActionButton(
-                        icon = Icons.Default.MoreVert,
-                        contentDescription = "更多操作",
-                        onClick = { topMenuExpanded = true }
+                menuExpanded = topMenuExpanded,
+                onMenuClick = { topMenuExpanded = true },
+                onMenuDismiss = { topMenuExpanded = false },
+                menuContent = {
+                    DropdownMenuItem(
+                        text = { Text("分享") },
+                        onClick = {
+                            topMenuExpanded = false
+                            showShareDialog = true
+                        }
                     )
-                    DropdownMenu(
-                        expanded = topMenuExpanded,
-                        onDismissRequest = { topMenuExpanded = false }
-                    ) {
+                    if (canManagePost) {
                         DropdownMenuItem(
-                            text = { Text("分享") },
+                            text = { Text("修改") },
                             onClick = {
                                 topMenuExpanded = false
-                                showShareDialog = true
+                                postDetailState.post?.let { post ->
+                                    val intent = Intent(context, EditPostActivity::class.java).apply {
+                                        putExtra("post_id", post.id)
+                                        putExtra("token", if (isTokenLoaded) currentToken else "")
+                                        putExtra("original_title", post.title)
+                                        putExtra("original_content", post.content)
+                                        putExtra("content_type", post.contentType)
+                                        putExtra("board_id", post.baId)
+                                        putExtra("board_name", postDetailState.board?.name ?: "")
+                                    }
+                                    context.startActivity(intent)
+                                }
                             }
                         )
-                        if (canManagePost) {
-                            DropdownMenuItem(
-                                text = { Text("修改") },
-                                onClick = {
-                                    topMenuExpanded = false
-                                    postDetailState.post?.let { post ->
-                                        val intent = Intent(context, EditPostActivity::class.java).apply {
-                                            putExtra("post_id", post.id)
-                                            putExtra("token", if (isTokenLoaded) currentToken else "")
-                                            putExtra("original_title", post.title)
-                                            putExtra("original_content", post.content)
-                                            putExtra("content_type", post.contentType)
-                                            putExtra("board_id", post.baId)
-                                            putExtra("board_name", postDetailState.board?.name ?: "")
-                                        }
-                                        context.startActivity(intent)
+                        DropdownMenuItem(
+                            text = { Text("移动文章") },
+                            onClick = {
+                                topMenuExpanded = false
+                                showMoveBoardDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if ((postDetailState.post?.isSticky ?: 0) == 1) {
+                                        "取消置顶"
+                                    } else {
+                                        "置顶文章"
                                     }
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("移动文章") },
-                                onClick = {
-                                    topMenuExpanded = false
-                                    showMoveBoardDialog = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if ((postDetailState.post?.isSticky ?: 0) == 1) {
-                                            "取消置顶"
-                                        } else {
-                                            "置顶文章"
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    topMenuExpanded = false
-                                    val post = postDetailState.post ?: return@DropdownMenuItem
-                                    val sticky = post.isSticky != 1
-                                    viewModel.togglePostStickyWithToken(
-                                        postId = post.id,
-                                        sticky = sticky,
-                                        onSuccess = {
-                                            Toast.makeText(
-                                                context,
-                                                if (sticky) "置顶成功" else "已取消置顶",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        },
-                                        onError = { msg ->
-                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                        }
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    topMenuExpanded = false
-                                    showDeleteDialog = true
-                                }
-                            )
-                        }
+                                )
+                            },
+                            onClick = {
+                                topMenuExpanded = false
+                                val post = postDetailState.post ?: return@DropdownMenuItem
+                                val sticky = post.isSticky != 1
+                                viewModel.togglePostStickyWithToken(
+                                    postId = post.id,
+                                    sticky = sticky,
+                                    onSuccess = {
+                                        Toast.makeText(
+                                            context,
+                                            if (sticky) "置顶成功" else "已取消置顶",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onError = { msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                topMenuExpanded = false
+                                showDeleteDialog = true
+                            }
+                        )
                     }
-                },
-                // 必须把 scrollBehavior 交给顶栏：只有顶栏量到自己的高度后，
-                // 滚动行为才知道"顶栏已完全收起"从而停止吃掉滑动事件。
-                // 少了这一行，heightOffsetLimit 会一直是最小值（无限），
-                // 于是每一帧的上滑都被顶栏行为消费掉 —— 列表完全滚不动。
-                scrollBehavior = scrollBehavior,
+                }
             )
         }
     ) { paddingValues ->
@@ -1867,10 +2043,10 @@ fun PostDetailScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .nestedScroll(scrollBehavior.nestedScrollConnection),
-                            // 底部多留出悬浮互动条的高度（含系统导航栏），滚到底时最后一段不会被按钮压住
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            // 顶部留出三件式悬浮栏的高度，正文从栏下开始；
+                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住
                             contentPadding = PaddingValues(
                                 start = 16.dp,
                                 top = 16.dp,
@@ -1907,7 +2083,122 @@ fun PostDetailScreen(
                                     }
                                 )
                             }
-                            
+
+                            // ===== 评论区：直接接在文章下方 =====
+                            // 「只看楼主」时只留楼主本人的评论。楼主就是这篇的作者，
+                            // 楼层号在所有评论里的原始位置不变（第几条就是几楼），
+                            // 所以过滤后不会重新编号，看起来仍是 1L、5L、17L 这样跳着走。
+                            val visibleComments = remember(commentListState.comments, filterLzOnly, post.senderId) {
+                                if (!filterLzOnly) {
+                                    commentListState.comments
+                                } else {
+                                    commentListState.comments.filter { it.senderId == post.senderId }
+                                }
+                            }
+
+                            item(key = "comment_header") {
+                                CommentSectionHeader(
+                                    total = if (commentListState.total > 0) {
+                                        commentListState.total
+                                    } else {
+                                        commentListState.comments.size
+                                    },
+                                    visibleCount = visibleComments.size,
+                                    filterLzOnly = filterLzOnly,
+                                    onCopyPost = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("帖子原文", post.content)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+
+                            item(key = "comment_input") {
+                                CommentInputRow(
+                                    value = commentText,
+                                    onValueChange = { commentText = it },
+                                    onSend = {
+                                        if (commentText.isNotBlank()) {
+                                            viewModel.commentPostWithToken(postId, commentText)
+                                            commentText = ""
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (visibleComments.isEmpty() && !commentListState.isLoading) {
+                                item(key = "comment_empty") {
+                                    CommentEmptyState(
+                                        lzOnly = filterLzOnly,
+                                    )
+                                }
+                            }
+
+                            itemsIndexed(
+                                items = visibleComments,
+                                key = { _, comment -> "comment_${comment.id}" }
+                            ) { index, comment ->
+                                CommentItem(
+                                    comment = comment,
+                                    // 楼层 = 它在全部评论里的位置 + 1，过滤时也保持原楼号
+                                    floor = commentListState.comments.indexOfFirst { it.id == comment.id }
+                                        .let { if (it >= 0) it + 1 else index + 1 },
+                                    // 第一层的竖线从头像中心开始，后面的层从顶部接上
+                                    startsRule = index == 0,
+                                    isLz = comment.senderId == post.senderId,
+                                    canDelete = comment.senderId == postDetailState.currentUserId ||
+                                        postDetailState.isAdmin == 1 ||
+                                        commentListState.isAdmin == 1,
+                                    onLikeClick = { commentId ->
+                                        viewModel.likeCommentWithToken(postId, commentId)
+                                    },
+                                    onDeleteClick = { selectedComment ->
+                                        pendingDeleteComment = selectedComment
+                                    },
+                                    onReportClick = { selectedComment ->
+                                        reportTarget = CommunityReportTarget(
+                                            typ = 2,
+                                            targetId = selectedComment.id,
+                                            title = "举报评论"
+                                        )
+                                    }
+                                )
+                            }
+
+                            if (commentListState.isLoading && commentListState.comments.isEmpty()) {
+                                item(key = "comment_loading") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (commentListState.hasMore) {
+                                item(key = "comment_load_more") {
+                                    // 评论接口不支持按作者过滤（CommentListRequest 只有 postId/size/page），
+                                    // 「只看楼主」是前端过滤：某一页里楼主可能一条都没有，
+                                    // 所以这里不依赖可见列表，只要还有下一页就继续拉，
+                                    // 否则翻到一页全是别人时列表会显得「卡住不动」。
+                                    LaunchedEffect(commentListState.currentPage, filterLzOnly) {
+                                        if (!commentListState.isLoading) {
+                                            viewModel.loadMoreCommentsWithToken(postId)
+                                        }
+                                    }
+                                    val pending = filterLzOnly && visibleComments.isEmpty()
+                                    CommentLoadMoreFooter(
+                                        isLoading = commentListState.isLoading || pending
+                                    )
+                                }
+                            }
                         }
                     }
                     
@@ -1967,53 +2258,6 @@ fun PostDetailScreen(
                             )
                         }
                     }
-                )
-            }
-
-            if (showCommentInput) {
-                CommentFloorSheet(
-                    comments = commentListState.comments,
-                    isLoading = commentListState.isLoading,
-                    hasMore = commentListState.hasMore,
-                    total = commentListState.total,
-                    inputText = commentText,
-                    onInputTextChange = { commentText = it },
-                    onSend = {
-                        if (commentText.isNotBlank()) {
-                            viewModel.commentPostWithToken(postId, commentText)
-                            commentText = ""
-                        }
-                    },
-                    onLoadMore = {
-                        if (!commentListState.isLoading) {
-                            viewModel.loadMoreCommentsWithToken(postId)
-                        }
-                    },
-                    onCopyPost = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("帖子原文", postDetailState.post?.content ?: "")
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
-                    },
-                    canDeleteComment = { comment ->
-                        comment.senderId == postDetailState.currentUserId ||
-                            postDetailState.isAdmin == 1 ||
-                            commentListState.isAdmin == 1
-                    },
-                    onLikeClick = { commentId ->
-                        viewModel.likeCommentWithToken(postId, commentId)
-                    },
-                    onDeleteClick = { selectedComment ->
-                        pendingDeleteComment = selectedComment
-                    },
-                    onReportClick = { selectedComment ->
-                        reportTarget = CommunityReportTarget(
-                            typ = 2,
-                            targetId = selectedComment.id,
-                            title = "举报评论"
-                        )
-                    },
-                    onDismiss = { showCommentInput = false }
                 )
             }
 

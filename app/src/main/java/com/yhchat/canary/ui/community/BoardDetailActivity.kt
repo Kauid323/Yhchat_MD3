@@ -37,7 +37,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -45,7 +44,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,7 +53,6 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -64,8 +61,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -166,13 +163,23 @@ fun BoardDetailScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // 头部滚走后，悬浮栏接管标题；用首项偏移量当作折叠进度
-    val headerCollapsed by remember {
-        derivedStateOf {
-            val first = listState.firstVisibleItemIndex
-            val offset = listState.firstVisibleItemScrollOffset
-            first > 0 || offset > HeaderDockDistance
+    // 打开文章：有外部导航回调就走回调，否则自己开详情页
+    val openPost: (CommunityPost) -> Unit = { post ->
+        if (onPostNavigate != null) {
+            onPostNavigate(post.id, post.title)
+        } else {
+            val intent = Intent(context, PostDetailActivity::class.java).apply {
+                putExtra("post_id", post.id)
+                putExtra("post_title", post.title)
+                putExtra("token", token)
+            }
+            context.startActivity(intent)
         }
+    }
+
+    // 点顶部胶囊回到分区头部（第一项）
+    fun focusBoardHeader() {
+        coroutineScope.launch { listState.animateScrollToItem(0) }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -234,28 +241,39 @@ fun BoardDetailScreen(
                 }
 
                 // ===== 文章流 =====
+                // 置顶文章按 Oolong 的做法：不铺成卡片，只占一行 —— 左侧「置顶」胶囊 + 单行标题，
+                // 全部排在列表最前面，之后才是普通文章；置顶和普通之间留一段空，分隔感由位置给出。
+                // 「只看楼主」开启时置顶仍保留（置顶是分区自己的内容，不该被筛选掉）。
+                val pinnedPosts = postListState.posts.filter { it.isSticky != 0 }
+                val normalPosts = postListState.posts.filter { it.isSticky == 0 }
+
                 itemsIndexed(
-                    items = postListState.posts,
+                    items = pinnedPosts,
+                    key = { _, post -> "pinned_${post.id}" }
+                ) { _, post ->
+                    PinnedPostRow(
+                        title = post.title,
+                        onClick = { openPost(post) }
+                    )
+                }
+
+                if (pinnedPosts.isNotEmpty() && normalPosts.isNotEmpty()) {
+                    item(key = "pinned_gap") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                itemsIndexed(
+                    items = normalPosts,
                     key = { _, post -> post.id }
                 ) { index, post ->
                     Column(modifier = Modifier.fillMaxWidth()) {
                         if (index > 0) {
-                            HorizontalHairLine(modifier = Modifier.padding(horizontal = 16.dp))
+                            VerticalHairLine(modifier = Modifier.padding(horizontal = 16.dp))
                         }
                         PostListItem(
                             post = post,
-                            onClick = {
-                                if (onPostNavigate != null) {
-                                    onPostNavigate(post.id, post.title)
-                                } else {
-                                    val intent = Intent(context, PostDetailActivity::class.java).apply {
-                                        putExtra("post_id", post.id)
-                                        putExtra("post_title", post.title)
-                                        putExtra("token", token)
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            },
+                            onClick = { openPost(post) },
                             onLongClick = {
                                 selectedPost = post
                                 showBlockDialog = true
@@ -293,17 +311,15 @@ fun BoardDetailScreen(
             }
         }
 
-        // ===== 悬浮栏（覆盖在列表之上，头部收起后渐显）=====
+        // ===== 悬浮栏（覆盖在列表之上，三件式：返回 / 分区名 / 全部-只看楼主）=====
         BoardFloatingBar(
             title = board?.name ?: boardName,
-            subtitle = board?.let { "${it.memberNum} 成员 · ${it.postNum} 文章" },
-            collapsed = headerCollapsed,
+            boardAvatar = board?.avatar,
+            boardId = boardId,
+            token = token,
             onBackClick = onBackClick,
-            onSearchClick = {
-                val intent = Intent(context, SearchActivity::class.java).apply {
-                    putExtra("token", token)
-                }
-                context.startActivity(intent)
+            onBoardClick = {
+                focusBoardHeader()
             },
             modifier = Modifier.align(Alignment.TopCenter)
         )
@@ -433,11 +449,8 @@ fun BoardDetailScreen(
     }
 }
 
-/** 头部滚到该距离之后，悬浮栏接管标题。 */
-private val HeaderDockDistance = 120
-
-/** 悬浮栏总高（含状态栏内边距之外的行高），列表顶部据此留白。 */
-private val FloatingBarHeight = 52.dp
+/** 悬浮栏占位高度（40dp 栏高 + 上下各 8dp 内边距），列表顶部据此留白。 */
+private val FloatingBarHeight = 56.dp
 
 /* -------------------------------------------------------------------------- */
 /*  大头部                                                                    */
@@ -507,8 +520,11 @@ private fun BoardHeader(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 统计行：成员 / 文章 / 群聊（群聊可点，右侧带 ">"）
-        Row(verticalAlignment = Alignment.Bottom) {
+        // 统计行在左，关注按钮挂在右边，跟统计数字同一行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
             BoardStat(
                 value = board?.memberNum?.toString() ?: "—",
                 label = "成员"
@@ -537,58 +553,15 @@ private fun BoardHeader(
                     )
                 }
             }
+
             Spacer(modifier = Modifier.weight(1f))
-        }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 全宽胶囊关注按钮：已关注时转 tonal 且不可点
-        val done = board?.isFollowed == "1"
-        val busy = followState.isLoading
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clip(CircleShape)
-                .background(
-                    when {
-                        busy -> accent.copy(alpha = 0.4f)
-                        done -> accent.copy(alpha = 0.14f)
-                        else -> accent
-                    }
-                )
-                .clickable(enabled = !done && !busy) { onFollowClick() },
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            when {
-                busy -> CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = if (done) accent else MaterialTheme.colorScheme.onPrimary
-                )
-                done -> {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "已关注",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = accent
-                    )
-                }
-                else -> Text(
-                    text = "关注分区",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            FollowPill(
+                followed = board?.isFollowed == "1",
+                busy = followState.isLoading,
+                accent = accent,
+                onClick = onFollowClick
+            )
         }
     }
 
@@ -619,88 +592,169 @@ private fun BoardStat(value: String, label: String) {
     }
 }
 
+/**
+ * 分区关注按钮，挂在统计行右侧。
+ * 跟着统计行一起下沉，所以用 Alignment.Bottom 对齐，并自己补一点底部内边距，
+ * 让胶囊底边跟统计标签的基线大致齐平。
+ */
+@Composable
+private fun FollowPill(
+    followed: Boolean,
+    busy: Boolean,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .padding(bottom = 2.dp)
+            .height(32.dp)
+            .clip(CircleShape)
+            .background(
+                when {
+                    busy -> accent.copy(alpha = 0.4f)
+                    followed -> accent.copy(alpha = 0.14f)
+                    else -> accent
+                }
+            )
+            .clickable(enabled = !followed && !busy) { onClick() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        when {
+            busy -> CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = if (followed) accent else MaterialTheme.colorScheme.onPrimary
+            )
+            followed -> {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "已关注",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent
+                )
+            }
+            else -> Text(
+                text = "关注",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+    }
+}
+
 /* -------------------------------------------------------------------------- */
 /*  悬浮栏                                                                    */
 /* -------------------------------------------------------------------------- */
 
 /**
- * 悬浮在列表之上的胶囊栏：返回 + 标题。
- * 未收起时半透明（列表从它下面透出来），收起后加不透明度与阴影，成为真正的标题栏；
- * 副标题（成员/文章数）跟着淡入。
+ * 顶部三件式悬浮栏，照截图排：
+ *   ① 独立圆形白底返回按钮（固定 40dp 圆，不跟中间胶囊连）
+ *   ② 中间白底胶囊：分区头像 + 分区名，撑满剩余宽度，始终可见
+ *   ③ 右侧白底分段控件「全部 / 只看楼主」
+ *
+ * 三个都是**各自成块的实心白面**，浮在列表之上；列表从它们之间和下面滚过去。
+ * 不再用整条通栏背景，所以滚动时不会有一条灰带横在中间。
  */
 @Composable
 private fun BoardFloatingBar(
     title: String,
-    subtitle: String?,
-    collapsed: Boolean,
+    boardAvatar: String?,
+    boardId: Int,
+    token: String,
     onBackClick: () -> Unit,
-    onSearchClick: () -> Unit,
+    onBoardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 收起后才出现的背景胶囊，让标题从正文里“浮”出来
-        val barAlpha = if (collapsed) 1f else 0f
+        // ① 圆形返回
+        CircleChromeButton(onClick = onBackClick) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        // ② 分区名胶囊：头像 + 名称，点进分区详情
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-                .alpha(barAlpha),
+            onClick = onBoardClick,
+            modifier = Modifier.weight(1f),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
-            shadowElevation = 3.dp
-        ) {}
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = ChromeElevation
         ) {
-            IconButton(onClick = onBackClick, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    modifier = Modifier.size(22.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(ChromeHeight)
+                    .padding(start = 6.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = boardAvatar?.let {
+                        ImageUtils.createBoardImageRequest(
+                            context = LocalContext.current,
+                            url = it
+                        )
+                    },
+                    contentDescription = title,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                AnimatedVisibility(
-                    visible = collapsed && !subtitle.isNullOrBlank(),
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Text(
-                        text = subtitle.orEmpty(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            IconButton(onClick = onSearchClick, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "搜索",
-                    modifier = Modifier.size(22.dp)
-                )
             }
         }
+
+        // ③ 分段控件的位子是文章详情页的（「全部 / 只看楼主」筛的是评论、楼主是文章作者），
+        // 分区页这里只保留返回 + 分区名两块。
+    }
+}
+
+/** 顶部那几个悬浮块的统一高度与阴影。 */
+private val ChromeHeight = 40.dp
+private val ChromeElevation = 3.dp
+
+/** 白底圆形图标按钮，返回键用的就是它。 */
+@Composable
+private fun CircleChromeButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(ChromeHeight),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = ChromeElevation
+    ) {
+        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 
@@ -710,13 +764,55 @@ private fun BoardFloatingBar(
 
 /** 极细分隔线，比 Divider 更安静。 */
 @Composable
-private fun HorizontalHairLine(modifier: Modifier = Modifier) {
+private fun VerticalHairLine(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(0.5.dp)
             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     )
+}
+
+/**
+ * 置顶文章：照 Oolong 的 [TopThreadItem] 排 —— 一行解决，不铺成卡片。
+ *
+ * 左边「置顶」小胶囊（accent 底 14% alpha），右边标题单行省略，
+ * 中间隔 16dp。点整行进文章。
+ */
+@Composable
+private fun PinnedPostRow(
+    title: String,
+    onClick: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "置顶",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(accent.copy(alpha = 0.14f))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+        Text(
+            text = title.ifBlank { "无标题文章" },
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
 
 /** 加载更多页脚。 */
