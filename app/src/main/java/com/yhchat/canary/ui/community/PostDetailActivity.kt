@@ -473,6 +473,8 @@ fun PostBottomActionBarDuo3(
     searchResultCount: Int,
     onSearchTextChange: (String) -> Unit,
     onSearchToggle: () -> Unit,
+    /** 点评论按钮：弹起评论输入面板。 */
+    onCommentCompose: () -> Unit = onCommentInputToggle,
     modifier: Modifier = Modifier
 ) {
     var searchExpandSettled by remember { mutableStateOf(false) }
@@ -704,6 +706,40 @@ fun PostBottomActionBarDuo3(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.alpha(searchFieldAlpha)
+                        )
+                    }
+                }
+            }
+
+            // 评论按钮药丸：原来的「评论输入」入口在这里，点它弹起输入面板，
+            // 而不是把输入条常驻在底部。搜索展开时藏起来，让输入框占满药丸。
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isSearchExpanded,
+                enter = fadeIn(animationSpec = tween(180)) +
+                    expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(140)) +
+                    shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(200))
+            ) {
+                Surface(
+                    modifier = Modifier.clickable { onCommentCompose() },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Comment,
+                            contentDescription = "写评论",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "评论",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1305,40 +1341,8 @@ private fun CommentFilterChip(
 }
 
 /**
- * 评论输入行：紧贴评论区标题下方，正文底部也能直接写。
+ * 评论区空态。
  */
-@Composable
-private fun CommentInputRow(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSend: () -> Unit
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        placeholder = { Text("写下你的评论…") },
-        maxLines = 3,
-        singleLine = false,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-        trailingIcon = {
-            if (value.isNotBlank()) {
-                IconButton(onClick = onSend) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "发送",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
-}
-
-/** 评论区空态。 */
 @Composable
 private fun CommentEmptyState(lzOnly: Boolean = false) {
     Column(
@@ -1908,10 +1912,13 @@ fun PostDetailScreen(
     val communityReportState by viewModel.communityReportState.collectAsState()
     
     // 评论输入状态
-    var commentText by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var searchResultCount by remember { mutableStateOf(0) }
+    // 评论输入面板是否弹起。底部「评论」按钮和评论区的回复图标都走这个开关
+    var showCommentComposer by remember { mutableStateOf(false) }
+    // 放在正文之上的临时提示（发送中/失败），避免用 Toast 打断输入
+    var commentSending by remember { mutableStateOf(false) }
     // 「只看楼主」：筛的是本篇评论，楼主 = 这篇文章的作者（post.senderId），不是分区创建者
     var filterLzOnly by rememberSaveable { mutableStateOf(false) }
     // 详情页主列表，点底部「评论」按钮时滚到评论标题那一项
@@ -2038,6 +2045,8 @@ fun PostDetailScreen(
                             listState.animateScrollToItem(1)
                         }
                     },
+                    // 底部「评论」药丸：弹起输入面板
+                    onCommentCompose = { showCommentComposer = true },
                     isSearchExpanded = isSearchExpanded,
                     searchText = searchText,
                     searchResultCount = searchResultCount,
@@ -2281,18 +2290,9 @@ fun PostDetailScreen(
                                 )
                             }
 
-                            item(key = "comment_input") {
-                                CommentInputRow(
-                                    value = commentText,
-                                    onValueChange = { commentText = it },
-                                    onSend = {
-                                        if (commentText.isNotBlank()) {
-                                            viewModel.commentPostWithToken(postId, commentText)
-                                            commentText = ""
-                                        }
-                                    }
-                                )
-                            }
+                            // 评论输入不再常驻在列表里，改由底部「评论」药丸弹起面板。
+                            // 常驻输入条会一直占着一行，评论多时显得挤；弹起式还能给出
+                            // 更大的书写区。见 CommentComposerSheet。
 
                             if (visibleComments.isEmpty() && !commentListState.isLoading) {
                                 item(key = "comment_empty") {
@@ -2318,6 +2318,10 @@ fun PostDetailScreen(
                                         commentListState.isAdmin == 1,
                                     onLikeClick = { commentId ->
                                         viewModel.likeCommentWithToken(postId, commentId)
+                                    },
+                                    // 点评论底部的回复图标：弹起同一个输入面板
+                                    onReplyClick = {
+                                        showCommentComposer = true
                                     },
                                     onDeleteClick = { selectedComment ->
                                         pendingDeleteComment = selectedComment
@@ -2405,6 +2409,27 @@ fun PostDetailScreen(
                 )
             }
             
+            // 评论输入面板。底部「评论」药丸和评论区的回复图标都弹它
+            if (showCommentComposer) {
+                CommentComposerSheet(
+                    replyTo = null,
+                    sending = commentSending,
+                    onDismiss = { showCommentComposer = false },
+                    onSend = { content ->
+                        commentSending = true
+                        // 发送成功后 ViewModel 会重载第 1 页评论，这里只需要收起面板；
+                        // 失败的话 error 会走 commentListState，由页面已有的错误提示呈现
+                        viewModel.commentPostWithToken(postId = postId, content = content)
+                        commentSending = false
+                        showCommentComposer = false
+                        // 发完滚到评论区，让人立刻看到自己的评论
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(1)
+                        }
+                    }
+                )
+            }
+
             // 分享对话框
             if (showShareDialog) {
                 ShareDialog(
