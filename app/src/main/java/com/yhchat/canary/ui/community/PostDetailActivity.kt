@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -1804,6 +1805,9 @@ private fun PostDetailTopBar(
             )
 
         layout(foreground.width, foreground.height) {
+            // 这里必须返回恒定高度，靠浮层结构解决残留（见 PostDetailScreen 的 Box）。
+            // 曾经试过让返回高度随收起收缩，但 Scaffold 会每帧重新算 paddingValues，
+            // 内容跟着抖，不能这么做。
             background.place(0, 0)
             if (hiddenFraction() < 1f) {
                 foreground.placeWithLayer(0, -hidden) { alpha = 1f - hiddenFraction() }
@@ -1943,6 +1947,11 @@ fun PostDetailScreen(
     // 整页滚动状态：顶栏和内容共享，顶栏靠它算收起进度
     val pageScroll = rememberPageScrollState()
 
+    // 状态栏高度。顶栏是浮层之后，列表要自己让开它，所以这里先量出来。
+    val statusBarTop = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
+
     // 顶栏收起进度：内容往上滑它走向 1，往回滑一点立刻回来。
     // 不设 enabled —— 详情页第一屏就是正文，往上滑就该收，没有「头部还没走」这回事。
     val detailAway = rememberScrollProgress(
@@ -2035,8 +2044,19 @@ fun PostDetailScreen(
     // matchedGeometryAnchor / boundsOf 全是空操作，收起进度恒为 0，顶栏永远不动。
     // nestedScroll 把 pageScroll.scrollWatcher 挂上，onPostScroll 才会被调用。
     CompositionLocalProvider(LocalPageScroll provides pageScroll) {
+        // 顶栏改成浮层，跟分区页一样是 Box 的兄弟节点。
+        //
+        // 之前在 Scaffold.topBar 里：Scaffold 会按顶栏的测量高度给内容让位，
+        // 而这个高度是固定的（状态栏 + 56dp）。顶栏收起、玻璃也收缩之后，
+        // 那 56dp 的位置仍然被 Scaffold 占着，填的是 containerColor ——
+        // 这就是「收起之后还有一块不透明背景」的真正来源。
+        // 玻璃层怎么改都治不了它，因为问题不在玻璃，在让位。
+        //
+        // 放进 Box 之后顶栏不再参与内容让位，正文自己用 contentPadding
+        // 在开始处让开顶栏，滚动时从它下面穿过去。
+        Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(pageScroll.scrollWatcher),
             containerColor = MaterialTheme.colorScheme.background,
@@ -2077,126 +2097,14 @@ fun PostDetailScreen(
         },
         // 顶栏：玻璃底 + 随滚动收起，跟分区页同一套机制。
         // 「只看楼主」已移到评论区（它筛的是评论，放顶栏离内容太远）。
-        topBar = {
-            PostDetailTopBar(
-                boardName = postDetailState.board?.name
-                    ?: postDetailState.post?.group?.name
-                    ?: "文章详情",
-                boardAvatar = postDetailState.board?.avatar
-                    ?: postDetailState.post?.group?.avatarUrl,
-                hiddenFraction = { detailAway.value },
-                onBackClick = onBackClick,
-                onBoardClick = {
-                    postDetailState.board?.let { board ->
-                        val intent = Intent(context, BoardDetailActivity::class.java).apply {
-                            putExtra("board_id", board.id)
-                            putExtra("board_name", board.name)
-                            putExtra("token", if (isTokenLoaded) currentToken else "")
-                        }
-                        context.startActivity(intent)
-                    }
-                },
-                menuExpanded = topMenuExpanded,
-                onMenuClick = { topMenuExpanded = true },
-                onMenuDismiss = { topMenuExpanded = false },
-                menuContent = {
-                    DropdownMenuItem(
-                        text = { Text("分享") },
-                        onClick = {
-                            topMenuExpanded = false
-                            showShareDialog = true
-                        }
-                    )
-                    if (canManagePost) {
-                        DropdownMenuItem(
-                            text = { Text("修改") },
-                            onClick = {
-                                topMenuExpanded = false
-                                postDetailState.post?.let { post ->
-                                    val intent = Intent(context, EditPostActivity::class.java).apply {
-                                        putExtra("post_id", post.id)
-                                        putExtra("token", if (isTokenLoaded) currentToken else "")
-                                        putExtra("original_title", post.title)
-                                        putExtra("original_content", post.content)
-                                        putExtra("content_type", post.contentType)
-                                        putExtra("board_id", post.baId)
-                                        putExtra("board_name", postDetailState.board?.name ?: "")
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移动文章") },
-                            onClick = {
-                                topMenuExpanded = false
-                                showMoveBoardDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if ((postDetailState.post?.isSticky ?: 0) == 1) {
-                                        "取消置顶"
-                                    } else {
-                                        "置顶文章"
-                                    }
-                                )
-                            },
-                            onClick = {
-                                topMenuExpanded = false
-                                val post = postDetailState.post ?: return@DropdownMenuItem
-                                val sticky = post.isSticky != 1
-                                viewModel.togglePostStickyWithToken(
-                                    postId = post.id,
-                                    sticky = sticky,
-                                    onSuccess = {
-                                        Toast.makeText(
-                                            context,
-                                            if (sticky) "置顶成功" else "已取消置顶",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    },
-                                    onError = { msg ->
-                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                    }
-                                )
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                topMenuExpanded = false
-                                showDeleteDialog = true
-                            }
-                        )
-                    }
-                    // 举报：原来挂在作者行右边，改成 Oolong 版式后作者行只留名字和时间，
-                    // 举报挪到 ⋮ 菜单里 —— 它本来就是低频操作，不该占正文的视觉位置
-                    DropdownMenuItem(
-                        text = { Text("举报文章") },
-                        onClick = {
-                            topMenuExpanded = false
-                            postDetailState.post?.let { p ->
-                                reportTarget = CommunityReportTarget(
-                                    typ = 1,
-                                    targetId = p.id,
-                                    title = "举报文章"
-                                )
-                            }
-                        }
-                    )
-                }
-            )
-        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // 只让出顶部（标题栏）的空间，底部不再让位：
-                // 互动条现在是"真悬浮"，文章内容要从它下面滚过去
+                // 顶栏已经移出 Scaffold，paddingValues 只剩 bottomBar 的部分。
+                // 顶部由 LazyColumn 自己的 contentPadding 让开（见下面列表那段），
+                // 这样内容能从收起的顶栏下面直接穿过去。
                 .padding(
-                    top = paddingValues.calculateTopPadding(),
                     start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
                     end = paddingValues.calculateEndPadding(LocalLayoutDirection.current)
                 )
@@ -2252,7 +2160,11 @@ fun PostDetailScreen(
                             // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
                             // 正文和评论标题各自加 16dp，各自负责自己的对齐。
                             contentPadding = PaddingValues(
-                                top = 16.dp,
+                                // 顶栏现在是浮层，不再由 Scaffold 让位，
+                                // 所以这里自己让开「状态栏 + 顶栏行高」。
+                                // 用 statusBarTop 而不是固定的 56dp：
+                                // 刘海/挖孔屏的状态栏高度不一样，写死会让正文钻到栏里。
+                                top = statusBarTop + DetailBarRowHeight + 16.dp,
                                 bottom = 140.dp
                             ),
                             // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
@@ -2613,7 +2525,122 @@ fun PostDetailScreen(
                 )
             }
         }
-        }
+    }
+
+        // ===== 顶栏浮层 =====
+        // 放在 Box 里、Scaffold 之后：叠在内容之上，不参与内容让位。
+        // 跟分区页的 BoardTopBar 是同一个位置关系。
+        PostDetailTopBar(
+            boardName = postDetailState.board?.name
+                ?: postDetailState.post?.group?.name
+                ?: "文章详情",
+            boardAvatar = postDetailState.board?.avatar
+                ?: postDetailState.post?.group?.avatarUrl,
+            hiddenFraction = { detailAway.value },
+            onBackClick = onBackClick,
+            onBoardClick = {
+                postDetailState.board?.let { board ->
+                    val intent = Intent(context, BoardDetailActivity::class.java).apply {
+                        putExtra("board_id", board.id)
+                        putExtra("board_name", board.name)
+                        putExtra("token", if (isTokenLoaded) currentToken else "")
+                    }
+                    context.startActivity(intent)
+                }
+            },
+            menuExpanded = topMenuExpanded,
+            onMenuClick = { topMenuExpanded = true },
+            onMenuDismiss = { topMenuExpanded = false },
+            menuContent = {
+                DropdownMenuItem(
+                    text = { Text("分享") },
+                    onClick = {
+                        topMenuExpanded = false
+                        showShareDialog = true
+                    }
+                )
+                if (canManagePost) {
+                    DropdownMenuItem(
+                        text = { Text("修改") },
+                        onClick = {
+                            topMenuExpanded = false
+                            postDetailState.post?.let { post ->
+                                val intent = Intent(context, EditPostActivity::class.java).apply {
+                                    putExtra("post_id", post.id)
+                                    putExtra("token", if (isTokenLoaded) currentToken else "")
+                                    putExtra("original_title", post.title)
+                                    putExtra("original_content", post.content)
+                                    putExtra("content_type", post.contentType)
+                                    putExtra("board_id", post.baId)
+                                    putExtra("board_name", postDetailState.board?.name ?: "")
+                                }
+                                context.startActivity(intent)
+                            }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移动文章") },
+                        onClick = {
+                            topMenuExpanded = false
+                            showMoveBoardDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if ((postDetailState.post?.isSticky ?: 0) == 1) {
+                                    "取消置顶"
+                                } else {
+                                    "置顶文章"
+                                }
+                            )
+                        },
+                        onClick = {
+                            topMenuExpanded = false
+                            val post = postDetailState.post ?: return@DropdownMenuItem
+                            val sticky = post.isSticky != 1
+                            viewModel.togglePostStickyWithToken(
+                                postId = post.id,
+                                sticky = sticky,
+                                onSuccess = {
+                                    Toast.makeText(
+                                        context,
+                                        if (sticky) "置顶成功" else "已取消置顶",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                onError = { msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            topMenuExpanded = false
+                            showDeleteDialog = true
+                        }
+                    )
+                }
+                // 举报：原来挂在作者行右边，改成 Oolong 版式后作者行只留名字和时间，
+                // 举报挪到 ⋮ 菜单里 —— 它本来就是低频操作，不该占正文的视觉位置
+                DropdownMenuItem(
+                    text = { Text("举报文章") },
+                    onClick = {
+                        topMenuExpanded = false
+                        postDetailState.post?.let { p ->
+                            reportTarget = CommunityReportTarget(
+                                typ = 1,
+                                targetId = p.id,
+                                title = "举报文章"
+                            )
+                        }
+                    }
+                )
+            }
+        )
+    }
     }
 }
 
