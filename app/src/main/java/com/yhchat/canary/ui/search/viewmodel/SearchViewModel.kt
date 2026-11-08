@@ -5,11 +5,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yhchat.canary.data.api.ApiService
 import com.yhchat.canary.data.di.RepositoryFactory
+import com.yhchat.canary.data.model.SearchCategory
 import com.yhchat.canary.data.model.SearchData
+import com.yhchat.canary.data.model.SearchItem
 import com.yhchat.canary.data.repository.ConversationRepository
 import com.yhchat.canary.data.repository.FriendRepository
+import com.yhchat.canary.data.repository.GroupRepository
 import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.data.repository.UserRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +45,7 @@ class SearchViewModel(
     private val conversationRepository: ConversationRepository = RepositoryFactory.getConversationRepository(appContext)
 
     private val userRepository: UserRepository
+    private val groupRepository: GroupRepository = RepositoryFactory.getGroupRepository(appContext)
 
     init {
         userRepository = UserRepository(apiService, null)
@@ -59,7 +65,10 @@ class SearchViewModel(
     val joinRequestState: StateFlow<JoinRequestState> = _joinRequestState.asStateFlow()
 
     /**
-     * 执行搜索
+     * 执行搜索。
+     *
+     * 群聊不再走 home-search，而是先用「群口令」查 v1/group/info-add-friend；
+     * 关键词对上群口令就直接把那个群作为结果返回。用户和机器人仍用 home-search。
      */
     fun search(word: String) {
         if (word.isBlank()) {
@@ -71,18 +80,57 @@ class SearchViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-            userRepository.homeSearch(word)
-                .onSuccess { searchData ->
-                    _searchResult.value = searchData
-                    _uiState.value = _uiState.value.copy(isLoading = false)
-                }
-                .onFailure { error ->
-                    _searchResult.value = null
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "搜索失败: ${error.message}"
+            val keyword = word.trim()
+
+            // 两个接口并行：群口令查群 + home-search 查用户/机器人
+            val (keywordGroup, homeSearchData) = coroutineScope {
+                val groupDeferred = async { groupRepository.getGroupByKeyword(keyword).getOrNull() }
+                val homeDeferred = async { userRepository.homeSearch(keyword).getOrNull() }
+                groupDeferred.await() to homeDeferred.await()
+            }
+
+            if (keywordGroup == null && homeSearchData == null) {
+                _searchResult.value = null
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "没有找到「$keyword」对应的群聊、用户或机器人"
+                )
+                return@launch
+            }
+
+            // 3. 合并：群口令命中的群放最前面，其余类别原样保留
+            val categories = mutableListOf<SearchCategory>()
+
+            if (keywordGroup != null) {
+                categories += SearchCategory(
+                    title = "群口令匹配",
+                    list = listOf(
+                        SearchItem(
+                            friendId = keywordGroup.groupId,
+                            friendType = 2,
+                            nickname = keywordGroup.name,
+                            name = null,
+                            avatarUrl = keywordGroup.avatarUrl,
+                            hit = 0
+                        )
                     )
+                )
+            }
+
+            homeSearchData?.list?.forEach { category ->
+                val filtered = category.list
+                    ?.filterNot { item ->
+                        // 群口令已经命中的群，别在下面重复一份
+                        keywordGroup != null && item.friendType == 2 && item.friendId == keywordGroup.groupId
+                    }
+                    .orEmpty()
+                if (filtered.isNotEmpty()) {
+                    categories += category.copy(list = filtered)
                 }
+            }
+
+            _searchResult.value = SearchData(list = categories)
+            _uiState.value = _uiState.value.copy(isLoading = false)
         }
     }
 

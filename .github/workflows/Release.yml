@@ -183,7 +183,10 @@ jobs:
       - name: Prepare release metadata
         id: release_meta
         run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          set -uo pipefail
+
+          COMMIT_MESSAGE="$(git log -1 --pretty=%s 2>/dev/null || true)"
+          HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
           INPUT_TAG="${{ github.event.inputs.release_tag }}"
           LAST_TAG_INPUT="${{ github.event.inputs.last_tag }}"
           LATEST_TAG_INPUT="${{ github.event.inputs.latest_tag }}"
@@ -208,78 +211,100 @@ jobs:
           EMPTY_BEFORE="0000000000000000000000000000000000000000"
           FULL_CHANGELOG_LINE=""
 
+          # 取 commit 列表的优先级：
+          #   1) 手动填了 last_tag/latest_tag → 用它俩之间的范围
+          #   2) push 触发且有可达的 before → 用它到 HEAD
+          #   3) 都不可用 → 最近 20 条
+          # 每一步都加 || true：GitHub run 默认 -e，旧写法里 git log 报错会直接掐死 step，
+          # 后面的 release body 和机器人通知全都出不来。
+          COMMIT_RANGE=""
           if [ -n "$LAST_TAG_INPUT" ] && [ -n "$LATEST_TAG_INPUT" ]; then
-            CHANGELOG=$(git log --format='- %s' "${LAST_TAG_INPUT}..${LATEST_TAG_INPUT}")
-            COMMIT_LIST=$(git log --format='- `%h` %s (%an)' "${LAST_TAG_INPUT}..${LATEST_TAG_INPUT}")
+            if git rev-parse --verify --quiet "${LAST_TAG_INPUT}^{commit}" >/dev/null 2>&1 \
+               && git rev-parse --verify --quiet "${LATEST_TAG_INPUT}^{commit}" >/dev/null 2>&1; then
+              COMMIT_RANGE="${LAST_TAG_INPUT}..${LATEST_TAG_INPUT}"
+            else
+              echo "WARN: tag range ${LAST_TAG_INPUT}..${LATEST_TAG_INPUT} not resolvable, falling back" >&2
+            fi
             FULL_CHANGELOG_LINE="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG_INPUT}...${LATEST_TAG_INPUT}"
-          elif [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "$EMPTY_BEFORE" ]; then
-            CHANGELOG=$(git log --format='- %s' "${BEFORE_SHA}..HEAD")
-            COMMIT_LIST=$(git log --format='- `%h` %s (%an)' "${BEFORE_SHA}..HEAD")
-          else
-            CHANGELOG=$(git log -n 10 --format='- %s')
-            COMMIT_LIST=$(git log -n 10 --format='- `%h` %s (%an)')
           fi
 
-          if [ -z "$CHANGELOG" ]; then
+          if [ -z "$COMMIT_RANGE" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "$EMPTY_BEFORE" ]; then
+            if git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              COMMIT_RANGE="${BEFORE_SHA}..HEAD"
+            fi
+          fi
+
+          if [ -n "$COMMIT_RANGE" ]; then
+            COMMIT_LIST="$(git log --no-merges --format='- `%h` %s (%an)' "${COMMIT_RANGE}" 2>/dev/null || true)"
+            CHANGELOG="$(git log --no-merges --format='- %s' "${COMMIT_RANGE}" 2>/dev/null || true)"
+          fi
+
+          if [ -z "${COMMIT_LIST:-}" ]; then
+            COMMIT_LIST="$(git log --no-merges -n 20 --format='- `%h` %s (%an)' 2>/dev/null || true)"
+            CHANGELOG="$(git log --no-merges -n 20 --format='- %s' 2>/dev/null || true)"
+          fi
+
+          # 兜底：连 git log 都取不到时，至少给一条当前提交
+          if [ -z "${COMMIT_LIST:-}" ] && [ -n "$HEAD_SHA" ]; then
+            COMMIT_LIST="- \`${HEAD_SHA:0:7}\` ${COMMIT_MESSAGE}"
+          fi
+          if [ -z "${CHANGELOG:-}" ]; then
             CHANGELOG="- ${COMMIT_MESSAGE}"
           fi
 
-          if [ -z "$COMMIT_LIST" ]; then
-            COMMIT_LIST="- \`${{ steps.commit.outputs.hash }}\` ${COMMIT_MESSAGE}"
-          fi
-
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "commit range: ${COMMIT_RANGE:-<none, fell back to recent commits>}"
 
-          cat > release-body.md <<EOF
-          ## Build Information
-          - **Version**: ${{ steps.version.outputs.release_name }}
-          - **Commit Hash**: ${{ steps.commit.outputs.full_hash }}
-          - **Build Date**: ${{ steps.date.outputs.date }}
-          - **Branch**: ${{ github.ref_name }}
-
-          ## Build Variants
-          - **Standard**: [app-standard-release.apk](${STANDARD_APK_URL})
-          - **Miuix**: [app-miuix-release.apk](${MIUIX_APK_URL})
-          - **Player**: [app-player-release.apk](${PLAYER_APK_URL})
-          - **PlayerMiuix**: [app-playermiuix-release.apk](${PLAYER_MIUIX_APK_URL})
-          - **Live**: [app-live-release.apk](${LIVE_APK_URL})
-          - **LiveMiuix**: [app-livemiuix-release.apk](${LIVE_MIUIX_APK_URL})
-          - **Full**: [app-full-release.apk](${FULL_APK_URL})
-          - **FullMiuix**: [app-fullmiuix-release.apk](${FULL_MIUIX_APK_URL})
-
-          ## Changelog
-          ${CHANGELOG}
-
-          ## Commit List
-          ${COMMIT_LIST}
-
-          ${FULL_CHANGELOG_LINE}
-          EOF
+          {
+            printf '## Build Information\n'
+            printf -- '- **Version**: %s\n' "${{ steps.version.outputs.release_name }}"
+            printf -- '- **Commit Hash**: %s\n' "${{ steps.commit.outputs.full_hash }}"
+            printf -- '- **Build Date**: %s\n' "${{ steps.date.outputs.date }}"
+            printf -- '- **Branch**: %s\n' "${{ github.ref_name }}"
+            printf '\n'
+            printf '## Build Variants\n'
+            printf -- '- **Standard**: [app-standard-release.apk](%s)\n' "${STANDARD_APK_URL}"
+            printf -- '- **Miuix**: [app-miuix-release.apk](%s)\n' "${MIUIX_APK_URL}"
+            printf -- '- **Player**: [app-player-release.apk](%s)\n' "${PLAYER_APK_URL}"
+            printf -- '- **PlayerMiuix**: [app-playermiuix-release.apk](%s)\n' "${PLAYER_MIUIX_APK_URL}"
+            printf -- '- **Live**: [app-live-release.apk](%s)\n' "${LIVE_APK_URL}"
+            printf -- '- **LiveMiuix**: [app-livemiuix-release.apk](%s)\n' "${LIVE_MIUIX_APK_URL}"
+            printf -- '- **Full**: [app-full-release.apk](%s)\n' "${FULL_APK_URL}"
+            printf -- '- **FullMiuix**: [app-fullmiuix-release.apk](%s)\n' "${FULL_MIUIX_APK_URL}"
+            printf '\n'
+            printf '## Changelog\n'
+            printf '%s\n' "${CHANGELOG}"
+            printf '\n'
+            printf '## Commit List\n'
+            printf '%s\n' "${COMMIT_LIST}"
+            printf '\n'
+            printf '%s\n' "${FULL_CHANGELOG_LINE}"
+          } > release-body.md
 
           # 云湖通知只展示最近 5 条 commit
-          BOT_COMMIT_LIST=$(printf '%s\n' "$COMMIT_LIST" | head -n 5)
+          BOT_COMMIT_LIST="$(printf '%s\n' "${COMMIT_LIST}" | head -n 5)"
 
-          cat > bot-release-body.md <<EOF
-          ## Build Information
-          - **Version**: ${{ steps.version.outputs.release_name }}
-          - **Commit Hash**: ${{ steps.commit.outputs.full_hash }}
-          - **Build Date**: ${{ steps.date.outputs.date }}
-          - **Branch**: ${{ github.ref_name }}
-
-          ## Build Variants
-          - **StandardRelease**: [app-standard-release.apk](${STANDARD_APK_URL})
-          - **MiuixRelease**: [app-miuix-release.apk](${MIUIX_APK_URL})
-          - **PlayerRelease**: [app-player-release.apk](${PLAYER_APK_URL})
-          - **PlayermiuixRelease**: [app-playermiuix-release.apk](${PLAYER_MIUIX_APK_URL})
-
-          ## Changelog
-          ${CHANGELOG}
-
-          ## Commit List
-          ${BOT_COMMIT_LIST}
-
-          ${FULL_CHANGELOG_LINE}
-          EOF
+          {
+            printf '## Build Information\n'
+            printf -- '- **Version**: %s\n' "${{ steps.version.outputs.release_name }}"
+            printf -- '- **Commit Hash**: %s\n' "${{ steps.commit.outputs.full_hash }}"
+            printf -- '- **Build Date**: %s\n' "${{ steps.date.outputs.date }}"
+            printf -- '- **Branch**: %s\n' "${{ github.ref_name }}"
+            printf '\n'
+            printf '## Build Variants\n'
+            printf -- '- **StandardRelease**: [app-standard-release.apk](%s)\n' "${STANDARD_APK_URL}"
+            printf -- '- **MiuixRelease**: [app-miuix-release.apk](%s)\n' "${MIUIX_APK_URL}"
+            printf -- '- **PlayerRelease**: [app-player-release.apk](%s)\n' "${PLAYER_APK_URL}"
+            printf -- '- **PlayermiuixRelease**: [app-playermiuix-release.apk](%s)\n' "${PLAYER_MIUIX_APK_URL}"
+            printf '\n'
+            printf '## Changelog\n'
+            printf '%s\n' "${CHANGELOG}"
+            printf '\n'
+            printf '## Commit List\n'
+            printf '%s\n' "${BOT_COMMIT_LIST}"
+            printf '\n'
+            printf '%s\n' "${FULL_CHANGELOG_LINE}"
+          } > bot-release-body.md
 
       - name: Create Release
         id: create_release
@@ -424,7 +449,9 @@ jobs:
             -d "$SUMMARY_PAYLOAD" || true
 
   notify-failure:
-    if: ${{ always() && (needs.build.result == 'failure' || needs.release.result == 'failure') }}
+    # build 是 matrix job：部分 flavor 失败时它整体是 failure，但 cancelled 以及
+    # 被跳过的 job 不应该触发通知，所以排除 cancelled。
+    if: ${{ always() && (needs.build.result == 'failure' || needs.release.result == 'failure') && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     needs: [build, release]
     permissions:
@@ -435,7 +462,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # 失败通知要读 git log 拼 header，浅克隆会让 subject/sha 取不到
+          fetch-depth: 0
+
+      - name: Ensure gh and jq available
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "gh not found, installing..."
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gh
+          fi
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "jq not found, installing..."
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          gh --version
+          jq --version
 
       - name: Notify bot about failure
         continue-on-error: true
@@ -448,4 +491,7 @@ jobs:
           BOT_RECV_ID_SECRET: ${{ secrets.YHCHAT_BOT_RECV_ID }}
           BOT_RECV_TYPE_VAR: ${{ vars.YHCHAT_BOT_RECV_TYPE }}
           BOT_RECV_TYPE_SECRET: ${{ secrets.YHCHAT_BOT_RECV_TYPE }}
-        run: bash .github/scripts/bot-notify-failure.sh
+        run: |
+          # 显式用 bash 调脚本；文件权限在 Windows 检出后可能丢失可执行位，这里补一下
+          chmod +x .github/scripts/bot-notify-failure.sh
+          bash .github/scripts/bot-notify-failure.sh

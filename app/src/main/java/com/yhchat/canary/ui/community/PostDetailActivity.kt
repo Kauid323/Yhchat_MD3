@@ -11,11 +11,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,11 +29,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -75,7 +82,6 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -101,6 +107,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -115,10 +125,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.yhchat.canary.crash.CrashHandler
@@ -777,12 +787,38 @@ fun PostBottomActionBarDuo3(
     }
 }
 
+/* -------------------------------------------------------------------------- */
+/*  评论区：楼层样式                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** 楼层左侧栏宽度：头像、楼层号、竖线都在这条栏里。 */
+private val FloorGutter = 52.dp
+private val FloorAvatarSize = 36.dp
+private val FloorGutterStart = 4.dp
+
+/** 回复的小头像，以及它在第一行上的中心高度（竖线从这里拐出去）。 */
+private val ReplyAvatarSize = 22.dp
+private val ReplyAvatarCenter = 12.dp
+private val ReplyBranchRadius = 12.dp
+
+/** 竖线：很细，用文字色的一层淡染，不抢内容。 */
+private val FloorRuleWidth = 1.dp
+private const val FloorRuleAlpha = 0.16f
+
+@Composable
+private fun floorRuleColor(): Color =
+    MaterialTheme.colorScheme.onSurface.copy(alpha = FloorRuleAlpha)
+
 /**
- * 评论项
+ * 评论项，按论坛楼层的样式排：
+ * 左栏是作者头像 + 压在头像下沿的楼层号，一条细竖线从头像中心一路往下串到下一层；
+ * 右边是楼层正文。楼层里的回复挂在竖线的小分支上。
  */
 @Composable
 fun CommentItem(
     comment: CommunityComment,
+    floor: Int,
+    startsRule: Boolean = false,
     canDelete: Boolean = false,
     onLikeClick: (Int) -> Unit = {},
     onReplyClick: (Int) -> Unit = {},
@@ -791,164 +827,328 @@ fun CommentItem(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
+    val rule = floorRuleColor()
+    val replies = comment.replies.orEmpty()
+
+    // 楼层和它的回复都排在同一列里：楼栏（竖线 + 头像）宽 FloorGutter，
+    // 回复的楼栏接着往下画分支，竖线才不会错位
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // 高度由右侧内容决定，左栏的竖线才好铺满
+                .height(IntrinsicSize.Min)
+                .padding(top = 10.dp, bottom = 6.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                AsyncImage(
-                    model = comment.senderAvatar,
-                    contentDescription = comment.senderNickname,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clickable {
-                            UserDetailActivity.start(context = context, userId = comment.senderId, userName = comment.senderNickname)
-                        },
-                    contentScale = ContentScale.Crop
-                )
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = comment.senderNickname,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        if (comment.isVip == 1) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = "VIP",
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-                        }
-                    }
-                    
-                    Text(
-                        text = comment.createTimeText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            // ===== 左栏：竖线 + 头像 + 楼层号 =====
+            Box(modifier = Modifier.width(FloorGutter).fillMaxHeight()) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    // 第一层从头像中心起画，后面的层从顶部接住上一层的线
+                    val x = size.width / 2f
+                    val top = if (startsRule) FloorAvatarSize.toPx() / 2f else 0f
+                    drawLine(
+                        color = rule,
+                        start = Offset(x, top),
+                        end = Offset(x, size.height),
+                        strokeWidth = FloorRuleWidth.toPx()
                     )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    // 评论内容 - 支持选择复制
-                    SelectionContainer {
-                        Text(
-                            text = comment.content,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                }
+
+                // 头像在楼栏里居中，竖线正好从中穿过
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = comment.senderAvatar,
+                        contentDescription = comment.senderNickname,
+                        modifier = Modifier
+                            .size(FloorAvatarSize)
+                            .clip(CircleShape)
+                            .clickable {
+                                UserDetailActivity.start(
+                                    context = context,
+                                    userId = comment.senderId,
+                                    userName = comment.senderNickname
+                                )
+                            },
+                        contentScale = ContentScale.Crop
+                    )
+
+                    // 楼层号胶囊：压在头像下沿，比头像宽一点也没关系，不出楼栏
+                    FloorBadge(floor = floor)
                 }
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // 评论操作按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // 点赞按钮
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onLikeClick(comment.id) }
-                    ) {
-                        Icon(
-                            imageVector = if (comment.isLiked == "1") Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                            contentDescription = "点赞",
-                            tint = if (comment.isLiked == "1") 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        if (comment.likeNum > 0) {
-                            Spacer(modifier = Modifier.width(4.dp))
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // ===== 右侧：楼层正文 =====
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = comment.senderNickname,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (comment.isVip == 1) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
                             Text(
-                                text = comment.likeNum.toString(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (comment.isLiked == "1") 
-                                    MaterialTheme.colorScheme.primary 
-                                else 
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    // 回复按钮
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onReplyClick(comment.id) }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Comment,
-                            contentDescription = "回复",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        if (comment.repliesNum > 0) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = comment.repliesNum.toString(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "VIP",
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
                 }
 
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = comment.createTimeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 正文 - 支持选择复制
+                SelectionContainer {
+                    Text(
+                        text = comment.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 22.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 楼层操作：点赞、回复在左，删除/举报在右，都压成小字，不抢正文
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (canDelete) {
-                        TextButton(
-                            onClick = { onDeleteClick(comment) },
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onLikeClick(comment.id) }
                         ) {
-                            Text("删除", color = MaterialTheme.colorScheme.error)
+                            Icon(
+                                imageVector = if (comment.isLiked == "1") Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                contentDescription = "点赞",
+                                tint = if (comment.isLiked == "1") {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(15.dp)
+                            )
+                            if (comment.likeNum > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = comment.likeNum.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (comment.isLiked == "1") {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onReplyClick(comment.id) }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Comment,
+                                contentDescription = "回复",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            if (comment.repliesNum > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = comment.repliesNum.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
-                    TextButton(
-                        onClick = { onReportClick(comment) },
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text("举报")
+                        if (canDelete) {
+                            FloorAction("删除", color = MaterialTheme.colorScheme.error) {
+                                onDeleteClick(comment)
+                            }
+                        }
+                        FloorAction("举报") { onReportClick(comment) }
                     }
                 }
             }
-            
-            // 显示回复
-            if (!comment.replies.isNullOrEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Column(
-                    modifier = Modifier.padding(start = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    comment.replies.forEach { reply ->
-                        CommentReplyItem(reply = reply)
+        }
+
+        // ===== 楼层里的回复：挂在竖线的分支上 =====
+        replies.forEachIndexed { index, reply ->
+            CommentReplyItem(
+                reply = reply,
+                isLast = index == replies.lastIndex
+            )
+        }
+    }
+}
+
+/**
+ * 压在头像下沿的楼层号：小胶囊，数字用等宽感更稳，楼层多了也不会把左栏撑开。
+ */
+@Composable
+private fun FloorBadge(floor: Int) {
+    Box(
+        modifier = Modifier
+            .offset(y = (-7).dp)
+            .widthIn(max = FloorGutter - FloorGutterStart)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "${floor}F",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+/** 楼层操作的小字按钮，比 TextButton 更安静。 */
+@Composable
+private fun FloorAction(
+    text: String,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    onClick: () -> Unit
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    )
+}
+
+/**
+ * 楼层里的一条回复：左栏画一根从竖线拐过来的分支（最后一条不再往下续），
+ * 右边是小头像 + 昵称 + 内容。
+ */
+@Composable
+fun CommentReplyItem(
+    reply: CommunityComment,
+    isLast: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val rule = floorRuleColor()
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        // 分支：竖线走到开口高度，四分之一圆弧拐进回复，最后一条不再往下接
+        Canvas(modifier = Modifier.width(FloorGutter).fillMaxHeight()) {
+            val x = size.width / 2f
+            val y = ReplyAvatarCenter.toPx()
+            val r = ReplyBranchRadius.toPx()
+            val path = Path().apply {
+                moveTo(x, 0f)
+                lineTo(x, if (isLast) (y - r).coerceAtLeast(0f) else size.height)
+                arcTo(
+                    rect = Rect(x, y - 2 * r, x + 2 * r, y),
+                    startAngleDegrees = 180f,
+                    sweepAngleDegrees = -90f,
+                    forceMoveTo = false
+                )
+                lineTo(size.width, y)
+            }
+            drawPath(path, rule, style = Stroke(FloorRuleWidth.toPx()))
+        }
+
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            AsyncImage(
+                model = reply.senderAvatar,
+                contentDescription = reply.senderNickname,
+                modifier = Modifier
+                    .size(ReplyAvatarSize)
+                    // 跟第一行文字居中对齐
+                    .padding(top = ReplyAvatarCenter - ReplyAvatarSize / 2)
+                    .clip(CircleShape)
+                    .clickable {
+                        UserDetailActivity.start(
+                            context = context,
+                            userId = reply.senderId,
+                            userName = reply.senderNickname
+                        )
+                    },
+                contentScale = ContentScale.Crop
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = reply.senderNickname,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (reply.isVip == 1) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "VIP",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = reply.createTimeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                SelectionContainer {
+                    Text(
+                        text = reply.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        lineHeight = 20.sp
+                    )
                 }
             }
         }
@@ -956,66 +1156,182 @@ fun CommentItem(
 }
 
 /**
- * 评论回复项
+ * 评论楼层表：全屏 sheet，顶部是标题 + 输入框，下面是按楼层排的评论列表。
+ *
+ * 楼层号按列表顺序从 1F 起算，加载更多之后接着往下编号，
+ * 所以不会出现「翻页了楼层号又从 1F 开始」。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CommentReplyItem(
-    reply: CommunityComment,
-    modifier: Modifier = Modifier
+private fun CommentFloorSheet(
+    comments: List<CommunityComment>,
+    isLoading: Boolean,
+    hasMore: Boolean,
+    total: Int,
+    inputText: String,
+    onInputTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onLoadMore: () -> Unit,
+    onCopyPost: () -> Unit,
+    canDeleteComment: (CommunityComment) -> Boolean,
+    onLikeClick: (Int) -> Unit,
+    onDeleteClick: (CommunityComment) -> Unit,
+    onReportClick: (CommunityComment) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.Top
+    val listState = rememberLazyListState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
-        AsyncImage(
-            model = reply.senderAvatar,
-            contentDescription = reply.senderNickname,
+        Column(
             modifier = Modifier
-                .size(24.dp)
-                .clickable {
-                    UserDetailActivity.start(context = context, userId = reply.senderId, userName = reply.senderNickname)
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .navigationBarsPadding()
+        ) {
+            // ===== 标题栏 =====
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "评论",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (total > 0) "$total" else "${comments.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onCopyPost) {
+                    Text("复制原文", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ===== 输入框 =====
+            OutlinedTextField(
+                value = inputText,
+                onValueChange = onInputTextChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                placeholder = { Text("写下你的评论…") },
+                maxLines = 3,
+                singleLine = false,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                trailingIcon = {
+                    if (inputText.isNotBlank()) {
+                        IconButton(onClick = onSend) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "发送",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 },
-            contentScale = ContentScale.Crop
-        )
-        
-        Spacer(modifier = Modifier.width(8.dp))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = reply.senderNickname,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
-                if (reply.isVip == 1) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.small
-                    ) {
+                shape = RoundedCornerShape(20.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ===== 楼层列表 =====
+            if (comments.isEmpty() && isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            } else if (comments.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "VIP",
-                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
+                            text = "还没有评论",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "来说点什么，占个 1F",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = reply.createTimeText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                ) {
+                    itemsIndexed(
+                        items = comments,
+                        key = { _, comment -> comment.id }
+                    ) { index, comment ->
+                        CommentItem(
+                            comment = comment,
+                            // 楼层从 1F 起，跨页连续
+                            floor = index + 1,
+                            // 第一层的竖线从头像中心开始；后面的层从顶部接上上一层的线
+                            startsRule = index == 0,
+                            canDelete = canDeleteComment(comment),
+                            onLikeClick = onLikeClick,
+                            onDeleteClick = onDeleteClick,
+                            onReportClick = onReportClick
+                        )
+                    }
+
+                    if (hasMore) {
+                        item(key = "comment_load_more") {
+                            LaunchedEffect(Unit) { onLoadMore() }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "继续上滑加载更多",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            
-            Text(
-                text = reply.content,
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }
@@ -1655,118 +1971,50 @@ fun PostDetailScreen(
             }
 
             if (showCommentInput) {
-                ModalBottomSheet(
-                    onDismissRequest = { showCommentInput = false },
-                    sheetState = rememberModalBottomSheetState()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "评论 (${commentListState.comments.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            TextButton(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("帖子原文", postDetailState.post?.content ?: "")
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
-                                }
-                            ) { Text("复制原文") }
+                CommentFloorSheet(
+                    comments = commentListState.comments,
+                    isLoading = commentListState.isLoading,
+                    hasMore = commentListState.hasMore,
+                    total = commentListState.total,
+                    inputText = commentText,
+                    onInputTextChange = { commentText = it },
+                    onSend = {
+                        if (commentText.isNotBlank()) {
+                            viewModel.commentPostWithToken(postId, commentText)
+                            commentText = ""
                         }
-
-                        OutlinedTextField(
-                            value = commentText,
-                            onValueChange = { commentText = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("写下你的评论...") },
-                            maxLines = 3,
-                            singleLine = false,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            trailingIcon = {
-                                if (commentText.isNotBlank()) {
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.commentPostWithToken(postId, commentText)
-                                            commentText = ""
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.Send,
-                                            contentDescription = "发送",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(16.dp)
+                    },
+                    onLoadMore = {
+                        if (!commentListState.isLoading) {
+                            viewModel.loadMoreCommentsWithToken(postId)
+                        }
+                    },
+                    onCopyPost = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("帖子原文", postDetailState.post?.content ?: "")
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
+                    },
+                    canDeleteComment = { comment ->
+                        comment.senderId == postDetailState.currentUserId ||
+                            postDetailState.isAdmin == 1 ||
+                            commentListState.isAdmin == 1
+                    },
+                    onLikeClick = { commentId ->
+                        viewModel.likeCommentWithToken(postId, commentId)
+                    },
+                    onDeleteClick = { selectedComment ->
+                        pendingDeleteComment = selectedComment
+                    },
+                    onReportClick = { selectedComment ->
+                        reportTarget = CommunityReportTarget(
+                            typ = 2,
+                            targetId = selectedComment.id,
+                            title = "举报评论"
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(commentListState.comments) { comment ->
-                                CommentItem(
-                                    comment = comment,
-                                    canDelete = comment.senderId == postDetailState.currentUserId || postDetailState.isAdmin == 1 || commentListState.isAdmin == 1,
-                                    onLikeClick = { commentId ->
-                                        viewModel.likeCommentWithToken(postId, commentId)
-                                    },
-                                    onReplyClick = {
-                                    },
-                                    onDeleteClick = { selectedComment ->
-                                        pendingDeleteComment = selectedComment
-                                    },
-                                    onReportClick = { selectedComment ->
-                                        reportTarget = CommunityReportTarget(
-                                            typ = 2,
-                                            targetId = selectedComment.id,
-                                            title = "举报评论"
-                                        )
-                                    }
-                                )
-                            }
-
-                            if (commentListState.hasMore) {
-                                item {
-                                    LaunchedEffect(Unit) {
-                                        if (!commentListState.isLoading) {
-                                            viewModel.loadMoreCommentsWithToken(postId)
-                                        }
-                                    }
-                                    if (commentListState.isLoading) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                    },
+                    onDismiss = { showCommentInput = false }
+                )
             }
 
             pendingDeleteComment?.let { comment ->

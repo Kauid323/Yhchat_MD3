@@ -10,6 +10,8 @@ import com.yhchat.canary.proto.group.bot_list_send
 import com.yhchat.canary.proto.group.edit_group
 import com.yhchat.canary.proto.group.edit_group_send
 import com.yhchat.canary.proto.group.info
+import com.yhchat.canary.proto.group.info_add_friend
+import com.yhchat.canary.proto.group.info_add_friend_send
 import com.yhchat.canary.proto.group.info_send
 import com.yhchat.canary.proto.group.list_member
 import com.yhchat.canary.proto.group.list_member_send
@@ -356,6 +358,103 @@ class GroupRepository @Inject constructor(
             Log.e(tag, "❌ Unknown error: ${e.message}", e)
             Log.e(tag, "Error type: ${e::class.java.simpleName}")
             Log.e(tag, "Error details: ${e.stackTraceToString()}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 获取群口令关联群聊
+     * POST /v1/group/info-add-friend (protobuf)
+     *
+     * 请求只有 keyword（群口令），响应是 Status + Group_data，
+     * 和 getGroupInfo 的 data 结构一致，所以直接复用 GroupDetail。
+     */
+    suspend fun getGroupByKeyword(keyword: String): Result<GroupDetail> = withContext(Dispatchers.IO) {
+        Log.d(tag, "🔍 Getting group by keyword: $keyword")
+        val token = tokenRepository?.getTokenSync()
+        if (token.isNullOrEmpty()) {
+            return@withContext Result.failure(Exception("未登录"))
+        }
+
+        val trimmed = keyword.trim()
+        if (trimmed.isEmpty()) {
+            return@withContext Result.failure(Exception("请输入群口令"))
+        }
+
+        return@withContext try {
+            val request = info_add_friend_send.newBuilder()
+                .setKeyword(trimmed)
+                .build()
+
+            val requestBody = request.toByteArray()
+                .toRequestBody("application/x-protobuf".toMediaTypeOrNull())
+
+            val httpRequest = Request.Builder()
+                .url("$baseUrl/v1/group/info-add-friend")
+                .addHeader("token", token)
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(httpRequest).execute()
+
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string() ?: "No error body"
+                Log.e(tag, "❌ info-add-friend failed: ${response.code} - $errorBody")
+                return@withContext Result.failure(IOException("请求失败: ${response.code}"))
+            }
+
+            val responseBody = response.body?.bytes()
+                ?: return@withContext Result.failure(IOException("响应为空"))
+
+            val infoResponse = info_add_friend.parseFrom(responseBody)
+
+            if (infoResponse.status.code != 1) {
+                Log.e(tag, "❌ info-add-friend error: ${infoResponse.status.msg}")
+                return@withContext Result.failure(Exception(infoResponse.status.msg))
+            }
+
+            val data = infoResponse.data
+
+            Result.success(
+                GroupDetail(
+                    groupId = data.groupId,
+                    name = data.name,
+                    avatarUrl = data.avatarUrl,
+                    introduction = data.introduction,
+                    memberCount = data.member.toInt(),
+                    createBy = data.createBy,
+                    directJoin = data.directJoin == 1,
+                    permissionLevel = data.permissonLevel,
+                    historyMsgEnabled = data.historyMsg == 1,
+                    categoryName = data.categoryName,
+                    categoryId = data.categoryId,
+                    isPrivate = data.private == 1,
+                    doNotDisturb = data.doNotDisturb == 1,
+                    hideGroupMembers = data.hideGroupMembers == 1L,
+                    denyMembersUploadToGroupDisk = data.denyMembersUploadToGroupDisk == 1L,
+                    communityId = data.communityId,
+                    communityName = data.communityName,
+                    isTop = data.top == 1,
+                    adminIds = data.adminList,
+                    ownerId = data.owner,
+                    limitedMsgType = data.limitedMsgType,
+                    avatarId = data.avatarId,
+                    recommendation = data.recommandation,
+                    myGroupNickname = data.myGroupNickname.takeIf { it.isNotEmpty() },
+                    groupCode = data.groupCode.takeIf { it.isNotEmpty() },
+                    autoDeleteMessage = data.autoDeleteMessage,
+                    unbanTimestamp = if (data.unbanTimestamp > 0L) data.unbanTimestamp else null,
+                    banReason = data.banReason.takeIf { it.isNotBlank() }
+                )
+            )
+        } catch (e: InvalidProtocolBufferException) {
+            Log.e(tag, "❌ info-add-friend protobuf parse error: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: IOException) {
+            Log.e(tag, "❌ info-add-friend network error: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: Exception) {
+            Log.e(tag, "❌ info-add-friend unknown error: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -877,13 +976,14 @@ class GroupRepository @Inject constructor(
         }
     }
 
+    /**
+     * 编辑机器人在群聊中的管理权限。
+     * 只提交 [permissions] 里给出的那几项，key 用服务端下发的 key（如 allowGetGroupMembers）。
+     */
     suspend fun editBotGroupPermission(
         groupId: String,
         botId: String,
-        allowEditGroupInfo: Int,
-        allowGagMember: Int,
-        allowRemoveMember: Int,
-        allowGroupTagManage: Int
+        permissions: Map<String, Boolean>
     ): Result<Boolean> {
         return try {
             val token = tokenRepository?.getTokenSync()
@@ -894,12 +994,9 @@ class GroupRepository @Inject constructor(
             val response = apiService.editBotGroupPermission(
                 token = token,
                 request = com.yhchat.canary.data.api.BotGroupPermissionEditRequest(
-                    groupId = groupId,
                     botId = botId,
-                    allowEditGroupInfo = allowEditGroupInfo,
-                    allowGagMember = allowGagMember,
-                    allowRemoveMember = allowRemoveMember,
-                    allowGroupTagManage = allowGroupTagManage
+                    groupId = groupId,
+                    permissions = permissions
                 )
             )
 

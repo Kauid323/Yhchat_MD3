@@ -18,13 +18,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -32,13 +32,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.yhchat.canary.data.api.BotGroupPermissionItem
 import com.yhchat.canary.proto.group.Bot_data
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.bot.BotDetailActivity
@@ -217,7 +221,7 @@ fun GroupBotManagementScreen(
 
     // 邀请机器人对话框
     if (uiState.showInviteBotDialog) {
-        InviteBotDialog(
+        InviteBotSheet(
             myBots = uiState.myBots,
             searchQuery = uiState.inviteSearchQuery,
             onSearchQueryChange = viewModel::updateInviteSearchQuery,
@@ -251,17 +255,18 @@ fun GroupBotManagementScreen(
     }
 
     uiState.selectedPermissionBot?.let { bot ->
-        BotPermissionDialog(
+        BotPermissionSheet(
             bot = bot,
             permissionState = uiState.botPermissionStates[bot.botId] ?: BotGroupPermissionState(),
-            isUpdating = uiState.updatingPermissionBotIds.contains(bot.botId) ||
-                uiState.loadingPermissionBotIds.contains(bot.botId),
+            isLoading = uiState.loadingPermissionBotIds.contains(bot.botId),
+            isUpdating = uiState.updatingPermissionBotIds.contains(bot.botId),
             onDismiss = { viewModel.closePermissionDialog() },
-            onPermissionChange = { field, enabled ->
-                viewModel.updateBotPermission(
+            onRefresh = { viewModel.refreshPermission(groupId, bot.botId) },
+            onToggle = { key, enabled ->
+                viewModel.toggleBotPermission(
                     groupId = groupId,
                     botId = bot.botId,
-                    field = field,
+                    key = key,
                     enabled = enabled
                 )
             }
@@ -362,70 +367,132 @@ fun BotCard(
     }
 }
 
+/**
+ * 机器人管理权限弹窗。
+ *
+ * 权限项完全由 group-permission-get 返回的 permissions 列表驱动：
+ * 名称、说明、顺序都是服务端下发的，本地不再硬编码；勾选后只提交这一项。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BotPermissionDialog(
+private fun BotPermissionSheet(
     bot: Bot_data,
     permissionState: BotGroupPermissionState,
+    isLoading: Boolean,
     isUpdating: Boolean,
     onDismiss: () -> Unit,
-    onPermissionChange: (BotPermissionField, Boolean) -> Unit
+    onRefresh: () -> Unit,
+    onToggle: (key: String, enabled: Boolean) -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("机器人管理权限") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        sheetState = rememberModalBottomSheetState()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // 标题区：机器人头像 + 名称
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
             ) {
-                Text(
-                    text = bot.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                AsyncImage(
+                    model = ImageUtils.createBotImageRequest(LocalContext.current, bot.avatarUrl),
+                    contentDescription = bot.name,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
-                PermissionCheckboxRow(
-                    text = "允许编辑群聊信息",
-                    checked = permissionState.allowEditGroupInfo,
-                    enabled = !isUpdating,
-                    onCheckedChange = { onPermissionChange(BotPermissionField.EditGroupInfo, it) }
-                )
-                PermissionCheckboxRow(
-                    text = "允许禁言成员",
-                    checked = permissionState.allowGagMember,
-                    enabled = !isUpdating,
-                    onCheckedChange = { onPermissionChange(BotPermissionField.GagMember, it) }
-                )
-                PermissionCheckboxRow(
-                    text = "允许移除成员",
-                    checked = permissionState.allowRemoveMember,
-                    enabled = !isUpdating,
-                    onCheckedChange = { onPermissionChange(BotPermissionField.RemoveMember, it) }
-                )
-                PermissionCheckboxRow(
-                    text = "允许管理群标签",
-                    checked = permissionState.allowGroupTagManage,
-                    enabled = !isUpdating,
-                    onCheckedChange = { onPermissionChange(BotPermissionField.GroupTagManage, it) }
-                )
-                if (isUpdating) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = bot.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "机器人管理权限",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
+
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                }
+
+                permissionState.isEmpty -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "没有可配置的权限项",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        TextButton(onClick = onRefresh) {
+                            Text("重新加载")
+                        }
+                    }
+                }
+
+                else -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 项数由服务端决定，多起来时自身可滚，不会把 sheet 顶出屏幕
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        permissionState.items.forEach { item ->
+                            PermissionSwitchRow(
+                                item = item,
+                                checked = permissionState.isEnabled(item.key),
+                                enabled = !isUpdating,
+                                onCheckedChange = { onToggle(item.key, it) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isUpdating) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
             }
         }
-    )
+    }
 }
 
+/**
+ * 一行权限：标题 + 说明 + 右侧开关。说明由服务端下发，没有就不占位。
+ */
 @Composable
-private fun PermissionCheckboxRow(
-    text: String,
+private fun PermissionSwitchRow(
+    item: BotGroupPermissionItem,
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -433,96 +500,148 @@ private fun PermissionCheckboxRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            if (item.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Switch(
             checked = checked,
             onCheckedChange = if (enabled) onCheckedChange else null,
             enabled = enabled
         )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }
 
+/**
+ * 邀请机器人：全屏 BottomSheet。
+ * 顶部标题 + 搜索框，下面铺满机器人列表，点一项直接邀请。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InviteBotDialog(
+fun InviteBotSheet(
     myBots: List<Contact>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onInvite: (String) -> Unit
 ) {
-
     val filteredBots = remember(searchQuery, myBots) {
         if (searchQuery.isEmpty()) {
             myBots
         } else {
             myBots.filter { bot ->
                 bot.name.contains(searchQuery, ignoreCase = true) ||
-                bot.chatId.contains(searchQuery, ignoreCase = true)
+                    bot.chatId.contains(searchQuery, ignoreCase = true)
             }
         }
     }
-    
-    AlertDialog(
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("邀请机器人") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-            ) {
-                // 搜索框
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("搜索机器人") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = "搜索")
-                    },
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // 机器人列表
-                if (filteredBots.isEmpty()) {
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp)
+        ) {
+            Text(
+                text = "邀请机器人",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "选择要添加到本群的机器人",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("搜索机器人名称或 ID") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "清除")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(28.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (filteredBots.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(bottom = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = if (searchQuery.isEmpty()) "暂无机器人" else "未找到匹配的机器人",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(filteredBots) { bot ->
-                            InviteBotItem(
-                                bot = bot,
-                                onInvite = { onInvite(bot.chatId) }
-                            )
-                        }
+                    if (searchQuery.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "换个关键词试试",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredBots) { bot ->
+                        InviteBotItem(
+                            bot = bot,
+                            onInvite = { onInvite(bot.chatId) }
+                        )
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
         }
-    )
+    }
 }
 
 @Composable

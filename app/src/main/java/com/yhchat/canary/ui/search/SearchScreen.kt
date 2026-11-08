@@ -115,7 +115,7 @@ fun SearchScreen(
         OutlinedTextField(
             value = searchText,
             onValueChange = { searchText = it },
-            placeholder = { Text("搜索用户、群组和机器人") },
+            placeholder = { Text("输入群口令、用户ID或机器人名") },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -307,7 +307,7 @@ fun SearchScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "输入关键词开始搜索",
+                            text = "输入群口令或关键词开始搜索",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

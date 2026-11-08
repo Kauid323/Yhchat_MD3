@@ -2313,19 +2313,17 @@ data class ReportPostRequest(
     val url: String? = null // 举报图片url，可选
 )
 
+/**
+ * 编辑机器人群权限请求。
+ * 新版接口只传要改的那几项：`permissions: { "allowXxx": true }`，未传的项保持不变。
+ */
 data class BotGroupPermissionEditRequest(
-    @SerializedName("groupId")
-    val groupId: String,
     @SerializedName("botId")
     val botId: String,
-    @SerializedName("allowEditGroupInfo")
-    val allowEditGroupInfo: Int,
-    @SerializedName("allowGagMember")
-    val allowGagMember: Int,
-    @SerializedName("allowRemoveMember")
-    val allowRemoveMember: Int,
-    @SerializedName("allowGroupTagManage")
-    val allowGroupTagManage: Int
+    @SerializedName("groupId")
+    val groupId: String,
+    @SerializedName("permissions")
+    val permissions: Map<String, Boolean>
 )
 
 data class BotGroupPermissionGetRequest(
@@ -2345,12 +2343,31 @@ data class BotGroupPermissionGetResponse(
 )
 
 data class BotGroupPermissionData(
+    // 顶层仍保留四个 0/1 字段（部分客户端还在读），真正驱动界面的是 permissions 列表
     @SerializedName("allowEditGroupInfo")
-    val allowEditGroupInfo: Int,
+    val allowEditGroupInfo: Int = 0,
     @SerializedName("allowGagMember")
-    val allowGagMember: Int,
+    val allowGagMember: Int = 0,
     @SerializedName("allowRemoveMember")
-    val allowRemoveMember: Int,
+    val allowRemoveMember: Int = 0,
     @SerializedName("allowGroupTagManage")
-    val allowGroupTagManage: Int
+    val allowGroupTagManage: Int = 0,
+    @SerializedName("allowGetGroupMembers")
+    val allowGetGroupMembers: Int = 0,
+    @SerializedName("permissions")
+    val permissions: List<BotGroupPermissionItem>? = null
+)
+
+/**
+ * 群权限列表里的一项。name/description 由服务端下发，界面直接用，不在本地硬编码文案。
+ */
+data class BotGroupPermissionItem(
+    @SerializedName("key")
+    val key: String,
+    @SerializedName("name")
+    val name: String = "",
+    @SerializedName("description")
+    val description: String = "",
+    @SerializedName("enabled")
+    val enabled: Boolean = false
 )

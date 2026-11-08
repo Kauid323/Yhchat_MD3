@@ -3,6 +3,7 @@ package com.yhchat.canary.ui.group
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.yhchat.canary.data.api.BotGroupPermissionItem
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.repository.BotRepository
 import com.yhchat.canary.data.repository.FriendRepository
@@ -138,11 +139,9 @@ class GroupBotManagementViewModel(application: Application) : AndroidViewModel(a
     }
 
     fun openPermissionDialog(groupId: String, bot: Bot_data) {
-        val permissionStates = _uiState.value.botPermissionStates.toMutableMap()
-        permissionStates.putIfAbsent(bot.botId, BotGroupPermissionState())
         _uiState.value = _uiState.value.copy(
             selectedPermissionBot = bot,
-            botPermissionStates = permissionStates,
+            botPermissionStates = _uiState.value.botPermissionStates - bot.botId,
             loadingPermissionBotIds = _uiState.value.loadingPermissionBotIds + bot.botId,
             userMessage = null
         )
@@ -171,34 +170,54 @@ class GroupBotManagementViewModel(application: Application) : AndroidViewModel(a
         _uiState.value = _uiState.value.copy(selectedPermissionBot = null)
     }
 
-    fun updateBotPermission(
+    fun refreshPermission(groupId: String, botId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                loadingPermissionBotIds = _uiState.value.loadingPermissionBotIds + botId
+            )
+            groupRepository.getBotGroupPermission(groupId = groupId, botId = botId).fold(
+                onSuccess = { permissionData ->
+                    _uiState.value = _uiState.value.copy(
+                        botPermissionStates = _uiState.value.botPermissionStates + (
+                            botId to permissionData.toUiState()
+                        ),
+                        loadingPermissionBotIds = _uiState.value.loadingPermissionBotIds - botId
+                    )
+                },
+                onFailure = { error ->
+                    _uiState.value = _uiState.value.copy(
+                        loadingPermissionBotIds = _uiState.value.loadingPermissionBotIds - botId,
+                        userMessage = error.message ?: "获取机器人权限失败"
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * 切换某一项权限。key 直接用服务端下发的 key（allowEditGroupInfo / allowGetGroupMembers ...），
+     * 只提交换的这一项，其余保持服务端现状。
+     */
+    fun toggleBotPermission(
         groupId: String,
         botId: String,
-        field: BotPermissionField,
+        key: String,
         enabled: Boolean
     ) {
+        val currentState = _uiState.value.botPermissionStates[botId] ?: BotGroupPermissionState()
+        val nextState = currentState.withPermission(key, enabled)
+
+        _uiState.value = _uiState.value.copy(
+            botPermissionStates = _uiState.value.botPermissionStates + (botId to nextState),
+            updatingPermissionBotIds = _uiState.value.updatingPermissionBotIds + botId,
+            userMessage = null
+        )
+
         viewModelScope.launch {
-            val currentState = _uiState.value.botPermissionStates[botId] ?: BotGroupPermissionState()
-            val nextState = when (field) {
-                BotPermissionField.EditGroupInfo -> currentState.copy(allowEditGroupInfo = enabled)
-                BotPermissionField.GagMember -> currentState.copy(allowGagMember = enabled)
-                BotPermissionField.RemoveMember -> currentState.copy(allowRemoveMember = enabled)
-                BotPermissionField.GroupTagManage -> currentState.copy(allowGroupTagManage = enabled)
-            }
-
-            _uiState.value = _uiState.value.copy(
-                botPermissionStates = _uiState.value.botPermissionStates + (botId to nextState),
-                updatingPermissionBotIds = _uiState.value.updatingPermissionBotIds + botId,
-                userMessage = null
-            )
-
             groupRepository.editBotGroupPermission(
                 groupId = groupId,
                 botId = botId,
-                allowEditGroupInfo = nextState.allowEditGroupInfo.toApiValue(),
-                allowGagMember = nextState.allowGagMember.toApiValue(),
-                allowRemoveMember = nextState.allowRemoveMember.toApiValue(),
-                allowGroupTagManage = nextState.allowGroupTagManage.toApiValue()
+                permissions = mapOf(key to enabled)
             ).fold(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(
@@ -206,6 +225,7 @@ class GroupBotManagementViewModel(application: Application) : AndroidViewModel(a
                     )
                 },
                 onFailure = { error ->
+                    // 失败回滚到切换前的状态
                     _uiState.value = _uiState.value.copy(
                         botPermissionStates = _uiState.value.botPermissionStates + (botId to currentState),
                         updatingPermissionBotIds = _uiState.value.updatingPermissionBotIds - botId,
@@ -232,27 +252,37 @@ data class GroupBotManagementUiState(
     val loadingPermissionBotIds: Set<String> = emptySet()
 )
 
+/**
+ * 一个机器人在本群的管理权限。
+ * 权限项不再本地枚举：顺序、名称、描述都跟服务端 group-permission-get 的 permissions 列表走，
+ * 本地只维护 key -> enabled 的映射，这样服务端加项不用改客户端。
+ */
 data class BotGroupPermissionState(
-    val allowEditGroupInfo: Boolean = false,
-    val allowGagMember: Boolean = false,
-    val allowRemoveMember: Boolean = false,
-    val allowGroupTagManage: Boolean = false
-)
+    val items: List<BotGroupPermissionItem> = emptyList(),
+    val enabled: Map<String, Boolean> = emptyMap()
+) {
+    val isEmpty: Boolean get() = items.isEmpty()
 
-enum class BotPermissionField {
-    EditGroupInfo,
-    GagMember,
-    RemoveMember,
-    GroupTagManage
+    fun isEnabled(key: String): Boolean = enabled[key] ?: false
+
+    fun withPermission(key: String, value: Boolean): BotGroupPermissionState =
+        copy(enabled = enabled + (key to value))
 }
-
-private fun Boolean.toApiValue(): Int = if (this) 1 else 0
 
 private fun com.yhchat.canary.data.api.BotGroupPermissionData.toUiState(): BotGroupPermissionState {
+    // 新接口下发 permissions 列表时优先用它；老响应只有顶层四个 0/1 字段，兜底转成同样的结构
+    val list = permissions?.takeIf { it.isNotEmpty() } ?: legacyPermissions()
     return BotGroupPermissionState(
-        allowEditGroupInfo = allowEditGroupInfo == 1,
-        allowGagMember = allowGagMember == 1,
-        allowRemoveMember = allowRemoveMember == 1,
-        allowGroupTagManage = allowGroupTagManage == 1
+        items = list,
+        enabled = list.associate { it.key to it.enabled }
     )
 }
+
+private fun com.yhchat.canary.data.api.BotGroupPermissionData.legacyPermissions(): List<BotGroupPermissionItem> =
+    listOf(
+        BotGroupPermissionItem("allowEditGroupInfo", "允许修改群信息", "允许机器人修改群信息及消息类型限制", allowEditGroupInfo == 1),
+        BotGroupPermissionItem("allowGagMember", "允许禁言用户", "允许机器人禁言或解除成员禁言", allowGagMember == 1),
+        BotGroupPermissionItem("allowRemoveMember", "允许移除群成员", "允许机器人将成员移出本群", allowRemoveMember == 1),
+        BotGroupPermissionItem("allowGroupTagManage", "允许控制标签组", "允许机器人创建、修改群标签及成员标签关联", allowGroupTagManage == 1),
+        BotGroupPermissionItem("allowGetGroupMembers", "允许获取群成员列表", "允许机器人读取本群成员的基本信息；开启隐藏群成员后仍可读取完整名单", allowGetGroupMembers == 1)
+    )

@@ -26,6 +26,7 @@
 - [x] 修改密码/绑定邮箱
 - [x] 搜索会话/口令进群
 - [x] 创建群聊/机器人
+- [x] 查找引用消息
 - [x] 各种群聊管理功能...
 - [x] 社区
   - 分区列表
@@ -59,9 +60,9 @@
 - 发送消息带机器人变量（有机器人变量时才会有）
 - 修生成聊天记录功能
 - 更强壮的html解析器
-- 查找引用消息
 
-> 最新构建请看[Actions](https://github.com/Kauid323/Yhchat_MD3/actions)，点击[Release](https://github.com/Kauid323/Yhchat_MD3/releases)下载，或[加入云湖群聊](https://yhfx.jwznb.com/share?key=csahOdGjPUYX&ts=1778391867)，使用高速下载通道
+
+> 最新构建请看[Actions](https://github.com/Kauid323/Yhchat_MD3/actions)，正式版下载请点击[Release](https://github.com/Kauid323/Yhchat_MD3/releases)下载，或[加入云湖群聊](https://yhfx.jwznb.com/share?key=csahOdGjPUYX&ts=1778391867)，使用高速下载通道
 
 # 特别感谢
 ### [yhchatAPI](https://github.com/yh-Tpdev/yhchatAPI)
@@ -71,8 +72,10 @@
 ### [Reorderable](https://github.com/Calvin-LL/Reorderable)
 ### [KsoupHtml](https://github.com/MohamedRejeb/Ksoup)
 ### [轻昼](http://github.com/shijuhao/QingZhouCE)
+### [Oolong](https://github.com/HuanCheng65/Oolong)
 
 以及项目里用到的所有库
 
 # 声明
 此项目（Yhchat_MD3）是个人为了兴趣而开发, 仅用于学习和测试，请于下载后24小时内删除。 所用API皆从官方网站收集, 不提供任何破解内容。
+

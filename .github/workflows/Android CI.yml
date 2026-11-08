@@ -160,9 +160,8 @@ jobs:
       - name: Prepare bot release metadata
         id: release_meta
         run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          BEFORE_SHA="${{ github.event.before }}"
-          EMPTY_BEFORE="0000000000000000000000000000000000000000"
+          set -uo pipefail
+
           RUN_ID="${{ github.run_id }}"
           REPO="${{ github.repository }}"
           ACTIONS_RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
@@ -171,45 +170,85 @@ jobs:
           LIVE_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-live.zip"
           FULL_APK_URL="https://nightly.link/${REPO}/actions/runs/${RUN_ID}/apk-full.zip"
 
-          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "$EMPTY_BEFORE" ]; then
-            CHANGELOG=$(git log --format='- %s' "${BEFORE_SHA}..HEAD")
-            COMMIT_LIST=$(git log --format='- `%h` %s (%an)' "${BEFORE_SHA}..HEAD")
-          else
-            CHANGELOG=$(git log -n 10 --format='- %s')
-            COMMIT_LIST=$(git log -n 10 --format='- `%h` %s (%an)')
+          # 本次构建到底包含哪些 commit。
+          #
+          # 旧写法用 `git log "${BEFORE_SHA}..HEAD"`：push 事件下 before 是推送前的 HEAD，
+          # 但 workflow_dispatch / 首次推送 / force push 之后 before 为空或不可达，
+          # 这时 git log 会直接报错，又因为 GitHub 的 run 默认带 -e，整个 step 挂掉，
+          # 后面的消息根本不会发出去。
+          #
+          # 现在改成显式拼范围，并且给每个 git 调用加 || true，任何一步取不到都退化成
+          # HEAD 本身，绝不因为取日志失败而中断通知。
+          BEFORE_SHA="${{ github.event.before }}"
+          EMPTY_SHA="0000000000000000000000000000000000000000"
+          HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+
+          COMMIT_RANGE=""
+          if [ -n "${BEFORE_SHA}" ] && [ "${BEFORE_SHA}" != "${EMPTY_SHA}" ]; then
+            # before 必须在本地历史里可达，否则 ..HEAD 会失败
+            if git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              COMMIT_RANGE="${BEFORE_SHA}..HEAD"
+            fi
           fi
 
-          if [ -z "$CHANGELOG" ]; then
+          COMMIT_MESSAGE="$(git log -1 --pretty=%s 2>/dev/null || true)"
+          COMMIT_AUTHOR="$(git log -1 --pretty=%an 2>/dev/null || true)"
+
+          # 取 commit 列表：有可用范围就用范围，没有就退化成最近 N 条
+          collect_commits() {
+            local n="$1"
+            if [ -n "${COMMIT_RANGE}" ]; then
+              git log --no-merges --format='- `%h` %s (%an)' "${COMMIT_RANGE}" 2>/dev/null || true
+            fi
+          }
+
+          COMMIT_LIST="$(collect_commits 20)"
+          if [ -z "${COMMIT_LIST}" ]; then
+            COMMIT_LIST="$(git log --no-merges -n 20 --format='- `%h` %s (%an)' 2>/dev/null || true)"
+          fi
+
+          # 实在取不到（比如单 commit 浅克隆），至少给出一条当前提交
+          if [ -z "${COMMIT_LIST}" ] && [ -n "${HEAD_SHA}" ]; then
+            SHORT="${HEAD_SHA:0:7}"
+            COMMIT_LIST="- \`${SHORT}\` ${COMMIT_MESSAGE}"
+          fi
+
+          # Changelog 只要主题行，去掉 PR 编号噪音
+          CHANGELOG="$(printf '%s\n' "${COMMIT_LIST}" | sed -E 's/ \(.*\)$//' | head -n 20)"
+          if [ -z "${CHANGELOG}" ]; then
             CHANGELOG="- ${COMMIT_MESSAGE}"
           fi
 
-          if [ -z "$COMMIT_LIST" ]; then
-            COMMIT_LIST="- \`${{ steps.commit.outputs.hash }}\` ${COMMIT_MESSAGE}"
+          # 云湖通知只展示最近 5 条 commit
+          BOT_COMMIT_LIST="$(printf '%s\n' "${COMMIT_LIST}" | head -n 5)"
+          if [ -z "${BOT_COMMIT_LIST}" ]; then
+            BOT_COMMIT_LIST="${CHANGELOG}"
           fi
 
-          # 云湖通知只展示最近 5 条 commit
-          BOT_COMMIT_LIST=$(printf '%s\n' "$COMMIT_LIST" | head -n 5)
+          {
+            printf '## Build Information\n'
+            printf -- '- **Version**: %s\n' "${{ steps.version.outputs.release_name }}"
+            printf -- '- **Commit Hash**: %s\n' "${{ steps.commit.outputs.full_hash }}"
+            printf -- '- **Build Date**: %s\n' "${{ steps.date.outputs.date }}"
+            printf -- '- **Branch**: %s\n' "${{ github.ref_name }}"
+            printf -- '- **Actions Run**: [查看 Actions 构建与产物](%s)\n' "${ACTIONS_RUN_URL}"
+            printf '\n'
+            printf '## Build Variants (点击直链下载)\n'
+            printf -- '- **StandardRelease**: [app-standard-release.apk (zip)](%s)\n' "${STANDARD_APK_URL}"
+            printf -- '- **PlayerRelease**: [app-player-release.apk (zip)](%s)\n' "${PLAYER_APK_URL}"
+            printf -- '- **LiveRelease**: [app-live-release.apk (zip)](%s)\n' "${LIVE_APK_URL}"
+            printf -- '- **FullRelease**: [app-full-release.apk (zip)](%s)\n' "${FULL_APK_URL}"
+            printf '\n'
+            printf '## Changelog\n'
+            printf '%s\n' "${CHANGELOG}"
+            printf '\n'
+            printf '## Commit List\n'
+            printf '%s\n' "${BOT_COMMIT_LIST}"
+          } > bot-release-body.md
 
-          cat > bot-release-body.md <<EOF
-          ## Build Information
-          - **Version**: ${{ steps.version.outputs.release_name }}
-          - **Commit Hash**: ${{ steps.commit.outputs.full_hash }}
-          - **Build Date**: ${{ steps.date.outputs.date }}
-          - **Branch**: ${{ github.ref_name }}
-          - **Actions Run**: [查看 Actions 构建与产物](${ACTIONS_RUN_URL})
-
-          ## Build Variants (点击直链下载)
-          - **StandardRelease**: [app-standard-release.apk (zip)](${STANDARD_APK_URL})
-          - **PlayerRelease**: [app-player-release.apk (zip)](${PLAYER_APK_URL})
-          - **LiveRelease**: [app-live-release.apk (zip)](${LIVE_APK_URL})
-          - **FullRelease**: [app-full-release.apk (zip)](${FULL_APK_URL})
-
-          ## Changelog
-          ${CHANGELOG}
-
-          ## Commit List
-          ${BOT_COMMIT_LIST}
-          EOF
+          # 落到日志里，出问题时一眼能看出是哪种分支
+          echo "commit range: ${COMMIT_RANGE:-<none, fell back to recent commits>}"
+          echo "commit count: $(printf '%s\n' "${COMMIT_LIST}" | grep -c '^- ' || true)"
 
       - name: Notify bot about build
         continue-on-error: true
@@ -340,7 +379,10 @@ jobs:
             -d "$SUMMARY_PAYLOAD" || true
 
   notify-failure:
-    if: ${{ always() && needs.build.result == 'failure' }}
+    # build 是 matrix job：只要有一个 flavor 失败，它就整体是 failure；
+    # 但 cancelled 以及"部分 flavor 成功"的情况以前会被漏掉，所以这里放宽到
+    # 非 success 且不是被手动取消都通知。
+    if: ${{ always() && needs.build.result != 'success' && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     needs: build
     permissions:
@@ -351,7 +393,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # 失败通知要读 git log，浅克隆会让 sha 取不到subject
+          fetch-depth: 0
+
+      - name: Ensure gh and jq available
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "gh not found, installing..."
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gh
+          fi
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "jq not found, installing..."
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          gh --version
+          jq --version
 
       - name: Notify bot about failure
         continue-on-error: true
@@ -364,4 +422,6 @@ jobs:
           BOT_RECV_ID_SECRET: ${{ secrets.YHCHAT_BOT_RECV_ID }}
           BOT_RECV_TYPE_VAR: ${{ vars.YHCHAT_BOT_RECV_TYPE }}
           BOT_RECV_TYPE_SECRET: ${{ secrets.YHCHAT_BOT_RECV_TYPE }}
-        run: bash .github/scripts/bot-notify-failure.sh
+        run: |
+          chmod +x .github/scripts/bot-notify-failure.sh
+          bash .github/scripts/bot-notify-failure.sh

@@ -202,3 +202,47 @@ message create_group {
     Status status = 1;
     string group_id = 2;  // 创建的群组ID
 }
+
+// 获取群口令关联群聊
+message info_add_friend_send {
+    string keyword = 2; // 欲要搜索的群口令
+}
+
+message info_add_friend {
+    Status status = 1;
+    // 与 info.Group_data 字段一致，这里独立定义一份，
+    // 避免跨消息引用带来的生成顺序/命名依赖
+    message Group_data {
+        string group_id = 1;
+        string name = 2;
+        string avatar_url = 3;
+        int64 avatar_id = 4; // 头像ID
+        string introduction = 5;
+        int64 member = 6; // 群人数
+        string create_by = 7;
+        int32 direct_join = 8; // 进群免审核
+        int32 permisson_level = 9; // 权限等级
+        int32 history_msg = 10; // 历史消息
+        string category_name = 11; // 分类名
+        int64 category_id = 12; // 分类ID
+        int32 private = 13; // 是否为私有群聊
+        int32 do_not_disturb = 14; // 免打扰
+        int64 community_id = 15;
+        string community_name = 16;
+        int64 unban_timestamp = 18; // 群聊解禁时间戳
+        int32 top = 19; // 会话置顶
+        repeated string admin = 20;
+        string limited_msg_type = 22; // 被限制的消息类型
+        string owner = 23;
+        int32 recommandation = 24; // 是否加入群推荐
+        repeated string tag_old = 26; // 标签(旧版)
+        string my_group_nickname = 28; // 我的群昵称
+        string group_code = 29; // 群口令
+        uint64 hide_group_members = 30; // 隐藏群成员
+        int64 auto_delete_message = 32; // 消息自动销毁时间
+        uint64 deny_members_upload_to_group_disk = 33; // 禁止上传群云盘
+        string ban_reason = 34; // 群聊封禁原因
+    }
+
+    Group_data data = 2;
+}

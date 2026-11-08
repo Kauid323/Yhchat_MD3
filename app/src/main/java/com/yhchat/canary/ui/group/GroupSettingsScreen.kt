@@ -97,7 +97,7 @@ fun GroupSettingsScreenRoot(
             LargeTopAppBar(
                 title = {
                     Text(
-                        text = "群聊设置 · $groupName",
+                        text = "群聊设置",
                         fontWeight = FontWeight.SemiBold
                     )
                 },

@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +70,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -1217,6 +1219,9 @@ private fun AddMenuBottomSheetContent(
     showAddGroup: Boolean = true,
     showScan: Boolean = true
 ) {
+    // 选项统一收进一张 surfaceContainerHigh 的圆角卡里：
+    // 之前 ListItem 用的是默认容器色，跟 sheet 背景几乎同色又不完全一样，
+    // 一列看下来每条颜色都不均匀，还会被 sheet 自身的 ripple/遮罩再压一层。
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1226,66 +1231,137 @@ private fun AddMenuBottomSheetContent(
             text = "添加",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 12.dp)
         )
-        
-        Box(
+
+        val itemColors = ListItemDefaults.colors(
+            containerColor = Color.Transparent
+        )
+
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // 添加用户/群聊/机器人
+                if (showAddUser) {
+                    ListItem(
+                        headlineContent = { Text("添加用户/群聊/机器人") },
+                        supportingContent = { Text("通过ID搜索并添加好友、群聊或机器人") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = "添加",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
+                        modifier = Modifier.clickable(onClick = onAddUserGroupBot),
+                        colors = itemColors
+                    )
+                }
+
+                if (showAddUser && (showAddGroup || showScan)) {
+                    AddMenuItemDivider()
+                }
+
+                // 创建群聊/机器人
+                if (showAddGroup) {
+                    ListItem(
+                        headlineContent = { Text("创建群聊/机器人") },
+                        supportingContent = { Text("创建新的群聊或机器人") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.GroupAdd,
+                                contentDescription = "创建",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
+                        modifier = Modifier.clickable(onClick = onCreateGroupBot),
+                        colors = itemColors
+                    )
+                }
+
+                if (showAddGroup && showScan) {
+                    AddMenuItemDivider()
+                }
+
+                // 扫一扫
+                if (showScan) {
+                    ListItem(
+                        headlineContent = { Text("扫一扫") },
+                        supportingContent = { Text("扫描二维码添加好友或加入群聊") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "扫一扫",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
+                        modifier = Modifier.clickable(onClick = onScan),
+                        colors = itemColors
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 添加菜单里选项之间的极细分隔线，比 Divider 更安静。 */
+@Composable
+private fun AddMenuItemDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 56.dp, end = 16.dp)
+            .height(0.5.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    )
+}
+
+/**
+ * 认证角标，用 Material 的 Verified 图标代替原来的「官 / 地」文字圆点。
+ *
+ * - 官方（1）：实心徽章 + 白勾
+ * - 地区（2）：同形状，换蓝色
+ * 图标本身不自带底色，所以先铺一个圆形底、再叠白色图标，
+ * 尺寸完全由调用方决定，标题旁和头像角标能复用同一个。
+ */
+@Composable
+private fun CertificationBadge(
+    level: Int,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    val badgeColor = when (level) {
+        1 -> Color(0xFF4CAF50) // 官方 - 绿色
+        2 -> Color(0xFF2196F3) // 地区 - 蓝色
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val description = when (level) {
+        1 -> "官方认证"
+        2 -> "地区认证"
+        else -> "已认证"
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .background(badgeColor, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Verified,
+            contentDescription = description,
+            tint = Color.White,
+            // 图标留一点点内边距，徽章边缘才不会被勾的尖角顶满
+            modifier = Modifier.size(size * 0.78f)
         )
-        
-        // 添加用户/群聊/机器人
-        if (showAddUser) {
-            ListItem(
-                headlineContent = { Text("添加用户/群聊/机器人") },
-                supportingContent = { Text("通过ID搜索并添加好友、群聊或机器人") },
-                leadingContent = {
-                    Icon(
-                        imageVector = Icons.Default.PersonAdd,
-                        contentDescription = "添加",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                modifier = Modifier.clickable(onClick = onAddUserGroupBot)
-            )
-        }
-        
-        // 创建群聊/机器人
-        if (showAddGroup) {
-            ListItem(
-                headlineContent = { Text("创建群聊/机器人") },
-                supportingContent = { Text("创建新的群聊或机器人") },
-                leadingContent = {
-                    Icon(
-                        imageVector = Icons.Default.GroupAdd,
-                        contentDescription = "创建",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                modifier = Modifier.clickable(onClick = onCreateGroupBot)
-            )
-        }
-        
-        // 扫一扫
-        if (showScan) {
-            ListItem(
-                headlineContent = { Text("扫一扫") },
-                supportingContent = { Text("扫描二维码添加好友或加入群聊") },
-                leadingContent = {
-                    Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = "扫一扫",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                modifier = Modifier.clickable(onClick = onScan)
-            )
-        }
     }
 }
 
@@ -1424,30 +1500,10 @@ fun ConversationItem(
                             // 认证标识
                             if (conversation.certificationLevel != null && conversation.certificationLevel > 0) {
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .background(
-                                            when (conversation.certificationLevel) {
-                                                1 -> Color(0xFF4CAF50) // 官方 - 绿色
-                                                2 -> Color(0xFF2196F3) // 地区 - 蓝色
-                                                else -> Color.Gray
-                                            },
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = when (conversation.certificationLevel) {
-                                            1 -> "官"
-                                            2 -> "地"
-                                            else -> "认"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
-                                        fontSize = 10.sp
-                                    )
-                                }
+                                CertificationBadge(
+                                    level = conversation.certificationLevel,
+                                    size = 16.dp
+                                )
                             }
                             
                             // 免打扰图标
@@ -1632,30 +1688,10 @@ fun StickyConversationCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .background(
-                                    when (stickyItem.certificationLevel) {
-                                        1 -> Color(0xFF4CAF50) // 官方 - 绿色
-                                        2 -> Color(0xFF2196F3) // 地区 - 蓝色
-                                        else -> Color.Gray
-                                    },
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = when (stickyItem.certificationLevel) {
-                                    1 -> "官"
-                                    2 -> "地"
-                                    else -> "认"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontSize = 8.sp
-                            )
-                        }
+                        CertificationBadge(
+                            level = stickyItem.certificationLevel,
+                            size = 14.dp
+                        )
                     }
                     Text(
                         text = stickyItem.chatName,
@@ -1701,31 +1737,11 @@ fun StickyConversationCard(
 
                     // 认证标识
                     if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .align(Alignment.BottomEnd)
-                                .background(
-                                    when (stickyItem.certificationLevel) {
-                                        1 -> Color(0xFF4CAF50)
-                                        2 -> Color(0xFF2196F3)
-                                        else -> Color.Gray
-                                    },
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = when (stickyItem.certificationLevel) {
-                                    1 -> "官"
-                                    2 -> "地"
-                                    else -> "认"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontSize = 8.sp
-                            )
-                        }
+                        CertificationBadge(
+                            level = stickyItem.certificationLevel,
+                            size = 14.dp,
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        )
                     }
                 }
 
@@ -1776,31 +1792,11 @@ fun StickyConversationCard(
 
                     // 认证标识
                     if (stickyItem.certificationLevel != null && stickyItem.certificationLevel > 0) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .align(Alignment.BottomEnd)
-                                .background(
-                                    when (stickyItem.certificationLevel) {
-                                        1 -> Color(0xFF4CAF50)
-                                        2 -> Color(0xFF2196F3)
-                                        else -> Color.Gray
-                                    },
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = when (stickyItem.certificationLevel) {
-                                    1 -> "官"
-                                    2 -> "地"
-                                    else -> "认"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontSize = 8.sp
-                            )
-                        }
+                        CertificationBadge(
+                            level = stickyItem.certificationLevel,
+                            size = 14.dp,
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        )
                     }
                 }
             }
