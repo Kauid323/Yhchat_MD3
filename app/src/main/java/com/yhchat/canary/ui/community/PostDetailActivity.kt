@@ -159,6 +159,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
 import java.util.regex.Pattern
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 private fun TextUnit.scaledOrUnspecified(multiplier: Float): TextUnit {
     return if (this == TextUnit.Unspecified) {
@@ -246,90 +248,107 @@ fun PostContentCard(
         onSearchResultCountChanged(totalMatches)
     }
     
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // 作者信息
+    // 版式照 Oolong 的 FirstPostContent：
+    //   标题（22sp 粗体，行高 32sp）
+    //   ↓ 14dp
+    //   作者行：28dp 小头像 + 名字 + 时间（靠右）
+    //   ↓ 16dp
+    //   正文（左 padding 16dp）
+    Column(modifier = modifier.fillMaxWidth()) {
+        // ===== 标题 =====
+        SelectionContainer {
+            if (trimmedSearchQuery.isBlank()) {
+                Text(
+                    text = post.title,
+                    fontSize = 22.sp,
+                    lineHeight = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            } else {
+                HighlightedArticleText(
+                    text = post.title,
+                    keyword = trimmedSearchQuery,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp,
+                        lineHeight = 32.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ===== 作者行：头像 + 名字在左，时间在右 =====
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
                 model = post.senderAvatar,
                 contentDescription = post.senderNickname,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
                     .clickable {
-                        UserDetailActivity.start(context = context, userId = post.senderId, userName = post.senderNickname)
+                        UserDetailActivity.start(
+                            context = context,
+                            userId = post.senderId,
+                            userName = post.senderNickname
+                        )
                     },
                 contentScale = ContentScale.Crop
             )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // 名字：14sp SemiBold，权重吃掉剩余宽度
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = post.senderNickname,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (post.isVip == 1) {
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = post.senderNickname,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
+                        text = "VIP",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    if (post.isVip == 1) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = "VIP",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
                 }
-                Text(
-                    text = post.createTimeText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(8.dp))
 
-            TextButton(onClick = onReportClick) {
-                Text("举报")
-            }
+            // 时间靠右，跟 Oolong 一样压在作者行的行尾
+            Text(
+                text = post.createTimeText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // 文章标题 - 支持选择复制
-        SelectionContainer {
-            if (trimmedSearchQuery.isBlank()) {
-                Text(
-                    text = post.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                HighlightedArticleText(
-                    text = post.title,
-                    keyword = trimmedSearchQuery,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // 文章内容 - 支持选择复制
+
+        // ===== 正文 =====
         if (post.contentType == 2) {
             if (trimmedSearchQuery.isBlank()) {
                 MarkdownText(
@@ -339,7 +358,9 @@ fun PostContentCard(
                         currentImageUrl = imageUrl
                         showImageViewer = true
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     enableHtmlRendering = true
                 )
             } else {
@@ -351,7 +372,9 @@ fun PostContentCard(
                             lineHeight = MaterialTheme.typography.bodyMedium.lineHeight.scaledOrUnspecified(1.3f),
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
             }
@@ -375,20 +398,23 @@ fun PostContentCard(
                             lineHeight = MaterialTheme.typography.bodyMedium.lineHeight.scaledOrUnspecified(1.3f),
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // 群聊来源信息
         post.group?.let { group ->
             if (!group.groupId.isNullOrEmpty() && group.groupId != "0") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                         .clickable {
                             // 使用统一链接处理器跳转到群聊添加页面
                             val groupLink = "yunhu://chat-add?id=${group.groupId}&type=group"
@@ -725,6 +751,16 @@ private val ReplyBranchRadius = 12.dp
 private val FloorRuleWidth = 1.25.dp
 private const val FloorRuleAlpha = 0.16f
 
+/**
+ * 楼层之间的间距。
+ *
+ * 这个值必须同时出现在两处，否则竖线一定会断：
+ *  1. `LazyColumn` 的 `verticalArrangement = Arrangement.spacedBy(FloorGap)`
+ *  2. 楼层 Canvas 的主线往下多画 `FloorGap`，画穿 item 之间的那段空隙
+ * 两个值写死成同一个常量，改一处就同步。
+ */
+private val FloorGap = 12.dp
+
 @Composable
 private fun floorRuleColor(): Color =
     MaterialTheme.colorScheme.onSurface.copy(alpha = FloorRuleAlpha)
@@ -777,13 +813,16 @@ fun CommentItem(
             val top = if (startsRule) (10.dp + FloorAvatarSize / 2).toPx() else 0f
             val r = ReplyBranchRadius.toPx()
             val endX = (FloorGutterStart + FloorGutter).toPx()
+            // LazyColumn 的 spacedBy 把间距放在 item 之间，Canvas 只覆盖 item 自身高度，
+            // 那 12dp 就是线断掉的地方。这里让主线画穿自己的下边界、延伸进那段间隙，
+            // 下一层的顶正好接上 —— 线才是从头连到尾的。
+            val overflow = FloorGap.toPx()
 
-            // 主线：从起点一路到底，**不中断**。这是「线连着」的根本 ——
-            // 只要它不被 moveTo 打断，楼层和所有回复之间就没有缝。
+            // 主线：从起点一路画到下一层，中间不中断
             drawLine(
                 color = rule,
                 start = Offset(x, top),
-                end = Offset(x, size.height),
+                end = Offset(x, size.height + overflow),
                 strokeWidth = FloorRuleWidth.toPx()
             )
 
@@ -1749,7 +1788,9 @@ private val DetailBarEdgeExtend = 12.dp
 
 /**
  * 详情页顶栏的玻璃底：从上往下淡出到透明。
- * 和分区页是同一种做法，两页切换时观感一致。
+ *
+ * 色阶节点跟分区页一致，用 6 段而不是 3 段 —— 节点太少时相邻两段的 alpha
+ * 是线性跳变的，屏幕上能看出一条色带的边，那就是"硬"的来源。
  */
 @Composable
 private fun Modifier.detailGlassBackground(): Modifier {
@@ -1758,9 +1799,12 @@ private fun Modifier.detailGlassBackground(): Modifier {
         drawContent()
         drawRect(
             brush = Brush.verticalGradient(
-                0f to base.copy(alpha = 0.92f),
-                0.65f to base.copy(alpha = 0.70f),
-                1f to base.copy(alpha = 0f)
+                0.00f to base.copy(alpha = 0.90f),
+                0.22f to base.copy(alpha = 0.80f),
+                0.44f to base.copy(alpha = 0.60f),
+                0.64f to base.copy(alpha = 0.36f),
+                0.82f to base.copy(alpha = 0.14f),
+                1.00f to base.copy(alpha = 0.00f)
             )
         )
     }
@@ -1903,9 +1947,15 @@ fun PostDetailScreen(
         commentListState.comments.mapIndexed { index, c -> c.id to index + 1 }.toMap()
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
+    // LocalPageScroll 必须 provide 出去，否则 Modifier.pageScroll /
+    // matchedGeometryAnchor / boundsOf 全是空操作，收起进度恒为 0，顶栏永远不动。
+    // nestedScroll 把 pageScroll.scrollWatcher 挂上，onPostScroll 才会被调用。
+    CompositionLocalProvider(LocalPageScroll provides pageScroll) {
+        Scaffold(
+            modifier = modifier
+                .fillMaxSize()
+                .nestedScroll(pageScroll.scrollWatcher),
+            containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             // 统一底部操作栏
             postDetailState.post?.let { post ->
@@ -2035,6 +2085,21 @@ fun PostDetailScreen(
                             }
                         )
                     }
+                    // 举报：原来挂在作者行右边，改成 Oolong 版式后作者行只留名字和时间，
+                    // 举报挪到 ⋮ 菜单里 —— 它本来就是低频操作，不该占正文的视觉位置
+                    DropdownMenuItem(
+                        text = { Text("举报文章") },
+                        onClick = {
+                            topMenuExpanded = false
+                            postDetailState.post?.let { p ->
+                                reportTarget = CommunityReportTarget(
+                                    typ = 1,
+                                    targetId = p.id,
+                                    title = "举报文章"
+                                )
+                            }
+                        }
+                    )
                 }
             )
         }
@@ -2104,7 +2169,9 @@ fun PostDetailScreen(
                                 top = 16.dp,
                                 bottom = 140.dp
                             ),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
+                            // 穿过 item 之间的空隙，线才不会一层一层断开
+                            verticalArrangement = Arrangement.spacedBy(FloorGap)
                         ) {
                             // 文章内容
                             item {
@@ -2450,6 +2517,7 @@ fun PostDetailScreen(
                     }
                 )
             }
+        }
         }
     }
 }

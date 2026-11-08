@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -93,10 +94,13 @@ import com.yhchat.canary.ui.components.LocalPageScroll
 import com.yhchat.canary.ui.components.matchedGeometry
 import com.yhchat.canary.ui.components.matchedGeometryAnchor
 import com.yhchat.canary.ui.components.pageScroll
+import com.yhchat.canary.ui.components.rememberAnchorDockProgress
 import com.yhchat.canary.ui.components.rememberPageScrollState
 import com.yhchat.canary.ui.components.rememberScrollProgress
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 /**
  * 分区详情Activity - 显示某个分区的文章列表
@@ -220,26 +224,44 @@ fun BoardDetailScreen(
         coroutineScope.launch { listState.animateScrollToItem(0) }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        PullToRefreshBox(
-            isRefreshing = boardDetailState.isLoading || postListState.isLoading,
-            onRefresh = {
-                if (token.isNotBlank() && boardId > 0) {
-                    viewModel.refresh(token, boardId)
-                }
-            },
-            state = rememberPullToRefreshState(),
-            modifier = Modifier.fillMaxSize()
+    // 这一层是关键：LocalPageScroll 必须 provide 出去，否则
+    // Modifier.pageScroll / matchedGeometryAnchor / boundsOf 全都是空操作，
+    // 收起进度恒为 0，顶栏永远不动。
+    // nestedScroll 把 pageScroll.scrollWatcher 挂上，onPostScroll 才会被调用。
+    CompositionLocalProvider(LocalPageScroll provides pageScroll) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .nestedScroll(pageScroll.scrollWatcher)
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    // 内容上报自己的滚动位置给顶栏
-                    .pageScroll(listState),
-                // 顶部留出顶栏高度，头部内容从栏下开始；列表可以滚到顶栏后面
-                contentPadding = PaddingValues(top = TopBarHeight, bottom = 96.dp)
+            PullToRefreshBox(
+                isRefreshing = boardDetailState.isLoading || postListState.isLoading,
+                onRefresh = {
+                    if (token.isNotBlank() && boardId > 0) {
+                        viewModel.refresh(token, boardId)
+                    }
+                },
+                state = rememberPullToRefreshState(),
+                modifier = Modifier.fillMaxSize()
             ) {
+                // 顶部留白必须是「状态栏高度 + 顶栏行高」。
+                // 只给 TopBarHeight 的话，内容会钻进状态栏和顶栏行底下 ——
+                // 那就是分区信息显示到顶栏上的原因。
+                // 跟 Oolong GlassScaffold 一致：padding.top 用顶栏含状态栏的实际高度。
+                val topInset = WindowInsets.statusBars
+                    .asPaddingValues()
+                    .calculateTopPadding()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // 内容上报自己的滚动位置给顶栏
+                        .pageScroll(listState),
+                    contentPadding = PaddingValues(
+                        top = topInset + TopBarHeight,
+                        bottom = 96.dp
+                    )
+                ) {
                 // ===== 大头部 =====
                 item(key = "board_header") {
                     BoardHeader(
@@ -346,6 +368,7 @@ fun BoardDetailScreen(
                             repeat(3) { PostCardPlaceholder() }
                         }
                     }
+                }
                 }
             }
         }
@@ -824,8 +847,12 @@ private val BoardBarEdgeExtend = 12.dp
 /**
  * 顶栏的玻璃底：从上往下渐隐到完全透明。
  *
- * 顶部留 92% 的 surface 色保证标题读得清，到 65% 处已经淡到 72%，
- * 底边彻底 0 —— 没有硬底边，这就是「玻璃」和「不透明色块」的全部差别。
+ * 用 6 个色阶节点而不是 3 个 —— 节点太少时，两个节点之间的 alpha 是线性跳变的，
+ * 在屏幕上就是一条能看出边的色带（"硬"的观感主要来自这里）。
+ * 起点也只给 0.90，不做到不透明，标题靠字体加粗和阴影保证可读。
+ *
+ * 配合 [BoardBarEdgeExtend] 把渐变拉长到顶栏之外，每像素的 alpha 变化更缓，
+ * 内容穿过去才像雾而不是像一堵墙。
  */
 @Composable
 private fun Modifier.boardGlassBackground(): Modifier {
@@ -834,9 +861,12 @@ private fun Modifier.boardGlassBackground(): Modifier {
         drawContent()
         drawRect(
             brush = Brush.verticalGradient(
-                0f to base.copy(alpha = 0.92f),
-                0.65f to base.copy(alpha = 0.70f),
-                1f to base.copy(alpha = 0f)
+                0.00f to base.copy(alpha = 0.90f),
+                0.22f to base.copy(alpha = 0.80f),
+                0.44f to base.copy(alpha = 0.60f),
+                0.64f to base.copy(alpha = 0.36f),
+                0.82f to base.copy(alpha = 0.14f),
+                1.00f to base.copy(alpha = 0.00f)
             )
         )
     }
@@ -873,8 +903,8 @@ private fun BoardBarTitle(
     onBoardClick: () -> Unit
 ) {
     // 锚点进度：跟「元素和顶栏那一行的相对位置」走，不是跟滚动距离走
-    val avatarDock = rememberScrollProgress(BoardAvatarAnchor)
-    val nameDock = rememberScrollProgress(BoardNameAnchor)
+    val avatarDock = rememberAnchorDockProgress(BoardAvatarAnchor)
+    val nameDock = rememberAnchorDockProgress(BoardNameAnchor)
     val openDetail = Modifier.clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,

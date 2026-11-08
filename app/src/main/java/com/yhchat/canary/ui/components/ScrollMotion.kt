@@ -115,9 +115,15 @@ fun rememberScrollProgress(
  *
  * 头像、标题从页面里吸附到顶栏，用的就是这个 —— 它量的是「相对于顶栏位置」，
  * 所以无论在页面哪里，量出来都能直接拿去插值。
+ *
+ * 名字跟 [rememberScrollProgress] 分开，不靠重载区分：两者参数都是单个值，
+ * 传 object 时很容易被解析到 `away: Dp` 那个版本上。
  */
 @Composable
-fun rememberScrollProgress(anchor: Any, page: PageScrollState? = LocalPageScroll.current): ScrollProgress {
+fun rememberAnchorDockProgress(
+    anchor: Any,
+    page: PageScrollState? = LocalPageScroll.current
+): ScrollProgress {
     return remember(page, anchor) {
         ScrollProgress {
             val bounds = page?.anchors?.get(anchor) ?: return@ScrollProgress 0f
@@ -305,6 +311,10 @@ fun Modifier.matchedGeometry(key: Any, progress: ScrollProgress): Modifier {
                 alpha = 0f
                 return@graphicsLayer
             }
+            // graphicsLayer 的 block 每帧复用同一个 scope，alpha 是会累积的：
+            // 上面那个分支把 alpha 写成 0 之后，如果这里不显式设回来，
+            // 锚点测量到之后这一块就永远不可见 —— 大标题消失就是这么来的。
+            alpha = 1f
             val p = progress.value
             val scale = lerp(anchor.height / self.height, 1f, p)
             transformOrigin = TransformOrigin(0f, 0f)
