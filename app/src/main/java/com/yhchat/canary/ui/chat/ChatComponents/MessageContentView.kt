@@ -97,7 +97,7 @@ import kotlinx.coroutines.withContext
  * 固定尺寸配合 ContentScale.Crop 裁切居中，长宽比不同的图片也不会变形。
  */
 private val ImageThumbWidth = 70.dp
-private val ImageThumbHeight = 50.dp
+private val ImageThumbHeight = 120.dp
 
 /**
  * 消息内容视图
