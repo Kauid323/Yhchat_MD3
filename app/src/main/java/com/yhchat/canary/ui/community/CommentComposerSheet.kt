@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,7 +71,9 @@ internal fun CommentComposerSheet(
     val keyboard = LocalSoftwareKeyboardController.current
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        // 发送期间不响应关闭：请求已经出去了，这时收面板会让人不知道到底发没发出去。
+        // 等 commentSending 回落，由调用方的 LaunchedEffect 收起。
+        onDismissRequest = { if (!sending) onDismiss() },
         sheetState = sheetState,
         // 面板要装键盘和输入区，不要圆角那种小卡片观感
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -99,6 +102,8 @@ internal fun CommentComposerSheet(
                 BasicTextField(
                     value = text,
                     onValueChange = { text = it },
+                    // 发送期间锁住输入：请求已经发出，这时改内容会跟已提交的正文对不上
+                    enabled = !sending,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 120.dp)
@@ -151,11 +156,20 @@ internal fun CommentComposerSheet(
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "发送",
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (sending) {
+                        // 转圈时用 18dp，跟 Send 图标一样大，按钮不会看起来突然变小
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "发送",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

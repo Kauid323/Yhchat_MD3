@@ -45,6 +45,15 @@ class PostDetailViewModel @Inject constructor(
 
     private val _communityReportState = MutableStateFlow(CommunityReportState())
     val communityReportState: StateFlow<CommunityReportState> = _communityReportState.asStateFlow()
+
+    /**
+     * 评论是否正在发送。
+     *
+     * 单独一个 flow 而不是塞进 [CommentListState]：它是「输入面板上那一次点击」的状态，
+     * 跟列表数据无关。塞进列表状态会让每次发送都触发整个列表重组。
+     */
+    private val _commentSending = MutableStateFlow(false)
+    val commentSending: StateFlow<Boolean> = _commentSending.asStateFlow()
     
     /**
      * 使用TokenRepository获取token并加载文章详情
@@ -240,15 +249,32 @@ class PostDetailViewModel @Inject constructor(
      */
     fun commentPostWithToken(postId: Int, content: String, commentId: Int = 0) {
         viewModelScope.launch {
+            // 整个「取 token → 发请求 → 重载列表」算一次发送，所以状态包在最外层。
+            // 之前放在内层 commentPost 里，token 为 null 那条路不会把它置 true，
+            // 面板上的发送键就会一直不转、看起来像没反应。
+            _commentSending.value = true
             try {
                 val token = tokenRepository.getTokenSync()
                 if (token != null) {
-                    commentPost(token, postId, content, commentId)
+                    communityRepository.commentPost(token, postId, content, commentId)
+                        .onSuccess {
+                            // 重新加载评论列表。这里直接等它跑完再收状态，
+                            // 免得面板刚关、列表还在转圈
+                            loadCommentList(token, postId, 1)
+                        }
+                        .onFailure { error ->
+                            _commentListState.value =
+                                _commentListState.value.copy(error = error.message)
+                        }
                 } else {
                     _commentListState.value = _commentListState.value.copy(error = "未登录")
                 }
             } catch (e: Exception) {
-                _commentListState.value = _commentListState.value.copy(error = "获取登录信息失败: ${e.message}")
+                _commentListState.value =
+                    _commentListState.value.copy(error = "获取登录信息失败: ${e.message}")
+            } finally {
+                // 放 finally：异常或取消也要把发送键放开
+                _commentSending.value = false
             }
         }
     }
@@ -352,14 +378,20 @@ class PostDetailViewModel @Inject constructor(
      */
     fun commentPost(token: String, postId: Int, content: String, commentId: Int = 0) {
         viewModelScope.launch {
-            communityRepository.commentPost(token, postId, content, commentId)
-                .onSuccess {
-                    // 重新加载评论列表
-                    loadCommentList(token, postId, 1)
-                }
-                .onFailure { error ->
-                    _commentListState.value = _commentListState.value.copy(error = error.message)
-                }
+            _commentSending.value = true
+            try {
+                communityRepository.commentPost(token, postId, content, commentId)
+                    .onSuccess {
+                        // 重新加载评论列表
+                        loadCommentList(token, postId, 1)
+                    }
+                    .onFailure { error ->
+                        _commentListState.value = _commentListState.value.copy(error = error.message)
+                    }
+            } finally {
+                // 放在 finally：取消或异常也要把按钮放开，否则面板会一直卡在转圈
+                _commentSending.value = false
+            }
         }
     }
     

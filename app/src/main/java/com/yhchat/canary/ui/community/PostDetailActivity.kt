@@ -1917,13 +1917,28 @@ fun PostDetailScreen(
     var searchResultCount by remember { mutableStateOf(0) }
     // 评论输入面板是否弹起。底部「评论」按钮和评论区的回复图标都走这个开关
     var showCommentComposer by remember { mutableStateOf(false) }
-    // 放在正文之上的临时提示（发送中/失败），避免用 Toast 打断输入
-    var commentSending by remember { mutableStateOf(false) }
+    // 发送中状态来自 ViewModel，UI 只读。发送期间面板不关、按钮转圈
+    val commentSending by viewModel.commentSending.collectAsState()
+
     // 「只看楼主」：筛的是本篇评论，楼主 = 这篇文章的作者（post.senderId），不是分区创建者
     var filterLzOnly by rememberSaveable { mutableStateOf(false) }
     // 详情页主列表，点底部「评论」按钮时滚到评论标题那一项
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // 一次发送结束（sending 从 true 落回 false）时收起面板并滚到评论区。
+    // 用一个「本轮是否已开始」的标志，避免初次组合时 sending 本来就是 false 就误触发。
+    var awaitingSendResult by remember { mutableStateOf(false) }
+    LaunchedEffect(commentSending) {
+        if (commentSending) {
+            awaitingSendResult = true
+        } else if (awaitingSendResult) {
+            awaitingSendResult = false
+            showCommentComposer = false
+            // 发完滚到评论区，让人立刻看到自己的评论
+            coroutineScope.launch { listState.animateScrollToItem(1) }
+        }
+    }
 
     // 整页滚动状态：顶栏和内容共享，顶栏靠它算收起进度
     val pageScroll = rememberPageScrollState()
@@ -2416,16 +2431,9 @@ fun PostDetailScreen(
                     sending = commentSending,
                     onDismiss = { showCommentComposer = false },
                     onSend = { content ->
-                        commentSending = true
-                        // 发送成功后 ViewModel 会重载第 1 页评论，这里只需要收起面板；
-                        // 失败的话 error 会走 commentListState，由页面已有的错误提示呈现
+                        // 发送交给 ViewModel，面板先不关：等 commentSending 回落再关，
+                        // 这样按钮上的转圈能看到，失败时也不会闪一下就没了
                         viewModel.commentPostWithToken(postId = postId, content = content)
-                        commentSending = false
-                        showCommentComposer = false
-                        // 发完滚到评论区，让人立刻看到自己的评论
-                        coroutineScope.launch {
-                            listState.animateScrollToItem(1)
-                        }
                     }
                 )
             }
