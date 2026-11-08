@@ -165,12 +165,35 @@ class PostDetailViewModel @Inject constructor(
             
             communityRepository.getCommentList(token, postId, page = page)
                 .onSuccess { response ->
-                    val newComments = if (page == 1) {
+                    val merged = if (page == 1) {
                         response.data.comments
                     } else {
                         _commentListState.value.comments + response.data.comments
                     }
-                    
+
+                    // 后端按时间倒序返回（最新在前），这里统一排成正序：1L 在最上面。
+                    //
+                    // 必须「拼完再排」而不是「每页反转」：
+                    // 分页时第 1 页是 [旧…新]，第 2 页又是 [旧…新]（更旧的一批），
+                    // 逐页反转拼起来会变成 [旧…新][更旧…] 的错序。
+                    // 在合并后的全集上按时间排，才与页码无关。
+                    //
+                    // 用 createTime 升序，同一秒的用 id 兜底 —— 楼中楼回复常常
+                    // 落在同一秒，只按时间排会不稳定。
+                    //
+                    // 万一某条 createTime 是 0（后端漏给），它会被排到最前面，
+                    // 反而比原来的倒序更乱。所以只要有一条时间无效就整批不排，
+                    // 保持后端给的顺序 —— 那是已知可用的顺序。
+                    // 这里不能写 reversed()：分页下「每批反转再拼」会错序。
+                    val timeValid = merged.all { it.createTime > 0L }
+                    val newComments = if (timeValid) {
+                        merged.sortedWith(
+                            compareBy<CommunityComment> { it.createTime }.thenBy { it.id }
+                        )
+                    } else {
+                        merged
+                    }
+
                     _commentListState.value = CommentListState(
                         comments = newComments,
                         isAdmin = response.data.isAdmin,
