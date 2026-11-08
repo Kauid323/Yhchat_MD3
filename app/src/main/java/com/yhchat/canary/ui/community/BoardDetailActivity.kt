@@ -232,6 +232,11 @@ fun BoardDetailScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
+                // 根容器必须自己画背景。这里之前没画，深色主题下窗口露出的是系统默认
+                // 白底，而文字用的是 onSurface（浅色）—— 于是整页白底白字。
+                // 同目录其他页面都用 Scaffold(containerColor = background) 或
+                // Modifier.background(background) 兜住，这里保持一致。
+                .background(MaterialTheme.colorScheme.background)
                 .nestedScroll(pageScroll.scrollWatcher)
         ) {
             PullToRefreshBox(
