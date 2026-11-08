@@ -110,6 +110,27 @@ fun rememberScrollProgress(
 }
 
 /**
+ * 某个元素（用 [matchedGeometryAnchor] 标了 [anchor]）进到顶栏那一行里的进度：
+ * 它的中线还在顶栏下方时是 0，到达那一行中线时是 1。
+ *
+ * 头像、标题从页面里吸附到顶栏，用的就是这个 —— 它量的是「相对于顶栏位置」，
+ * 所以无论在页面哪里，量出来都能直接拿去插值。
+ */
+@Composable
+fun rememberScrollProgress(anchor: Any, page: PageScrollState? = LocalPageScroll.current): ScrollProgress {
+    return remember(page, anchor) {
+        ScrollProgress {
+            val bounds = page?.anchors?.get(anchor) ?: return@ScrollProgress 0f
+            val rowTop = page.barRowTop
+            val rowBottom = page.barRowBottom
+            if (rowTop.isNaN() || rowBottom.isNaN()) return@ScrollProgress 0f
+            val rowCenter = (rowTop + rowBottom) / 2f
+            ((rowBottom - bounds.center.y) / (rowBottom - rowCenter)).coerceIn(0f, 1f)
+        }
+    }
+}
+
+/**
  * 跟随滚动方向的进度状态。
  *
  * Oolong 原版的 `toggle` 模式这里去掉了 —— 本项目顶栏不需要「翻到 1 就不回头」的行为，

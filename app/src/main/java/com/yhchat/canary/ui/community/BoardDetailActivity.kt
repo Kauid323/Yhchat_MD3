@@ -872,9 +872,9 @@ private fun BoardBarTitle(
     boardAvatar: String?,
     onBoardClick: () -> Unit
 ) {
-    // 锚点 key 用 Any 存，避免 rememberScrollProgress 的重载被解析到 away: Dp 那个版本
-    val avatarDock = rememberScrollProgress(BoardAvatarAnchor as Any)
-    val nameDock = rememberScrollProgress(BoardNameAnchor as Any)
+    // 锚点进度：跟「元素和顶栏那一行的相对位置」走，不是跟滚动距离走
+    val avatarDock = rememberScrollProgress(BoardAvatarAnchor)
+    val nameDock = rememberScrollProgress(BoardNameAnchor)
     val openDetail = Modifier.clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
