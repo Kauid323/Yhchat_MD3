@@ -70,10 +70,16 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
+      # 方案 B：不写 gradle-version，直接跟随 gradle/wrapper/gradle-wrapper.properties
+      # 里的 9.4.1。写死 9.2.1 会让 setup-gradle 下 9.2.1-bin，随后 ./gradlew 又下
+      # 9.4.1-all，同一个发行包下两遍，且 9.2.1 那次 504 就直接把 job 干掉。
+      #
+      # continue-on-error：这一步只负责预热缓存 + 提供 gradle 可执行文件，
+      # 功能上跟 ./gradlew 完全独立（gradlew 自己会按 wrapper 取发行包）。
+      # 它失败不该让 build 失败，网络抖动交给下面的 warmup 步骤重试。
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: '9.2.1'
+        continue-on-error: true
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -95,15 +101,40 @@ jobs:
           echo "=== Memory ==="
           free -h
 
-      # services.gradle.org 在大陆网络下经常 504 或 read timeout，
-      # 而 gradlew 首次启动就要下发行包（9.4.1-all 约 250MB），一卡整条流水线就挂。
-      # 这个脚本先探官方源：能通就什么都不改（网络正常时行为跟以前完全一致），
-      # 通了才留下原样；不通才按 腾讯云 → 阿里云 顺序切镜像。
-      - name: Use Gradle mirror if official source is unreachable
-        run: bash .github/scripts/setup-gradle-mirror.sh gradle/wrapper/gradle-wrapper.properties
-
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
+
+      # 把「下发行包」从 build 步里剥离出来单独重试。
+      #
+      # 之前 gradlew 的发行包下载混在 Build 步里：services.gradle.org 一旦
+      # Read timed out，整个 job 直接结束，连重试的机会都没有。
+      # 现在先 ./gradlew --version 把发行包拉下来（这一步不编译任何东西），
+      # 失败就切镜像再试，最多 3 轮；三轮都挂才算真的没网。
+      #
+      # 镜像脚本本身只探官方源：官方可达就完全不动 wrapper，
+      # 保证网络正常时行为与以前一致。
+      - name: Warm up Gradle distribution (retry with mirror)
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          WRAPPER="gradle/wrapper/gradle-wrapper.properties"
+
+          for attempt in 1 2 3; do
+            echo "=========== attempt ${attempt}/3 ==========="
+            if ./gradlew --version --no-daemon; then
+              echo "Gradle distribution ready"
+              exit 0
+            fi
+            echo "attempt ${attempt} failed, trying to switch mirror..."
+            bash .github/scripts/setup-gradle-mirror.sh "$WRAPPER" || true
+            sleep $((attempt * 10))
+          done
+
+          echo "Gradle distribution still unavailable after 3 attempts" >&2
+          echo "--- current wrapper ---" >&2
+          cat "$WRAPPER" >&2
+          exit 1
 
       - name: Decode Keystore
         env:
