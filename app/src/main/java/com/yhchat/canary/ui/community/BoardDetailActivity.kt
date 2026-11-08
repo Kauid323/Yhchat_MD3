@@ -78,6 +78,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -763,14 +764,25 @@ private fun BoardTopBar(
     val statusBar = WindowInsets.statusBars
     val page = LocalPageScroll.current
 
+    // 内容滚到顶栏下面多少：0 还没钻进来，1 完全钻进来。
+    // 跟 Oolong 的 topBarGlass 一致，除数是 TopBarEdgeReveal 而不是整行高。
+    val revealPx = with(LocalDensity.current) { TopBarEdgeReveal.toPx() }
+    val barGlassShown: () -> Float = {
+        val scrolled = page?.scrolled
+        if (scrolled == null) 1f
+        else (scrolled / revealPx).coerceIn(0f, 1f)
+    }
+
     Layout(
         modifier = modifier.fillMaxWidth(),
         content = {
-            // 背景：玻璃渐变，往下淡出到透明，不留硬边
+            // 背景：玻璃渐变，往下淡出到透明，不留硬边。
+            // 页面在顶部时整层不画 —— 那时栏那块本该是页面自己的底色，
+            // 盖一层雾就是拍上去一块灰板。
             Box(
                 modifier = Modifier
                     .layoutId(BoardBarLayer.Background)
-                    .boardGlassBackground()
+                    .boardGlassBackground(shown = { barGlassShown() })
             )
 
             // 前景：返回 + 分区名（会跟着滚走）
@@ -826,9 +838,19 @@ private fun BoardTopBar(
         val statusTop = statusBar.getTop(this)
         val hidden = ((foreground.height - statusTop) * hiddenFraction()).toInt()
 
-        // 玻璃只铺到顶栏行底部，再往下多留一点，让渐变在硬边之前就开始
+        // 玻璃的高度**随收起一起收缩**，不是固定值再平移。
+        // Oolong GlassTopBar 就是这么做的：
+        //   measure(Constraints.fixed(width, height - hidden - uncovered + extend))
+        // 收起多少，玻璃就短多少，最后只剩状态栏那块 —— 天然不会有悬空块。
+        // 这里 pinnedOffset 恒为 0（调用处传 { 0 }），所以 covered 这一段是 0，
+        // 直接用 foreground.height - hidden + extend。
         val background = measurables.first { it.layoutId == BoardBarLayer.Background }
-            .measure(Constraints.fixed(foreground.width, foreground.height + BoardBarEdgeExtend.roundToPx()))
+            .measure(
+                Constraints.fixed(
+                    foreground.width,
+                    (foreground.height - hidden + BoardBarEdgeExtend.roundToPx()).coerceAtLeast(0)
+                )
+            )
 
         layout(foreground.width, height) {
             background.place(0, 0)
@@ -851,32 +873,58 @@ private val BoardBarRowHeight = 56.dp
 private val BoardBarEdgeExtend = 12.dp
 
 /**
+ * 内容滚多少像素，顶栏玻璃完全显出来。
+ *
+ * 取 32dp 而不是整行高 56dp：内容刚贴到栏下时就该有底，等滚满一整行
+ * 才显出来会让「内容已经在栏下面」和「栏还是空的」同时出现。
+ * 跟 Oolong 的 `TopBarEdgeReveal` 一致。
+ */
+private val TopBarEdgeReveal = 32.dp
+
+/**
  * 顶栏的玻璃底：从上往下渐隐到完全透明。
  *
- * 用 6 个色阶节点而不是 3 个 —— 节点太少时，两个节点之间的 alpha 是线性跳变的，
- * 在屏幕上就是一条能看出边的色带（"硬"的观感主要来自这里）。
- * 起点也只给 0.90，不做到不透明，标题靠字体加粗和阴影保证可读。
+ * 曲线照 Oolong `Glass.kt` 的 `scrollEdgeTint`：
+ *   - 32 个色阶节点。节点少时相邻两段是线性跳变，屏幕上能看出色带的边。
+ *   - alpha 走 smootherstep `t³(6t²−15t+10)`，两端导数为 0，起步收尾都不留棱。
+ *   - 峰值 0.5（Oolong 的 TopBarTint），不是 0.9。顶栏只需压住文字，
+ *     不需要把内容整个盖掉；0.9 在深色主题下就是一块明显的灰板。
  *
- * 配合 [BoardBarEdgeExtend] 把渐变拉长到顶栏之外，每像素的 alpha 变化更缓，
- * 内容穿过去才像雾而不是像一堵墙。
+ * [shown] 为 0 时整层不画 —— 页面还在顶部、内容没钻到栏下时，
+ * 栏那块本该是页面自己的底色。
  */
 @Composable
-private fun Modifier.boardGlassBackground(): Modifier {
+private fun Modifier.boardGlassBackground(shown: () -> Float): Modifier {
     val base = MaterialTheme.colorScheme.surface
     return this.drawWithContent {
+        val s = shown()
+        if (s <= 0f) return@drawWithContent
         drawContent()
-        drawRect(
-            brush = Brush.verticalGradient(
-                0.00f to base.copy(alpha = 0.90f),
-                0.22f to base.copy(alpha = 0.80f),
-                0.44f to base.copy(alpha = 0.60f),
-                0.64f to base.copy(alpha = 0.36f),
-                0.82f to base.copy(alpha = 0.14f),
-                1.00f to base.copy(alpha = 0.00f)
-            )
-        )
+        drawRect(brush = scrollEdgeTintBrush(base, TopBarTintAlpha * s))
     }
 }
+
+/**
+ * 顶栏玻璃的色阶：顶部 alpha 最浓，往下 smootherstep 淡到 0。
+ *
+ * 32 段是从 Oolong 的 `TopBarTintStops` 来的，段数越多每段之间 alpha 差越小，
+ * 肉眼看到的就越是一条连续的雾而不是一层层色带。
+ */
+private fun scrollEdgeTintBrush(color: Color, alpha: Float): Brush =
+    Brush.verticalGradient(
+        *Array(TopBarTintStops + 1) { i ->
+            val t = i / TopBarTintStops.toFloat()
+            // smootherstep：6t⁵ − 15t⁴ + 10t³，两端一阶、二阶导数都为 0
+            val gone = t * t * t * (t * (t * 6f - 15f) + 10f)
+            t to color.copy(alpha = alpha * (1f - gone))
+        }
+    )
+
+/** 玻璃在顶部那一端的 alpha。Oolong 的 TopBarTint 是 0.5。 */
+private const val TopBarTintAlpha = 0.5f
+
+/** 渐变用的色阶段数。段数少会让渐变出阶梯。 */
+private const val TopBarTintStops = 32
 
 /** 顶栏上的圆形悬浮按钮，返回用它。 */
 @Composable
