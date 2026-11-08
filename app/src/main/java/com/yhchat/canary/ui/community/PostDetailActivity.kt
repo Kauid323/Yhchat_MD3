@@ -1769,8 +1769,14 @@ private fun PostDetailTopBar(
             .measure(Constraints.fixed(foreground.width, foreground.height + DetailBarEdgeExtend.roundToPx()))
 
         layout(foreground.width, foreground.height) {
-            background.place(0, 0)
+            // 背景层必须跟前景一起收 —— 之前它是无条件 place(0, 0) 铺满
+            // foreground.height + 12dp，前景上移 56dp 之后，那 56~68dp
+            // 就留成一块悬空的不透明底，看起来就是"收起了还有背景"。
+            //
+            // 分区页之所以不显眼，是因为它下面还有 pinned 常驻行把这块盖住了；
+            // 详情页没有 pinned，所以必须自己收干净。
             if (hiddenFraction() < 1f) {
+                background.placeWithLayer(0, -hidden) { alpha = 1f - hiddenFraction() }
                 foreground.placeWithLayer(0, -hidden) { alpha = 1f - hiddenFraction() }
             }
         }
