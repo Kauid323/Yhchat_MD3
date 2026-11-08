@@ -24,15 +24,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,7 +57,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Bookmark
@@ -72,7 +72,6 @@ import androidx.compose.material.icons.outlined.MonetizationOn
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -98,6 +97,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -114,6 +114,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.SpanStyle
@@ -126,6 +128,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -140,6 +147,9 @@ import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MarkdownText
 import com.yhchat.canary.ui.share.SendToChatActivity
 import com.yhchat.canary.ui.share.SendToChatContent
+import com.yhchat.canary.ui.components.pageScroll
+import com.yhchat.canary.ui.components.rememberPageScrollState
+import com.yhchat.canary.ui.components.rememberScrollProgress
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import com.yhchat.canary.ui.user.UserDetailActivity
 import com.yhchat.canary.utils.UnifiedLinkHandler
@@ -237,7 +247,7 @@ fun PostContentCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 作者信息
@@ -409,68 +419,6 @@ fun PostContentCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
-        }
-        
-        // 分区信息卡片
-        board?.let { boardInfo ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        // 跳转到分区详情页
-                        val intent = Intent(context, BoardDetailActivity::class.java).apply {
-                            putExtra("board_id", boardInfo.id)
-                            putExtra("board_name", boardInfo.name)
-                            putExtra("token", token)
-                        }
-                        context.startActivity(intent)
-                    },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AsyncImage(
-                        model = ImageUtils.createBoardImageRequest(
-                            context = context,
-                            url = boardInfo.avatar
-                        ),
-                        contentDescription = boardInfo.name,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(6.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = boardInfo.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${boardInfo.memberNum} 成员 · ${boardInfo.postNum} 文章",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "进入分区",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
         }
     }
     
@@ -732,34 +680,6 @@ fun PostBottomActionBarDuo3(
                 }
             }
 
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !isSearchExpanded,
-                enter = fadeIn(animationSpec = tween(180)),
-                exit = fadeOut(animationSpec = tween(140))
-            ) {
-                Button(
-                    onClick = onCommentInputToggle,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Comment,
-                        contentDescription = "评论",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = post.commentNum.toString(),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
             IconButton(
                 onClick = onSearchToggle,
                 modifier = Modifier.size(32.dp),
@@ -829,77 +749,112 @@ fun CommentItem(
     val rule = floorRuleColor()
     val replies = comment.replies.orEmpty()
 
-    // 楼层和它的回复都排在同一列里：楼栏（竖线 + 头像）宽 FloorGutter，
-    // 回复的楼栏接着往下画分支，竖线才不会错位
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                // 高度由右侧内容决定，左栏的竖线才好铺满
-                .height(IntrinsicSize.Min)
-        ) {
-            // ===== 左栏：竖线 + 头像 + 楼层号 =====
-            // 楼栏整体从 GutterStart 开始缩进，竖线落在楼栏中线上
-            Box(
-                modifier = Modifier
-                    .padding(start = FloorGutterStart)
-                    .width(FloorGutter)
-                    .fillMaxHeight()
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    // 第一层从头像中心起画，后面的层从顶部接住上一层的线
-                    val x = size.width / 2f
-                    val top = if (startsRule) (FloorAvatarSize / 2 + 10.dp).toPx() else 0f
-                    drawLine(
-                        color = rule,
-                        start = Offset(x, top),
-                        end = Offset(x, size.height),
-                        strokeWidth = FloorRuleWidth.toPx()
-                    )
-                }
+    // 整层（楼层 + 回复）自己的布局坐标，回复靠它换算「我相对这层顶部有多高」
+    var floorCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // 每条回复的小头像中心在整层里的 y（像素），回复布局完就报上来
+    val branchYs = remember { mutableStateMapOf<Int, Float>() }
 
-                // 头像居中于楼栏，楼层号压在它下沿（截图里牌子上边盖住头像底部一小截）
+    // 整层是**一张 Canvas + 一层内容**：
+    //   0.0 ─┬─ 楼层正文 …… ↓
+    //        ├─→ 回复1
+    //        ├─→ 回复2
+    //        └─→（到此为止，线不再往下拖）
+    //
+    // 竖线是**一条连续 Path**，不是每层各画一段再拼 —— 拼接会在
+    // 楼层与回复、回复与回复之间留下缝，那正是之前看着「断掉」的原因。
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            // 右侧留 16dp 给正文，左边由楼栏自己控制（从 4dp 起）
+            .padding(end = 16.dp)
+            .onGloballyPositioned { floorCoords = it }
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val x = (FloorGutterStart + FloorGutter / 2).toPx()
+            val top = if (startsRule) (10.dp + FloorAvatarSize / 2).toPx() else 0f
+            val r = ReplyBranchRadius.toPx()
+            val endX = (FloorGutterStart + FloorGutter).toPx()
+
+            // 主线：从起点一路到底，**不中断**。这是「线连着」的根本 ——
+            // 只要它不被 moveTo 打断，楼层和所有回复之间就没有缝。
+            drawLine(
+                color = rule,
+                start = Offset(x, top),
+                end = Offset(x, size.height),
+                strokeWidth = FloorRuleWidth.toPx()
+            )
+
+            // 分支：每条回复一条，从主线拐出去。单独画，不跟主线抢同一个 Path。
+            branchYs.values.forEach { y ->
+                val branch = Path().apply {
+                    moveTo(x, y - r)
+                    arcTo(
+                        rect = Rect(x, y - 2 * r, x + 2 * r, y),
+                        startAngleDegrees = 180f,
+                        sweepAngleDegrees = -90f,
+                        forceMoveTo = false
+                    )
+                    lineTo(endX, y)
+                }
+                drawPath(branch, rule, style = Stroke(FloorRuleWidth.toPx()))
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // ===== 楼层本体 =====
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+            ) {
+                // 左栏只占位（竖线由上面的整层 Canvas 画），头像和楼层号画在上面
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 10.dp),
-                    contentAlignment = Alignment.BottomCenter
+                        .padding(start = FloorGutterStart)
+                        .width(FloorGutter)
+                        .height(IntrinsicSize.Min)
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable {
-                                UserDetailActivity.start(
-                                    context = context,
-                                    userId = comment.senderId,
-                                    userName = comment.senderNickname
-                                )
-                            }
-                            .padding(bottom = 14.dp)
+                            .align(Alignment.TopCenter)
+                            .padding(top = 10.dp),
+                        contentAlignment = Alignment.BottomCenter
                     ) {
-                        AsyncImage(
-                            model = comment.senderAvatar,
-                            contentDescription = comment.senderNickname,
+                        Box(
                             modifier = Modifier
-                                .size(FloorAvatarSize)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
+                                .clip(CircleShape)
+                                .clickable {
+                                    UserDetailActivity.start(
+                                        context = context,
+                                        userId = comment.senderId,
+                                        userName = comment.senderNickname
+                                    )
+                                }
+                                .padding(bottom = 14.dp)
+                        ) {
+                            AsyncImage(
+                                model = comment.senderAvatar,
+                                contentDescription = comment.senderNickname,
+                                modifier = Modifier
+                                    .size(FloorAvatarSize)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        // 楼层号：压在头像下沿
+                        FloorBadge(floor = floor)
                     }
-
-                    // 楼层号：压在头像下沿，可以比头像宽，但不出楼栏
-                    FloorBadge(floor = floor)
                 }
-            }
 
-            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            // ===== 右侧：楼层正文 =====
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 10.dp, bottom = 4.dp)
-            ) {
+                // ===== 右侧：楼层正文 =====
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 10.dp, bottom = 4.dp)
+                ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = comment.senderNickname,
@@ -1016,29 +971,41 @@ fun CommentItem(
                         }
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.weight(1f))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (canDelete) {
-                            FloorAction("删除", color = MaterialTheme.colorScheme.error) {
-                                onDeleteClick(comment)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (canDelete) {
+                                FloorAction("删除", color = MaterialTheme.colorScheme.error) {
+                                    onDeleteClick(comment)
+                                }
                             }
+                            FloorAction("举报") { onReportClick(comment) }
                         }
-                        FloorAction("举报") { onReportClick(comment) }
                     }
                 }
             }
-        }
 
-        // ===== 楼层里的回复：挂在竖线的分支上 =====
-        replies.forEachIndexed { index, reply ->
-            CommentReplyItem(
-                reply = reply,
-                isLast = index == replies.lastIndex
-            )
+            // ===== 楼层里的回复：挂到同一条竖线的分支上 =====
+            replies.forEachIndexed { index, reply ->
+                CommentReplyItem(
+                    reply = reply,
+                    isLast = index == replies.lastIndex,
+                    // 上报「这条回复的小头像中心，相对整层顶部有多高」。
+                    // 用 LayoutCoordinates 直接换算，不靠累加高度猜 —— 文本折行、
+                    // 图片、多行内容都会让高度不固定，猜出来的 y 就会歪。
+                    onPlaced = { replyCoords ->
+                        val floor = floorCoords
+                        if (floor != null && floor.isAttached && replyCoords.isAttached) {
+                            val y = floor.localPositionOf(replyCoords, Offset.Zero).y +
+                                with(replyCoords.density) { ReplyAvatarCenter.toPx() }
+                            if (branchYs[reply.id] != y) branchYs[reply.id] = y
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -1089,47 +1056,38 @@ private fun FloorAction(
 }
 
 /**
- * 楼层里的一条回复：左栏画一根从竖线拐过来的分支（最后一条不再往下续），
- * 右边是小头像 + 昵称 + 内容。
+ * 楼层里的一条回复。
+ *
+ * **自己不画竖线** —— 整层的竖线和所有分支由 `CommentItem` 那张 Canvas
+ * 用一条 Path 画完，这里只上报「小头像中心相对这层顶部的高度」（[onPlaced]），
+ * 分支就从那个 y 拐出去。这样楼层与回复、回复与回复之间的竖线是**连着**的，
+ * 不会各画一段拼出缝来。
+ *
+ * 左边留出 [FloorGutter] 给分支走线，内容从楼栏之后开始 ——
+ * 所以整层的正文是**统一左边距**，不是每层各缩各的。
  */
 @Composable
 fun CommentReplyItem(
     reply: CommunityComment,
     isLast: Boolean = false,
+    onPlaced: (LayoutCoordinates) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val rule = floorRuleColor()
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
+            // 把自己的布局坐标交出去，整层用它换算分支该从哪个 y 拐
+            .onGloballyPositioned { onPlaced(it) }
     ) {
-        // 分支：竖线走到开口高度，四分之一圆弧拐进回复，最后一条不再往下接。
-    // 楼栏同样从 FloorGutterStart 起缩进，x 跟楼层的竖线严格重合。
-    Canvas(
-        modifier = Modifier
-            .padding(start = FloorGutterStart)
-            .width(FloorGutter)
-            .fillMaxHeight()
-    ) {
-        val x = size.width / 2f
-        val y = ReplyAvatarCenter.toPx()
-        val r = ReplyBranchRadius.toPx()
-        val path = Path().apply {
-            moveTo(x, 0f)
-            lineTo(x, if (isLast) (y - r).coerceAtLeast(0f) else size.height)
-            arcTo(
-                rect = Rect(x, y - 2 * r, x + 2 * r, y),
-                startAngleDegrees = 180f,
-                sweepAngleDegrees = -90f,
-                forceMoveTo = false
-            )
-            lineTo(size.width, y)
-        }
-        drawPath(path, rule, style = Stroke(FloorRuleWidth.toPx()))
-    }
+        // 楼栏：只占位，让内容从竖线右边开始
+        Spacer(
+            modifier = Modifier
+                .padding(start = FloorGutterStart)
+                .width(FloorGutter)
+        )
 
         Row(
             modifier = Modifier
@@ -1203,11 +1161,13 @@ private fun CommentSectionHeader(
     total: Int,
     visibleCount: Int,
     filterLzOnly: Boolean,
-    onCopyPost: () -> Unit
+    onFilterChange: (Boolean) -> Unit,
+    onCopyPost: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp)
             .padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1226,9 +1186,77 @@ private fun CommentSectionHeader(
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        TextButton(onClick = onCopyPost) {
-            Text("复制原文", style = MaterialTheme.typography.labelMedium)
+        // 「只看楼主」放在评论区这儿：它筛的是本篇评论，放在顶栏反而离内容太远
+        CommentFilterToggle(
+            filterLzOnly = filterLzOnly,
+            onFilterChange = onFilterChange
+        )
+    }
+}
+
+/**
+ * 评论区里的「全部 / 只看楼主」。
+ *
+ * 两格胶囊，选中是实底、未选中只有文字 —— 跟 Oolong 的 `SegmentedControl` 一个观感。
+ * 放在评论区标题行右侧，因为它管的是评论，不是整页。
+ */
+@Composable
+private fun CommentFilterToggle(
+    filterLzOnly: Boolean,
+    onFilterChange: (Boolean) -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier
+                .height(28.dp)
+                .padding(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CommentFilterChip(
+                text = "全部",
+                selected = !filterLzOnly,
+                onClick = { onFilterChange(false) }
+            )
+            CommentFilterChip(
+                text = "只看楼主",
+                selected = filterLzOnly,
+                onClick = { onFilterChange(true) }
+            )
         }
+    }
+}
+
+/** 分段控件里的一格。 */
+@Composable
+private fun CommentFilterChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.surface else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1
+        )
     }
 }
 
@@ -1244,7 +1272,9 @@ private fun CommentInputRow(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         placeholder = { Text("写下你的评论…") },
         maxLines = 3,
         singleLine = false,
@@ -1561,203 +1591,188 @@ fun ShareDialog(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  详情页顶部：三件式悬浮栏                                                   */
+/*  详情页顶栏                                                                */
 /* -------------------------------------------------------------------------- */
 
-/** 顶栏各块的统一高度、阴影，以及列表顶部要留的空白。 */
+/** 顶栏里按钮/胶囊的高度。 */
 private val DetailChromeHeight = 40.dp
-private val DetailChromeElevation = 3.dp
-private val DetailChromeHeightTotal = 56.dp
 
 /**
- * 文章详情的顶部悬浮栏，照截图排成三块独立的白面：
- *   ① 圆形返回
- *   ② 分区名胶囊（分区头像 + 名称），点它进分区
- *   ③ 分段控件「全部 / 只看楼主」+ 圆点更多菜单
+ * 文章详情的顶栏，机制跟分区页一致：**玻璃底 + 随滚动收起**。
  *
- * 「只看楼主」筛的是**本篇评论**，楼主 = 这篇文章的作者。
- * 三块各自白底 + 轻阴影，没有通栏背景，正文从它们下面滚过去也不会被压出一条灰带。
+ * 三块内容：圆形返回、分区名胶囊（点它进分区）、更多菜单。
+ * 「只看楼主」已经移到评论区 —— 它筛的是评论，放在顶栏离内容太远。
+ *
+ * 背景是一层从上往下淡出到透明的玻璃，正文穿过去是柔的，
+ * 不会再被一条实心通栏压出一刀切的灰带。
+ *
+ * @param hiddenFraction 0 显示、1 收起，由滚动驱动
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PostDetailFloatingBar(
+private fun PostDetailTopBar(
     boardName: String,
     boardAvatar: String?,
-    filterLzOnly: Boolean,
-    onFilterChange: (Boolean) -> Unit,
+    hiddenFraction: () -> Float,
     onBackClick: () -> Unit,
     onBoardClick: () -> Unit,
     menuExpanded: Boolean,
     onMenuClick: () -> Unit,
     onMenuDismiss: () -> Unit,
-    menuContent: @Composable ColumnScope.() -> Unit
+    menuContent: @Composable ColumnScope.() -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        DetailChromeSurface(
-            onClick = onBackClick,
-            modifier = Modifier.size(DetailChromeHeight)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
+    val statusBar = WindowInsets.statusBars
+    val page = LocalPageScroll.current
 
-        // 分区名胶囊：撑掉剩余宽度，名字太长就省略
-        DetailChromeSurface(
-            onClick = onBoardClick,
-            modifier = Modifier.weight(1f)
-        ) {
-            Row(
+    Layout(
+        modifier = modifier.fillMaxWidth(),
+        content = {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(DetailChromeHeight)
-                    .padding(start = 6.dp, end = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .layoutId(DetailBarLayer.Background)
+                    .detailGlassBackground()
+            )
+            Column(
+                modifier = Modifier
+                    .layoutId(DetailBarLayer.Foreground)
+                    .windowInsetsPadding(statusBar)
+                    .onGloballyPositioned { coords ->
+                        if (page != null) {
+                            val row = page.boundsOf(coords)
+                            page.barRowTop = row.top
+                            page.barRowBottom = row.bottom
+                        }
+                    }
             ) {
-                AsyncImage(
-                    model = ImageUtils.createBoardImageRequest(
-                        context = LocalContext.current,
-                        url = boardAvatar.orEmpty()
-                    ),
-                    contentDescription = boardName,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = boardName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        // 分段控件 + 更多
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            DetailChromeSurface {
                 Row(
                     modifier = Modifier
-                        .height(DetailChromeHeight)
-                        .padding(3.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth()
+                        .height(DetailBarRowHeight)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CommentFilterSegment(
-                        text = "全部",
-                        selected = !filterLzOnly,
-                        onClick = { onFilterChange(false) }
-                    )
-                    CommentFilterSegment(
-                        text = "只看楼主",
-                        selected = filterLzOnly,
-                        onClick = { onFilterChange(true) }
-                    )
+                    DetailNavButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    // 分区名胶囊
+                    Surface(
+                        onClick = onBoardClick,
+                        modifier = Modifier.weight(1f),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.86f),
+                        shadowElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(DetailChromeHeight)
+                                .padding(start = 6.dp, end = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = ImageUtils.createBoardImageRequest(
+                                    context = LocalContext.current,
+                                    url = boardAvatar.orEmpty()
+                                ),
+                                contentDescription = boardName,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = boardName,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // 更多菜单
+                    DetailNavButton(onClick = onMenuClick) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "更多操作",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = onMenuDismiss,
+                            content = menuContent
+                        )
+                    }
                 }
             }
+        }
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minHeight = 0)
+        val foreground = measurables.first { it.layoutId == DetailBarLayer.Foreground }.measure(loose)
+        val statusTop = statusBar.getTop(this)
+        val hidden = ((foreground.height - statusTop) * hiddenFraction()).toInt()
+        val background = measurables.first { it.layoutId == DetailBarLayer.Background }
+            .measure(Constraints.fixed(foreground.width, foreground.height + BoardBarEdgeExtend.roundToPx()))
 
-            DetailChromeSurface(
-                onClick = onMenuClick,
-                modifier = Modifier.size(DetailChromeHeight)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "更多操作",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = onMenuDismiss,
-                        content = menuContent
-                    )
-                }
+        layout(foreground.width, foreground.height) {
+            background.place(0, 0)
+            if (hiddenFraction() < 1f) {
+                foreground.placeWithLayer(0, -hidden) { alpha = 1f - hiddenFraction() }
             }
         }
     }
 }
 
-/** 顶栏里的一块白面。给了 onClick 就是可点块。 */
-@OptIn(ExperimentalMaterial3Api::class)
+/** 详情页顶栏的两层。 */
+private enum class DetailBarLayer { Background, Foreground }
+
+/** 详情页顶栏行高 —— 跟分区页保持一致，收起距离才对得上。 */
+private val DetailBarRowHeight = 56.dp
+
+/**
+ * 详情页顶栏的玻璃底：从上往下淡出到透明。
+ * 和分区页是同一种做法，两页切换时观感一致。
+ */
 @Composable
-private fun DetailChromeSurface(
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    if (onClick != null) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = DetailChromeElevation,
-            content = content
-        )
-    } else {
-        Surface(
-            modifier = modifier,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = DetailChromeElevation,
-            content = content
+private fun Modifier.detailGlassBackground(): Modifier {
+    val base = MaterialTheme.colorScheme.surface
+    return this.drawWithContent {
+        drawContent()
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to base.copy(alpha = 0.92f),
+                0.65f to base.copy(alpha = 0.70f),
+                1f to base.copy(alpha = 0f)
+            )
         )
     }
 }
 
-/**
- * 「全部 / 只看楼主」里的一格：选中是灰底胶囊，未选中只是文字。
- */
+/** 详情页顶栏上的圆形按钮。 */
 @Composable
-private fun CommentFilterSegment(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun DetailNavButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
-                } else {
-                    Color.Transparent
-                }
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(DetailChromeHeight),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.86f),
+        shadowElevation = 2.dp
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            maxLines = 1
-        )
+        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 
@@ -1789,6 +1804,16 @@ fun PostDetailScreen(
     // 详情页主列表，点底部「评论」按钮时滚到评论标题那一项
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // 整页滚动状态：顶栏和内容共享，顶栏靠它算收起进度
+    val pageScroll = rememberPageScrollState()
+
+    // 顶栏收起进度：内容往上滑它走向 1，往回滑一点立刻回来。
+    // 不设 enabled —— 详情页第一屏就是正文，往上滑就该收，没有「头部还没走」这回事。
+    val detailAway = rememberScrollProgress(
+        away = DetailBarRowHeight,
+        page = pageScroll
+    )
     
     // 打赏对话框状态
     var showRewardDialog by remember { mutableStateOf(false) }
@@ -1907,19 +1932,16 @@ fun PostDetailScreen(
                 )
             }
         },
-        // 按截图改成三件式悬浮栏：圆形返回 + 分区名胶囊 + 「全部 / 只看楼主」分段控件。
-        // 顶栏不再用 TopAppBar —— 那条通栏底色会把滚动中的正文压出一条灰带，
-        // 而截图里这三块都是各自独立的白色实心块，内容从它们之间穿过去。
-        // 「更多」菜单挂到标题栏右侧的圆形按钮上（收起为圆点菜单，不占额外空间）。
+        // 顶栏：玻璃底 + 随滚动收起，跟分区页同一套机制。
+        // 「只看楼主」已移到评论区（它筛的是评论，放顶栏离内容太远）。
         topBar = {
-            PostDetailFloatingBar(
+            PostDetailTopBar(
                 boardName = postDetailState.board?.name
                     ?: postDetailState.post?.group?.name
                     ?: "文章详情",
                 boardAvatar = postDetailState.board?.avatar
                     ?: postDetailState.post?.group?.avatarUrl,
-                filterLzOnly = filterLzOnly,
-                onFilterChange = { filterLzOnly = it },
+                hiddenFraction = { detailAway.value },
                 onBackClick = onBackClick,
                 onBoardClick = {
                     postDetailState.board?.let { board ->
@@ -2060,16 +2082,22 @@ fun PostDetailScreen(
                     ) {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            // 顶部留出三件式悬浮栏的高度，正文从栏下开始；
-                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // 内容上报滚动位置给顶栏
+                                .pageScroll(listState),
+                            // 顶部留出顶栏高度，正文从栏下开始；
+                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住。
+                            //
+                            // **左右不留 padding**：评论区的楼层要自己控制左边距
+                            // （楼栏从 4dp 起、正文跟在楼栏后面），外层再给 16dp
+                            // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
+                            // 正文和评论标题各自加 16dp，各自负责自己的对齐。
                             contentPadding = PaddingValues(
-                                start = 16.dp,
                                 top = 16.dp,
-                                end = 16.dp,
                                 bottom = 140.dp
                             ),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             // 文章内容
                             item {
@@ -2113,12 +2141,7 @@ fun PostDetailScreen(
                                     },
                                     visibleCount = visibleComments.size,
                                     filterLzOnly = filterLzOnly,
-                                    onCopyPost = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("帖子原文", post.content)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
-                                    }
+                                    onFilterChange = { filterLzOnly = it }
                                 )
                             }
 

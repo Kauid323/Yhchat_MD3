@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -59,14 +58,27 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -76,6 +88,12 @@ import com.yhchat.canary.data.model.CommunityBoard
 import com.yhchat.canary.data.model.CommunityPost
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.components.ImageUtils
+import com.yhchat.canary.ui.components.LocalPageScroll
+import com.yhchat.canary.ui.components.matchedGeometry
+import com.yhchat.canary.ui.components.matchedGeometryAnchor
+import com.yhchat.canary.ui.components.pageScroll
+import com.yhchat.canary.ui.components.rememberPageScrollState
+import com.yhchat.canary.ui.components.rememberScrollProgress
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 import kotlinx.coroutines.launch
 
@@ -163,6 +181,25 @@ fun BoardDetailScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    // 整页的滚动状态：顶栏和内容共享它
+    val pageScroll = rememberPageScrollState()
+
+    // 大头部有没有滚走 —— 滚走之前顶栏不该收，否则一进来往上滑一点就没了
+    val headerGone by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 0 }
+            // 第一项完全滚出可视区，就算滚走了
+            info == null || info.offset + info.size < 0
+        }
+    }
+
+    // 顶栏收起进度：只在头部滚走后才跟手，往上滑 → 1，往回滑 → 0
+    val barAway = rememberScrollProgress(
+        away = BoardBarRowHeight,
+        enabled = { headerGone },
+        page = pageScroll
+    )
+
     // 打开文章：有外部导航回调就走回调，否则自己开详情页
     val openPost: (CommunityPost) -> Unit = { post ->
         if (onPostNavigate != null) {
@@ -177,7 +214,7 @@ fun BoardDetailScreen(
         }
     }
 
-    // 点顶部胶囊回到分区头部（第一项）
+    // 点顶栏回到分区头部（第一项）
     fun focusBoardHeader() {
         coroutineScope.launch { listState.animateScrollToItem(0) }
     }
@@ -197,9 +234,10 @@ fun BoardDetailScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding(),
-                // 顶部留出悬浮栏高度，头部内容从栏下开始，不跟栏打架
-                contentPadding = PaddingValues(top = FloatingBarHeight, bottom = 96.dp)
+                    // 内容上报自己的滚动位置给顶栏
+                    .pageScroll(listState),
+                // 顶部留出顶栏高度，头部内容从栏下开始；列表可以滚到顶栏后面
+                contentPadding = PaddingValues(top = TopBarHeight, bottom = 96.dp)
             ) {
                 // ===== 大头部 =====
                 item(key = "board_header") {
@@ -311,16 +349,20 @@ fun BoardDetailScreen(
             }
         }
 
-        // ===== 悬浮栏（覆盖在列表之上，三件式：返回 / 分区名 / 全部-只看楼主）=====
-        BoardFloatingBar(
-            title = board?.name ?: boardName,
-            boardAvatar = board?.avatar,
-            boardId = boardId,
-            token = token,
+        // ===== 顶栏（覆盖在列表之上：返回 + 分区名，玻璃底、随滚动收起）=====
+        BoardTopBar(
+            hiddenFraction = { barAway.value },
+            pinnedOffset = { 0 },
             onBackClick = onBackClick,
-            onBoardClick = {
-                focusBoardHeader()
+            titleContent = {
+                BoardBarTitle(
+                    title = board?.name ?: boardName,
+                    boardAvatar = board?.avatar,
+                    onBoardClick = { focusBoardHeader() }
+                )
             },
+            // 分区页是文章列表，没有评论可筛 —— 「只看楼主」只属于文章详情
+            pinnedContent = {},
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
@@ -449,8 +491,11 @@ fun BoardDetailScreen(
     }
 }
 
-/** 悬浮栏占位高度（40dp 栏高 + 上下各 8dp 内边距），列表顶部据此留白。 */
-private val FloatingBarHeight = 56.dp
+/**
+ * 顶栏占位高度：顶栏行 56dp。
+ * 列表的 `contentPadding.top` 用它，头部内容从顶栏下面开始。
+ */
+private val TopBarHeight = 56.dp
 
 /* -------------------------------------------------------------------------- */
 /*  大头部                                                                    */
@@ -477,6 +522,7 @@ private fun BoardHeader(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 大头像：它自己画出来，同时作为锚点告诉顶栏里那个小头像「该从哪来」
             AsyncImage(
                 model = board?.let {
                     ImageUtils.createBoardImageRequest(
@@ -488,6 +534,7 @@ private fun BoardHeader(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(RoundedCornerShape(18.dp))
+                    .matchedGeometryAnchor(BoardAvatarAnchor)
                     .clickable(enabled = !board?.avatar.isNullOrBlank()) {
                         showImageViewer = true
                     },
@@ -497,12 +544,16 @@ private fun BoardHeader(
             Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // 标题本身不画（顶栏里那个才画），只占位给顶栏的标题当锚点用
                 Text(
                     text = board?.name ?: boardName,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .matchedGeometryAnchor(BoardNameAnchor)
+                        .graphicsLayer { alpha = 0f }
                 )
                 val created = board?.createTimeText.orEmpty()
                 if (created.isNotBlank()) {
@@ -652,111 +703,216 @@ private fun FollowPill(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  悬浮栏                                                                    */
+/*  顶栏                                                                      */
 /* -------------------------------------------------------------------------- */
 
 /**
- * 顶部三件式悬浮栏，照截图排：
- *   ① 独立圆形白底返回按钮（固定 40dp 圆，不跟中间胶囊连）
- *   ② 中间白底胶囊：分区头像 + 分区名，撑满剩余宽度，始终可见
- *   ③ 右侧白底分段控件「全部 / 只看楼主」
+ * 顶栏，机制照 Oolong 的 `GlassTopBar`。
  *
- * 三个都是**各自成块的实心白面**，浮在列表之上；列表从它们之间和下面滚过去。
- * 不再用整条通栏背景，所以滚动时不会有一条灰带横在中间。
+ * 跟之前那版最本质的区别是**背景**：不是实心色块，而是一层从上往下
+ * **渐隐到完全透明**的玻璃。列表穿过去是柔的，不会撞在一条硬边上。
+ *
+ * 收起：整行按 [hiddenFraction] 往上滑走并淡出。这个 0..1 由
+ * `rememberScrollProgress(away = 行高)` 给出 —— 内容往上滑它走向 1，
+ * 往回滑一点它立刻回到 0，所以是「滑的时候自己收、再滑回来才出来」。
+ * 状态栏那一块玻璃始终在，内容不会从状态栏底下硬切过去。
+ *
+ * @param hiddenFraction 0 显示、1 完全收起
+ * @param pinnedOffset 下方常驻行比顶栏行低多少像素
+ * @param pinnedContent 收起时也不走的那一行（分段控件）
  */
 @Composable
-private fun BoardFloatingBar(
-    title: String,
-    boardAvatar: String?,
-    boardId: Int,
-    token: String,
+private fun BoardTopBar(
+    hiddenFraction: () -> Float,
+    pinnedOffset: () -> Int,
     onBackClick: () -> Unit,
-    onBoardClick: () -> Unit,
+    titleContent: @Composable () -> Unit,
+    pinnedContent: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // ① 圆形返回
-        CircleChromeButton(onClick = onBackClick) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+    val statusBar = WindowInsets.statusBars
+    val page = LocalPageScroll.current
 
-        // ② 分区名胶囊：头像 + 名称，点进分区详情
-        Surface(
-            onClick = onBoardClick,
-            modifier = Modifier.weight(1f),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = ChromeElevation
-        ) {
-            Row(
+    Layout(
+        modifier = modifier.fillMaxWidth(),
+        content = {
+            // 背景：玻璃渐变，往下淡出到透明，不留硬边
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(ChromeHeight)
-                    .padding(start = 6.dp, end = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .layoutId(BoardBarLayer.Background)
+                    .boardGlassBackground()
+            )
+
+            // 前景：返回 + 分区名（会跟着滚走）
+            Column(
+                modifier = Modifier
+                    .layoutId(BoardBarLayer.Foreground)
+                    .windowInsetsPadding(statusBar)
+                    .onGloballyPositioned { coords ->
+                        // 记下这一行在页面里的上下边，吸附的头像和标题靠它算进度
+                        if (page != null) {
+                            val row = page.boundsOf(coords)
+                            page.barRowTop = row.top
+                            page.barRowBottom = row.bottom
+                        }
+                    }
             ) {
-                AsyncImage(
-                    model = boardAvatar?.let {
-                        ImageUtils.createBoardImageRequest(
-                            context = LocalContext.current,
-                            url = it
-                        )
-                    },
-                    contentDescription = title,
+                Row(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                        .fillMaxWidth()
+                        .height(BoardBarRowHeight)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BoardNavButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(1f)) { titleContent() }
+                }
+            }
+
+            // 常驻行：分段控件，顶栏收起时它留在原地
+            Box(
+                modifier = Modifier
+                    .layoutId(BoardBarLayer.Pinned)
+                    .windowInsetsPadding(statusBar.only(WindowInsetsSides.Horizontal))
+            ) {
+                pinnedContent()
             }
         }
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minHeight = 0)
+        val foreground = measurables.first { it.layoutId == BoardBarLayer.Foreground }.measure(loose)
+        val pinned = measurables.firstOrNull { it.layoutId == BoardBarLayer.Pinned }?.measure(loose)
+        val height = foreground.height + (pinned?.height ?: 0)
 
-        // ③ 分段控件的位子是文章详情页的（「全部 / 只看楼主」筛的是评论、楼主是文章作者），
-        // 分区页这里只保留返回 + 分区名两块。
+        // 隐藏时把状态栏以下的行整体往上推，pinned 行跟着上移
+        val statusTop = statusBar.getTop(this)
+        val hidden = ((foreground.height - statusTop) * hiddenFraction()).toInt()
+
+        // 玻璃只铺到顶栏行底部，再往下多留一点，让渐变在硬边之前就开始
+        val background = measurables.first { it.layoutId == BoardBarLayer.Background }
+            .measure(Constraints.fixed(foreground.width, foreground.height + BoardBarEdgeExtend.roundToPx()))
+
+        layout(foreground.width, height) {
+            background.place(0, 0)
+            // 完全收起时不摆前景：已淡到看不见，还留着会让玻璃每帧都去采样页面
+            if (hiddenFraction() < 1f) {
+                foreground.placeWithLayer(0, -hidden) { alpha = 1f - hiddenFraction() }
+            }
+            pinned?.place(0, foreground.height - hidden + pinnedOffset())
+        }
     }
 }
 
-/** 顶部那几个悬浮块的统一高度与阴影。 */
-private val ChromeHeight = 40.dp
-private val ChromeElevation = 3.dp
+/** 顶栏那几层的布局 id。 */
+private enum class BoardBarLayer { Background, Foreground, Pinned }
 
-/** 白底圆形图标按钮，返回键用的就是它。 */
+/** 顶栏行高。 */
+private val BoardBarRowHeight = 56.dp
+
+/** 玻璃往下伸出顶栏多少，让雾在硬边之前就开始。 */
+private val BoardBarEdgeExtend = 12.dp
+
+/**
+ * 顶栏的玻璃底：从上往下渐隐到完全透明。
+ *
+ * 顶部留 92% 的 surface 色保证标题读得清，到 65% 处已经淡到 72%，
+ * 底边彻底 0 —— 没有硬底边，这就是「玻璃」和「不透明色块」的全部差别。
+ */
 @Composable
-private fun CircleChromeButton(
+private fun Modifier.boardGlassBackground(): Modifier {
+    val base = MaterialTheme.colorScheme.surface
+    return this.drawWithContent {
+        drawContent()
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to base.copy(alpha = 0.92f),
+                0.65f to base.copy(alpha = 0.70f),
+                1f to base.copy(alpha = 0f)
+            )
+        )
+    }
+}
+
+/** 顶栏上的圆形悬浮按钮，返回用它。 */
+@Composable
+private fun BoardNavButton(
     onClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(ChromeHeight),
+        modifier = Modifier.size(40.dp),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = ChromeElevation
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shadowElevation = 2.dp
     ) {
         Box(contentAlignment = Alignment.Center) { content() }
     }
 }
+
+/**
+ * 顶栏里的分区标题：头像 + 名称。
+ *
+ * 两者都用 [matchedGeometry] 跟大头部里同名的锚点配对 —— 大头部滚上来时，
+ * 它会从 64dp 的大头像一路缩小、平移进顶栏这条 28dp 的位置，
+ * 而不是「突然出现在这里」。
+ */
+@Composable
+private fun BoardBarTitle(
+    title: String,
+    boardAvatar: String?,
+    onBoardClick: () -> Unit
+) {
+    val avatarDock = rememberScrollProgress(BoardAvatarAnchor)
+    val nameDock = rememberScrollProgress(BoardNameAnchor)
+    val openDetail = Modifier.clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        onClick = onBoardClick
+    )
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(
+            model = boardAvatar?.let {
+                ImageUtils.createBoardImageRequest(context = LocalContext.current, url = it)
+            },
+            contentDescription = title,
+            modifier = Modifier
+                .size(BoardDockedAvatarSize)
+                .clip(CircleShape)
+                .matchedGeometry(BoardAvatarAnchor, avatarDock)
+                .then(openDetail),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .matchedGeometry(BoardNameAnchor, nameDock)
+                .then(openDetail)
+        )
+    }
+}
+
+/** 配对用的两个 key：大头部里的和顶栏里的是同一对。 */
+private object BoardAvatarAnchor
+private object BoardNameAnchor
+
+/** 吸附进顶栏后的头像尺寸。 */
+private val BoardDockedAvatarSize = 28.dp
 
 /* -------------------------------------------------------------------------- */
 /*  列表零碎                                                                  */
