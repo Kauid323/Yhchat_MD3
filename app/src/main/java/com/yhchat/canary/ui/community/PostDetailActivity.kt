@@ -157,6 +157,7 @@ import com.yhchat.canary.ui.user.UserDetailActivity
 import com.yhchat.canary.utils.UnifiedLinkHandler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.text.DecimalFormat
 import java.util.regex.Pattern
 import androidx.compose.runtime.CompositionLocalProvider
