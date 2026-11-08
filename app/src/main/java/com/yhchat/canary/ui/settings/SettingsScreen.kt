@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -159,6 +160,12 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
+    // 设置搜索：null 表示没在搜；非 null 是当前查询串
+    var searchQuery by remember { mutableStateOf<String?>(null) }
+
+    // 首页列表状态。搜索结果点「首页条目」时要靠它滚过去
+    val listState = rememberLazyListState()
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -178,6 +185,14 @@ fun SettingsScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "搜索设置"
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -188,6 +203,7 @@ fun SettingsScreen(
     ) { innerPadding ->
         // 设置项列表
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -451,7 +467,13 @@ fun SettingsScreen(
             item {
                 DisplaySettingsGroup(context = context)
             }
-            
+
+            // 文字转语音。这组之前定义好却没有挂上来，所以界面上一直看不到；
+            // 搜索索引里有它的条目，这里补上调用才不至于点了没反应
+            item {
+                TTSSettingsGroup(context = context)
+            }
+
             // 主题设置
             item {
                 ThemeSettingsGroup(context = context)
@@ -505,6 +527,34 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
+    }
+
+    // 设置搜索面板。query 非 null 时显示；点结果后关掉并跳转
+    searchQuery?.let { query ->
+        SettingsSearchPanel(
+            query = query,
+            onQueryChange = { searchQuery = it },
+            onDismiss = { searchQuery = null },
+            onOpenEntry = { entry ->
+                searchQuery = null
+                val page = entry.page
+                if (page != null) {
+                    // 二级页里的条目：直接开那个页面
+                    openSettingsPage(context, page, navigationRepository)
+                } else {
+                    // 首页条目：滚到它所在的分组。
+                    // 注意要等一帧再滚 —— Dialog 刚关、LazyColumn 可能还没完成
+                    // 本帧的布局，立刻 animateScrollToItem 会算错位置。
+                    entry.scrollKey?.let { key ->
+                        SettingsSection.itemIndex(key)?.let { index ->
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index)
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 
     // 退出登录确认对话框
