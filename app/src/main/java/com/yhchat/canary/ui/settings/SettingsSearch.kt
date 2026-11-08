@@ -48,12 +48,13 @@ internal object SettingsSearch {
             var matchedOn = ""
 
             for (term in terms) {
-                val best = scoreFor(entry, term)
+                // scoreFor 返回 Pair<得分, 命中字段>
+                val (score, on) = scoreFor(entry, term)
                 // 有一个词完全找不到，这条就不要 —— AND 语义
-                if (best.score == 0) return@forEachIndexed
+                if (score == 0) return@forEachIndexed
 
-                total += best.score
-                if (matchedOn.isEmpty()) matchedOn = best.on
+                total += score
+                if (matchedOn.isEmpty()) matchedOn = on
             }
 
             // 索引里越靠前的越优先，用它当微弱的次序修正；
