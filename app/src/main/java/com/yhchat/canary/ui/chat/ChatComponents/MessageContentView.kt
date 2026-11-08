@@ -88,6 +88,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
+ * 图片消息在气泡里的缩略图尺寸。
+ *
+ * 固定 70x50 而不是自适应：图片消息只是「这里有一张图」的提示，
+ * 真正的浏览发生在点开之后的预览页。原先用 sizeIn(120..280dp, maxHeight 360dp)
+ * 让缩略图按原图比例撑开，同一屏里几乎放不下第二条消息。
+ *
+ * 固定尺寸配合 ContentScale.Crop 裁切居中，长宽比不同的图片也不会变形。
+ */
+private val ImageThumbWidth = 70.dp
+private val ImageThumbHeight = 50.dp
+
+/**
  * 消息内容视图
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -210,11 +222,10 @@ fun MessageContentView(
                         TgsPreviewMessage(
                             url = imageUrl,
                             modifier = Modifier
-                                .sizeIn(
-                                    minWidth = 120.dp,
-                                    maxWidth = 280.dp,
-                                    maxHeight = 360.dp
-                                )
+                                // 缩略图固定 70x50：图片消息在气泡里只当一条预览，
+                                // 原先 120~280dp 的尺寸会撑满一大块，把同一屏的
+                                // 其它消息挤出去。点开才是看原图的地方。
+                                .size(ImageThumbWidth, ImageThumbHeight)
                                 .clip(RoundedCornerShape(8.dp))
                                 .combinedClickable(
                                     onClick = { onImageClick(imageUrl) },
@@ -230,11 +241,8 @@ fun MessageContentView(
                             ),
                             contentDescription = "图片",
                             modifier = Modifier
-                                .sizeIn(
-                                    minWidth = 120.dp,
-                                    maxWidth = 280.dp,
-                                    maxHeight = 360.dp
-                                )
+                                // 跟上面的 TGS 分支保持同一个缩略图尺寸
+                                .size(ImageThumbWidth, ImageThumbHeight)
                                 .clip(RoundedCornerShape(8.dp))
                                 .combinedClickable(
                                     onClick = { onImageClick(imageUrl) },
