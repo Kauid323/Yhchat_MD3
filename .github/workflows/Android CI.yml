@@ -71,6 +71,13 @@ jobs:
           echo "=== Memory ==="
           free -h
 
+      # services.gradle.org 在大陆网络下经常 504 或 read timeout，
+      # 而 gradlew 首次启动就要下发行包（9.4.1-all 约 250MB），一卡整条流水线就挂。
+      # 这个脚本先探官方源：能通就什么都不改（网络正常时行为跟以前完全一致），
+      # 通了才留下原样；不通才按 腾讯云 → 阿里云 顺序切镜像。
+      - name: Use Gradle mirror if official source is unreachable
+        run: bash .github/scripts/setup-gradle-mirror.sh gradle/wrapper/gradle-wrapper.properties
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 

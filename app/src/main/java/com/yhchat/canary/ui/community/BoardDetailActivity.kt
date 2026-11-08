@@ -371,79 +371,80 @@ fun BoardDetailScreen(
                 }
                 }
             }
-        }
 
-        // ===== 顶栏（覆盖在列表之上：返回 + 分区名，玻璃底、随滚动收起）=====
-        BoardTopBar(
-            hiddenFraction = { barAway.value },
-            pinnedOffset = { 0 },
-            onBackClick = onBackClick,
-            titleContent = {
-                BoardBarTitle(
-                    title = board?.name ?: boardName,
-                    boardAvatar = board?.avatar,
-                    onBoardClick = { focusBoardHeader() }
-                )
-            },
-            // 分区页是文章列表，没有评论可筛 —— 「只看楼主」只属于文章详情
-            pinnedContent = {},
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+            // ===== 顶栏（覆盖在列表之上：返回 + 分区名，玻璃底、随滚动收起）=====
+            // 在 Box 内部，Modifier.align 才是 BoxScope 的扩展
+            BoardTopBar(
+                hiddenFraction = { barAway.value },
+                pinnedOffset = { 0 },
+                onBackClick = onBackClick,
+                titleContent = {
+                    BoardBarTitle(
+                        title = board?.name ?: boardName,
+                        boardAvatar = board?.avatar,
+                        onBoardClick = { focusBoardHeader() }
+                    )
+                },
+                // 分区页是文章列表，没有评论可筛 —— 「只看楼主」只属于文章详情
+                pinnedContent = {},
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
 
-        // ===== 悬浮按钮：回顶 / 发布 =====
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 16.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            AnimatedVisibility(
-                visible = listState.firstVisibleItemIndex > 0,
-                enter = fadeIn() + scaleIn(initialScale = 0.85f),
-                exit = fadeOut() + scaleOut(targetScale = 0.85f)
+            // ===== 悬浮按钮：回顶 / 发布 =====
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 16.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                AnimatedVisibility(
+                    visible = listState.firstVisibleItemIndex > 0,
+                    enter = fadeIn() + scaleIn(initialScale = 0.85f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.85f)
+                ) {
+                    Surface(
+                        onClick = {
+                            coroutineScope.launch { listState.animateScrollToItem(0) }
+                        },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shadowElevation = 4.dp,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "回到顶部",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+
                 Surface(
                     onClick = {
-                        coroutineScope.launch { listState.animateScrollToItem(0) }
+                        val intent = Intent(context, CreatePostActivity::class.java).apply {
+                            putExtra("board_id", boardId)
+                            putExtra("board_name", board?.name ?: boardName)
+                            putExtra("token", token)
+                        }
+                        context.startActivity(intent)
                     },
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.size(44.dp)
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.size(56.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "回到顶部",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = "发布文章",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                }
-            }
-
-            Surface(
-                onClick = {
-                    val intent = Intent(context, CreatePostActivity::class.java).apply {
-                        putExtra("board_id", boardId)
-                        putExtra("board_name", board?.name ?: boardName)
-                        putExtra("token", token)
-                    }
-                    context.startActivity(intent)
-                },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 8.dp,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "发布文章",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
                 }
             }
         }
