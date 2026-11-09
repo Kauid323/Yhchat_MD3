@@ -168,7 +168,18 @@ class PostDetailViewModel @Inject constructor(
                     val merged = if (page == 1) {
                         response.data.comments
                     } else {
-                        _commentListState.value.comments + response.data.comments
+                        // 按 id 去重后再拼。
+                        //
+                        // 后端是「倒序 + 按页切片」，发评论或别人发评论会让后面的条目整体后移，
+                        // 于是同一个 id 可能同时出现在第 1 页和第 2 页的返回里。
+                        // 直接相加会得到重复条目 —— LazyColumn 的 key 撞车直接抛
+                        // IllegalArgumentException（"Key already used"）。
+                        //
+                        // 保留先到的那份（old 在前），因为它已经渲染过，
+                        // 换成新的那份会让对应的 item 重建、位置闪一下。
+                        val knownIds = _commentListState.value.comments.mapTo(HashSet()) { it.id }
+                        _commentListState.value.comments +
+                            response.data.comments.filter { it.id !in knownIds }
                     }
 
                     // 后端按时间倒序返回（最新在前），这里统一排成正序：1L 在最上面。
@@ -186,13 +197,18 @@ class PostDetailViewModel @Inject constructor(
                     // 保持后端给的顺序 —— 那是已知可用的顺序。
                     // 这里不能写 reversed()：分页下「每批反转再拼」会错序。
                     val timeValid = merged.all { it.createTime > 0L }
-                    val newComments = if (timeValid) {
+                    val sorted = if (timeValid) {
                         merged.sortedWith(
                             compareBy<CommunityComment> { it.createTime }.thenBy { it.id }
                         )
                     } else {
                         merged
                     }
+
+                    // 最后再兜一道：保证交给 UI 的列表里 id 一定唯一。
+                    // 第 1 页本身也可能是脏的（后端返回重复行），那种情况上面的
+                    // 分页去重管不到。UI 的 key 就是 comment.id，这里漏一条就崩一次。
+                    val newComments = sorted.distinctBy { it.id }
 
                     _commentListState.value = CommentListState(
                         comments = newComments,

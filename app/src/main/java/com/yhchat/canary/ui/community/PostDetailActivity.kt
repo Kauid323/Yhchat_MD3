@@ -2171,6 +2171,28 @@ fun PostDetailScreen(
         else all.filter { it.senderId == lzId }
     }
 
+    // LazyColumn 渲染用的 key。直接基于 visibleComments 算，
+    // 不依赖 commentListState.comments 的下标 —— 「只看楼主」过滤后
+    // 列表变了、下标全变，用原始下标去查 key 会错位。
+    //
+    // 正常情况下 key 就是 "comment_<id>"（跟以前完全一样，动画不受影响）。
+    // 只有同一批数据里出现重复 id 时才给后来那几条加 #n 后缀 ——
+    // 那就是本次崩溃（"Key already used"）的来源：后端分页按页切片，
+    // 有人发评论时前后页会错位，同一个 id 出现在两页里，拼起来就重复。
+    //
+    // 返回的是跟 visibleComments 等长的列表，直接按位置取 —— 不用
+    // id 查表，这样重复 id 也能各自拿到不同的 key。
+    val commentKeys = remember(visibleComments) {
+        val occurrence = HashMap<Int, Int>()
+        val keys = ArrayList<String>(visibleComments.size)
+        visibleComments.forEach { comment ->
+            val times = occurrence.getOrElse(comment.id, 0)
+            occurrence[comment.id] = times + 1
+            keys += if (times == 0) "comment_${comment.id}" else "comment_${comment.id}#$times"
+        }
+        keys
+    }
+
     // 每条例子的原始楼层（在全部评论里的下标 + 1），过滤后仍用这个号
     val floorIndexOf = remember(commentListState.comments) {
         commentListState.comments.mapIndexed { index, c -> c.id to index + 1 }.toMap()
@@ -2367,7 +2389,14 @@ fun PostDetailScreen(
 
                             itemsIndexed(
                                 items = visibleComments,
-                                key = { _, comment -> "comment_${comment.id}" }
+                                // 用预先算好的 key（冲突时带 #n 后缀），
+                                // 保证同一次渲染内唯一
+                                key = { index, comment ->
+                                    // getOrElse 是兜底：commentKeys 与 visibleComments
+                                    // 同源同长，正常不会越界；万一出现不一致，
+                                    // 宁可退回 id 也不让列表崩掉
+                                    commentKeys.getOrElse(index) { "comment_${comment.id}" }
+                                }
                             ) { index, comment ->
                                 CommentItem(
                                     comment = comment,
