@@ -16,6 +16,21 @@ object ImageUtils {
         val prefs = context.getSharedPreferences("display_settings", Context.MODE_PRIVATE)
         return prefs.getBoolean("data_saver", false)
     }
+
+    /**
+     * 这个 URL 是不是本站图床的、需要带 Referer 才能取到图。
+     *
+     * 按域名后缀判断，不用 contains("chat-img.jwznb.com")：
+     * 图床有多套域名并存（chat-img、chat-img3、以后可能还有别的），
+     * 写死某一个的话，其余几套就漏了 —— 曾经就是这样，走 chat-img3 的
+     * 一部分用户头像一直加载不出来，因为 chat-img3.jwznb.com 里
+     * 并不包含 chat-img.jwznb.com 这个子串。
+     */
+    internal fun needsReferer(url: String): Boolean {
+        if (url.isBlank()) return false
+        val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return false
+        return host.endsWith("jwznb.com")
+    }
     
     /**
      * 创建支持多格式的ImageLoader
@@ -55,7 +70,7 @@ object ImageUtils {
             .crossfade(true)
             
         // 为相关域名添加Referer头
-        if (url.contains("chat-img.jwznb.com") || url.contains("jwznb.com") || url.contains("myapp.jwznb.com")) {
+        if (needsReferer(url)) {
             builder.setHeader("Referer", "https://myapp.jwznb.com")
             builder.setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
         }
@@ -83,7 +98,7 @@ object ImageUtils {
             .crossfade(true)
             
         // 为相关域名添加Referer头
-        if (url.contains("chat-img.jwznb.com") || url.contains("jwznb.com") || url.contains("myapp.jwznb.com")) {
+        if (needsReferer(url)) {
             builder.setHeader("Referer", "https://myapp.jwznb.com")
             builder.setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
         }
@@ -111,7 +126,7 @@ object ImageUtils {
             .crossfade(true)
             
         // 为相关域名添加Referer头
-        if (url.contains("chat-img.jwznb.com") || url.contains("jwznb.com") || url.contains("myapp.jwznb.com")) {
+        if (needsReferer(url)) {
             builder.setHeader("Referer", "https://myapp.jwznb.com")
             builder.setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
         }

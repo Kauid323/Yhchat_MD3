@@ -1045,10 +1045,16 @@ class MainActivity : BaseActivity() {
                 OkHttpClient.Builder()
                     .addInterceptor { chain ->
                         val request = chain.request()
-                        val url = request.url.toString()
-                        
-                        // 为chat-img.jwznb.com的请求添加Referer
-                        if (url.contains("chat-img.jwznb.com")) {
+                        val host = request.url.host
+
+                        // 图床域名要带 Referer，否则服务端 403、图片空白。
+                        //
+                        // 判断用「主机名后缀」而不是 contains("chat-img.jwznb.com")：
+                        // 图床有多套，chat-img.jwznb.com 和 chat-img3.jwznb.com 并存，
+                        // 后者不包含前者这个子串 —— 之前就是这么漏的，
+                        // 一部分用户头像（走 chat-img3）一直加载不出来。
+                        // 按 .jwznb.com 后缀判断，以后再加 chat-img4 之类也不用改。
+                        if (host.endsWith("jwznb.com")) {
                             val newRequest = request.newBuilder()
                                 .addHeader("Referer", "https://myapp.jwznb.com")
                                 .build()
