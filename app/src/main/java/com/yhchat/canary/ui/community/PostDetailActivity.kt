@@ -140,6 +140,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.Layout
@@ -305,11 +306,8 @@ fun PostContentCard(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = post.senderAvatar,
-                contentDescription = post.senderNickname,
+            Box(
                 modifier = Modifier
-                    .size(28.dp)
                     .clip(CircleShape)
                     .clickable {
                         UserDetailActivity.start(
@@ -317,9 +315,14 @@ fun PostContentCard(
                             userId = post.senderId,
                             userName = post.senderNickname
                         )
-                    },
-                contentScale = ContentScale.Crop
-            )
+                    }
+            ) {
+                CommentAvatar(
+                    url = post.senderAvatar,
+                    name = post.senderNickname,
+                    size = 28.dp
+                )
+            }
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -960,13 +963,10 @@ fun CommentItem(
                                 }
                                 .padding(bottom = 14.dp)
                         ) {
-                            AsyncImage(
-                                model = comment.senderAvatar,
-                                contentDescription = comment.senderNickname,
-                                modifier = Modifier
-                                    .size(FloorAvatarSize)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
+                            CommentAvatar(
+                                url = comment.senderAvatar,
+                                name = comment.senderNickname,
+                                size = FloorAvatarSize
                             )
                         }
 
@@ -1242,12 +1242,11 @@ fun CommentReplyItem(
                 .padding(bottom = 10.dp),
             verticalAlignment = Alignment.Top
         ) {
-            AsyncImage(
-                model = reply.senderAvatar,
-                contentDescription = reply.senderNickname,
+            // 头像跟第一行文字居中对齐：外层加 top padding 把它压到文字的
+            // 视觉中线上。padding 必须在外层 —— 放进 CommentAvatar 内部
+            // 会把头像本身压小（padding 在 size 之后就会缩内容）。
+            Box(
                 modifier = Modifier
-                    .size(ReplyAvatarSize)
-                    // 跟第一行文字居中对齐
                     .padding(top = ReplyAvatarCenter - ReplyAvatarSize / 2)
                     .clip(CircleShape)
                     .clickable {
@@ -1256,9 +1255,14 @@ fun CommentReplyItem(
                             userId = reply.senderId,
                             userName = reply.senderNickname
                         )
-                    },
-                contentScale = ContentScale.Crop
-            )
+                    }
+            ) {
+                CommentAvatar(
+                    url = reply.senderAvatar,
+                    name = reply.senderNickname,
+                    size = ReplyAvatarSize
+                )
+            }
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -1376,21 +1380,32 @@ private fun CommentFilterToggle(
     val density = LocalDensity.current
 
     // 两格都量到宽度之前不画指示器。
-    // 只判断 indicatorWidth > 0 不够：切换目标那格如果还没量到（宽度 0），
+    // 只判断宽度 > 0 不够：切换目标那格如果还没量到（宽度 0），
     // 指示器会整个消失一帧，比不显示更难看。
     val measured = allWidth.value > 0.dp && lzWidth.value > 0.dp
 
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (filterLzOnly) lzWidth.value else allWidth.value,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
-        label = "commentFilterIndicatorWidth"
+    // 用一个进度值驱动全部动画，而不是宽度和位移各跑一个动画。
+    //
+    // 之前两个 spring 各自插值，会错位：spring 的时长取决于「要走多远」，
+    // 宽度只走 allWidth→lzWidth 那一小段，位移要走整整一个 allWidth，
+    // 两条曲线速度不同 —— 中途宽度已经到位、位移才走了一部分，
+    // 指示器就半个身子卡在格子外面。
+    //
+    // 现在 progress 从 0 到 1，宽度和位移都从它算出来，
+    // 任何一帧都严格对应同一个位置，物理上不可能错开。
+    val progress by animateFloatAsState(
+        targetValue = if (filterLzOnly) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "commentFilterProgress"
     )
-    // 指示器的横向位移：切到「只看楼主」时往右挪「全部」那一格的宽度
-    val indicatorOffset by animateDpAsState(
-        targetValue = if (filterLzOnly) allWidth.value else 0.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
-        label = "commentFilterIndicatorOffset"
-    )
+
+    // 宽度在「全部格宽」和「只看楼主格宽」之间插值
+    val indicatorWidth = lerp(allWidth.value, lzWidth.value, progress)
+    // 位移从 0 走到「全部格宽」—— 那正好是第二格的起点
+    val indicatorOffset = allWidth.value * progress
 
     Surface(
         shape = CircleShape,
