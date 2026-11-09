@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,13 +46,20 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.BasicTextField
@@ -112,6 +121,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -503,6 +513,74 @@ fun PostBottomActionBarDuo3(
         label = "postDetailSearchFieldAlpha"
     )
 
+    // 文章点赞按钮的过渡色与弹跳。跟评论区那个点赞同一套手感，
+    // 两处点赞的反馈一致，不会显得一个是「高级」一个是「简陋」。
+    val postLiked = post.isLiked == "1"
+    val likeContainerColor by animateColorAsState(
+        targetValue = if (postLiked) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        animationSpec = tween(200),
+        label = "postLikeContainer"
+    )
+    val likeContentColor by animateColorAsState(
+        targetValue = if (postLiked) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "postLikeContent"
+    )
+    val postLikeScale by animateFloatAsState(
+        targetValue = if (postLiked) 1.15f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "postLikeScale"
+    )
+
+    // 收藏、打赏跟点赞同构，各自一套过渡色。
+    // 三个按钮的选中动画节奏一致，用户不用为每个按钮重新适应。
+    val collected = post.isCollected == 1
+    val collectContainerColor by animateColorAsState(
+        targetValue = if (collected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        animationSpec = tween(200),
+        label = "postCollectContainer"
+    )
+    val collectContentColor by animateColorAsState(
+        targetValue = if (collected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "postCollectContent"
+    )
+    val collectScale by animateFloatAsState(
+        targetValue = if (collected) 1.15f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "postCollectScale"
+    )
+
+    val rewarded = post.isReward == 1
+    val rewardContainerColor by animateColorAsState(
+        targetValue = if (rewarded) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        animationSpec = tween(200),
+        label = "postRewardContainer"
+    )
+    val rewardContentColor by animateColorAsState(
+        targetValue = if (rewarded) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "postRewardContent"
+    )
+
     // 注意：这一层（以及 bottomBar 那一层）**不能有任何背景色/底色**，
     // 文章要能从按钮之间和按钮周围露出来，只有按钮自己是实心的（挡住它自己那一小块）。
     Row(
@@ -541,11 +619,9 @@ fun PostBottomActionBarDuo3(
                     Surface(
                         modifier = Modifier.clickable { onLikeClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = if (post.isLiked == "1") {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        }
+                        // 底色走过渡：点赞瞬间从灰变主色是硬切，看着像闪了一下；
+                        // 过渡一下才有「按下去点亮」的感觉
+                        color = likeContainerColor
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -555,21 +631,15 @@ fun PostBottomActionBarDuo3(
                             Icon(
                                 imageVector = if (post.isLiked == "1") Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
                                 contentDescription = "点赞",
-                                tint = if (post.isLiked == "1") {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(18.dp)
+                                tint = likeContentColor,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .scale(postLikeScale)
                             )
                             Text(
                                 text = post.likeNum.toString(),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (post.isLiked == "1") {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                color = likeContentColor
                             )
                         }
                     }
@@ -577,11 +647,7 @@ fun PostBottomActionBarDuo3(
                     Surface(
                         modifier = Modifier.clickable { onCollectClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = if (post.isCollected == 1) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        }
+                        color = collectContainerColor
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -589,23 +655,17 @@ fun PostBottomActionBarDuo3(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = if (post.isCollected == 1) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                imageVector = if (collected) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                                 contentDescription = "收藏",
-                                tint = if (post.isCollected == 1) {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(18.dp)
+                                tint = collectContentColor,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .scale(collectScale)
                             )
                             Text(
                                 text = post.collectNum.toString(),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (post.isCollected == 1) {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                color = collectContentColor
                             )
                         }
                     }
@@ -613,11 +673,7 @@ fun PostBottomActionBarDuo3(
                     Surface(
                         modifier = Modifier.clickable { onRewardClick() },
                         shape = RoundedCornerShape(24.dp),
-                        color = if (post.isReward == 1) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        }
+                        color = rewardContainerColor
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -625,23 +681,15 @@ fun PostBottomActionBarDuo3(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = if (post.isReward == 1) Icons.Filled.MonetizationOn else Icons.Outlined.MonetizationOn,
+                                imageVector = if (rewarded) Icons.Filled.MonetizationOn else Icons.Outlined.MonetizationOn,
                                 contentDescription = "打赏",
-                                tint = if (post.isReward == 1) {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                                tint = rewardContentColor,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = formatRewardAmount(post.amountNum),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (post.isReward == 1) {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                color = rewardContentColor
                             )
                         }
                     }
@@ -1006,26 +1054,44 @@ fun CommentItem(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.clickable { onLikeClick(comment.id) }
                         ) {
-                            Icon(
-                                imageVector = if (comment.isLiked == "1") Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                                contentDescription = "点赞",
-                                tint = if (comment.isLiked == "1") {
+                            // 点赞后图标弹一下：点下去立刻有反馈，不等网络回来。
+                            // 用 spring 的 bouncy 而不是直接换颜色 —— 换色的延迟
+                            // 会让人以为没点上，得多点几次。
+                            val liked = comment.isLiked == "1"
+                            val likeScale by animateFloatAsState(
+                                targetValue = if (liked) 1.15f else 1f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "commentLikeScale"
+                            )
+                            // 颜色也走过渡，避免主色/灰色之间硬切
+                            val likeTint by animateColorAsState(
+                                targetValue = if (liked) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
-                                modifier = Modifier.size(15.dp)
+                                animationSpec = tween(180),
+                                label = "commentLikeTint"
+                            )
+
+                            Icon(
+                                imageVector = if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                contentDescription = "点赞",
+                                tint = likeTint,
+                                modifier = Modifier
+                                    .size(15.dp)
+                                    .scale(likeScale)
                             )
                             if (comment.likeNum > 0) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = comment.likeNum.toString(),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (comment.isLiked == "1") {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
+                                    // 跟图标共用同一个过渡色，点赞时一起变色
+                                    color = likeTint
                                 )
                             }
                         }
@@ -1259,12 +1325,24 @@ private fun CommentSectionHeader(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = if (filterLzOnly) "$visibleCount/$total" else "$total",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
+            // 数字用 AnimatedContent 横向滑动切换：
+            // 从「23」切到「3/23」时整段宽度会变，硬换会顶一下标题。
+            // 指定 sizeTransform 让宽度平滑过渡，而不是跳变。
+            AnimatedContent(
+                targetState = if (filterLzOnly) "$visibleCount/$total" else "$total",
+                transitionSpec = {
+                    (slideInHorizontally { it / 2 } + fadeIn()) togetherWith
+                        (slideOutHorizontally { -it / 2 } + fadeOut())
+                },
+                modifier = Modifier.padding(bottom = 2.dp),
+                label = "commentCountText"
+            ) { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Spacer(modifier = Modifier.weight(1f))
         // 「只看楼主」放在评论区这儿：它筛的是本篇评论，放在顶栏反而离内容太远
@@ -1278,64 +1356,122 @@ private fun CommentSectionHeader(
 /**
  * 评论区里的「全部 / 只看楼主」。
  *
- * 两格胶囊，选中是实底、未选中只有文字 —— 跟 Oolong 的 `SegmentedControl` 一个观感。
- * 放在评论区标题行右侧，因为它管的是评论，不是整页。
+ * 两格胶囊，选中项底下有一块滑动的实底 —— 跟 M3 的 segmented button 一个观感。
+ *
+ * 选中态用**一块会滑动的指示器**，而不是每格各自换背景：
+ *   - 换背景是硬切，点下去那一瞬看不出「换到哪儿了」
+ *   - 滑动指示器有个位移过程，眼睛能跟上，切换后也知道当前在哪一格
+ *
+ * 指示器宽度跟着目标格的实际宽度走（「只看楼主」比「全部」宽三个字），
+ * 所以两格不等宽 —— 用 weight 强行等分会让「全部」显得空。
  */
 @Composable
 private fun CommentFilterToggle(
     filterLzOnly: Boolean,
     onFilterChange: (Boolean) -> Unit
 ) {
+    // 两格各自的宽度，量出来给指示器用
+    val allWidth = remember { mutableStateOf(0.dp) }
+    val lzWidth = remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+
+    // 两格都量到宽度之前不画指示器。
+    // 只判断 indicatorWidth > 0 不够：切换目标那格如果还没量到（宽度 0），
+    // 指示器会整个消失一帧，比不显示更难看。
+    val measured = allWidth.value > 0.dp && lzWidth.value > 0.dp
+
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (filterLzOnly) lzWidth.value else allWidth.value,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "commentFilterIndicatorWidth"
+    )
+    // 指示器的横向位移：切到「只看楼主」时往右挪「全部」那一格的宽度
+    val indicatorOffset by animateDpAsState(
+        targetValue = if (filterLzOnly) allWidth.value else 0.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "commentFilterIndicatorOffset"
+    )
+
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .height(28.dp)
                 .padding(2.dp),
-            verticalAlignment = Alignment.CenterVertically
+            contentAlignment = Alignment.CenterStart
         ) {
-            CommentFilterChip(
-                text = "全部",
-                selected = !filterLzOnly,
-                onClick = { onFilterChange(false) }
-            )
-            CommentFilterChip(
-                text = "只看楼主",
-                selected = filterLzOnly,
-                onClick = { onFilterChange(true) }
-            )
+            // 滑动指示器。画在文字**下面**，所以先放它
+            if (measured) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = indicatorOffset)
+                        .width(indicatorWidth)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CommentFilterChip(
+                    text = "全部",
+                    selected = !filterLzOnly,
+                    onClick = { onFilterChange(false) },
+                    // 量自己的宽度交给指示器
+                    onWidthMeasured = { allWidth.value = with(density) { it.toDp() } }
+                )
+                CommentFilterChip(
+                    text = "只看楼主",
+                    selected = filterLzOnly,
+                    onClick = { onFilterChange(true) },
+                    onWidthMeasured = { lzWidth.value = with(density) { it.toDp() } }
+                )
+            }
         }
     }
 }
 
-/** 分段控件里的一格。 */
+/**
+ * 分段控件里的一格。
+ *
+ * 自己不画背景 —— 背景由外面那块滑动指示器负责。
+ * 这里只负责文字颜色和字重的过渡：选中时字变重、颜色变实，
+ * 跟指示器滑过来同步发生，切换才完整。
+ */
 @Composable
 private fun CommentFilterChip(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onWidthMeasured: (Int) -> Unit = {}
 ) {
+    // 字重和颜色都走动画：直接 if 切换会有一帧突变，看着像闪一下
+    val textAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.72f,
+        animationSpec = tween(180),
+        label = "commentFilterChipAlpha"
+    )
+    val weight by animateFloatAsState(
+        targetValue = if (selected) 600f else 400f,
+        animationSpec = tween(180),
+        label = "commentFilterChipWeight"
+    )
+
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.surface else Color.Transparent
-            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .onGloballyPositioned { onWidthMeasured(it.size.width) },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            fontWeight = FontWeight(weight.toInt()),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha),
             maxLines = 1
         )
     }
@@ -2243,6 +2379,10 @@ fun PostDetailScreen(
                                     canDelete = comment.senderId == postDetailState.currentUserId ||
                                         postDetailState.isAdmin == 1 ||
                                         commentListState.isAdmin == 1,
+                                    // 「只看楼主」切换时剩下的条目会重新排位，
+                                    // animateItem 让它们滑到新位置而不是瞬移；
+                                    // 被筛掉的淡出、新出现的淡入
+                                    modifier = Modifier.animateItem(),
                                     onLikeClick = { commentId ->
                                         viewModel.likeCommentWithToken(postId, commentId)
                                     },
