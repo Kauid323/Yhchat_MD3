@@ -2201,7 +2201,8 @@ fun PostDetailScreen(
         val occurrence = HashMap<Int, Int>()
         val keys = ArrayList<String>(visibleComments.size)
         visibleComments.forEach { comment ->
-            val times = occurrence.getOrElse(comment.id, 0)
+            // getOrElse 的第二个参数是 () -> Int（取默认值的 lambda），不是值本身
+            val times = occurrence.getOrElse(comment.id) { 0 }
             occurrence[comment.id] = times + 1
             keys += if (times == 0) "comment_${comment.id}" else "comment_${comment.id}#$times"
         }
