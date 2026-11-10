@@ -614,6 +614,17 @@ internal fun openSettingsPage(
         SettingsPage.Share -> ExternalShareManagerActivity.start(context)
         SettingsPage.Navigation -> navigationRepository?.let {
             NavigationSettingsActivity.start(context, it)
+        } ?: run {
+            // repository 为空时**也要跳**。
+            //
+            // start() 只是 startActivity，repository 根本没用上
+            // （NavigationSettingsActivity 自己从导航图取）。
+            // 原来这里写成 `navigationRepository?.let { ... }`，为 null 就整个
+            // 静默不执行 —— 搜「底部导航栏设置」「自定义导航栏」点了没有任何反应，
+            // 就是这一行造成的。
+            context.startActivity(
+                android.content.Intent(context, NavigationSettingsActivity::class.java)
+            )
         }
         // 剩下几个是首页上的分组名，不是真正的二级页，由索引里 page = null 的条目覆盖
         SettingsPage.Display,

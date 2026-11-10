@@ -553,8 +553,19 @@ fun SettingsScreen(
                 searchQuery = null
                 val page = entry.page
                 if (page != null) {
-                    // 二级页里的条目：直接开那个页面
-                    openSettingsPage(context, page, navigationRepository)
+                    // 二级页里的条目：直接开那个页面。
+                    //
+                    // 必须等这一帧结束再 startActivity，不能在同一帧里紧跟着
+                    // searchQuery = null 就跳：搜索面板是个 Dialog，
+                    // searchQuery = null 只是提交了一次状态变更，Dialog 的
+                    // window 要到下一帧才真的 dismiss。同一帧里就去 startActivity，
+                    // 新 Activity 的窗口创建和 Dialog 的销毁撞在一起，
+                    // 部分机型上会表现为「点了没反应」—— Activity 启动了又被
+                    // 紧接着的 dialog dismiss 事务盖掉。
+                    coroutineScope.launch {
+                        kotlinx.coroutines.yield()
+                        openSettingsPage(context, page, navigationRepository)
+                    }
                 } else {
                     // 首页条目：滚到它所在的分组。
                     // 注意要等一帧再滚 —— Dialog 刚关、LazyColumn 可能还没完成
@@ -846,6 +857,7 @@ private fun DisplaySettingsGroup(
             { WebSocketSettingItem(context = context) },
             { WebPQualitySettingItem(context = context) },
             { HtmlRawTextSettingItem(context = context) },
+            { AvatarFrameSettingItem(context = context) },
             { MarkdownRawTextSettingItem(context = context) },
             { A2UiRawTextSettingItem(context = context) },
             { LongMessageAutoCollapseSettingItem(context = context) }
@@ -1589,6 +1601,49 @@ private fun DataSaverSettingItem(
         isError = dataSaver
     )
 }
+
+/**
+ * 头像框显示开关。
+ *
+ * 头像框是把一张 PNG 叠在头像外面画的，本身不改变头像数据。
+ * 关掉开关只是不画那层框，头像原样保留。
+ *
+ * 开关状态存在 `display_settings` 里（跟其他显示项同一个 prefs），
+ * 「我的」页面读同一个 key，所以这里一改那边立刻跟着变。
+ */
+@Composable
+private fun AvatarFrameSettingItem(
+    context: Context,
+    modifier: Modifier = Modifier
+) {
+    val prefs = remember {
+        context.getSharedPreferences("display_settings", Context.MODE_PRIVATE)
+    }
+
+    var showAvatarFrame by remember {
+        mutableStateOf(prefs.getBoolean(AvatarFramePrefsKey, true))
+    }
+
+    SettingsSwitchItem(
+        icon = Icons.Default.Face,
+        title = "显示头像框",
+        subtitle = if (showAvatarFrame) "在头像外圈显示装饰框" else "只显示头像本身",
+        checked = showAvatarFrame,
+        onCheckedChange = { checked ->
+            showAvatarFrame = checked
+            prefs.edit().putBoolean(AvatarFramePrefsKey, checked).apply()
+        }
+    )
+}
+
+/**
+ * 头像框开关的 prefs 键。
+ *
+ * 抽成常量是因为写入（设置页）和读取（我的页 / 其他显示头像的地方）
+ * 必须用同一个字符串 —— 写错一个字符就会变成「开关能拨、但界面没反应」，
+ * 而且这种错不会报编译错误，只能靠人工对比字符串才能发现。
+ */
+internal const val AvatarFramePrefsKey = "show_avatar_frame"
 
 /**
  * 机器人看板显示设置项

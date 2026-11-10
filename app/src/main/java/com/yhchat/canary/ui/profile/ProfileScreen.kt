@@ -108,6 +108,8 @@ import com.yhchat.canary.ui.coin.CoinShopActivity
 import com.yhchat.canary.ui.components.ScrollAwareNavigationState
 import com.yhchat.canary.ui.components.observeScrollForNavigation
 import com.yhchat.canary.ui.components.rememberBooleanPreference
+import com.yhchat.canary.ui.components.FramedAvatar
+import com.yhchat.canary.ui.settings.AvatarFramePrefsKey
 import com.yhchat.canary.ui.settings.SettingsActivity
 import com.yhchat.canary.ui.settings.SettingsCustomItem
 import com.yhchat.canary.ui.settings.SettingsGroup
@@ -438,6 +440,15 @@ private fun UserProfileContent(
     val showCoin by rememberBooleanPreference("layout_settings", "profile_show_coin", true)
     val showVipExpire by rememberBooleanPreference("layout_settings", "profile_show_vip_expire", true)
     val showInviteCode by rememberBooleanPreference("layout_settings", "profile_show_invite_code", true)
+
+    // 头像框开关。用 rememberBooleanPreference 而不是自己读一次 prefs：
+    // 它注册了 OnSharedPreferenceChangeListener，在设置页拨动开关后
+    // 这个页面会立刻重建，不需要退出重进才生效。
+    val showAvatarFrame by rememberBooleanPreference(
+        preferencesName = "display_settings",
+        key = AvatarFramePrefsKey,
+        defaultValue = true
+    )
     
     Column(
         modifier = modifier
@@ -463,66 +474,77 @@ private fun UserProfileContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 头像（可点击修改）
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clickable { 
-                            imagePickerLauncher.launch("image/*")
-                        },
-                    contentAlignment = Alignment.Center
+                //
+                // 结构是两层 Box：
+                //   外层 —— 头像框的尺寸（比头像大一圈），框画在这里
+                //   内层 —— 头像本身的 80dp，头像、编辑角标、上传遮罩都在这里
+                //
+                // 为什么必须分层：头像框的外径是头像的 1.8 倍，装饰会伸出头像区域。
+                // 只用一层 80dp 的 Box 的话，框会被裁掉一圈；把外层放大又会让
+                // 「修改头像」角标（align 到 BottomEnd）跑到框外面去。
+                // 内层固定 80dp，角标就始终贴着头像边缘。
+                val avatarSize = 80.dp
+                FramedAvatar(
+                    avatarSize = avatarSize,
+                    showFrame = showAvatarFrame && !userProfile.avatarUrl.isNullOrEmpty(),
+                    modifier = Modifier.clickable {
+                        imagePickerLauncher.launch("image/*")
+                    }
                 ) {
-                    if (!userProfile.avatarUrl.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = userProfile.avatarUrl,
-                            contentDescription = "用户头像",
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "默认头像",
-                            modifier = Modifier.size(80.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    
-                    // 修改头像指示器
-                    Surface(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .align(Alignment.BottomEnd),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        shadowElevation = 2.dp
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "修改头像",
-                            modifier = Modifier
-                                .size(16.dp)
-                                .padding(4.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                    
-                    // 上传中指示器
-                    if (changeAvatarState.isLoading) {
+                    Box(modifier = Modifier.size(avatarSize)) {
+                        if (!userProfile.avatarUrl.isNullOrEmpty()) {
+                            AsyncImage(
+                                model = userProfile.avatarUrl,
+                                contentDescription = "用户头像",
+                                modifier = Modifier
+                                    .size(avatarSize)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "默认头像",
+                                modifier = Modifier.size(avatarSize),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // 修改头像指示器
                         Surface(
                             modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                                .size(24.dp)
+                                .align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            shadowElevation = 2.dp
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "修改头像",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(4.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+
+                        // 上传中指示器
+                        if (changeAvatarState.isLoading) {
+                            Surface(
+                                modifier = Modifier
+                                    .size(avatarSize)
+                                    .clip(CircleShape),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
                             ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
                             }
                         }
                     }
