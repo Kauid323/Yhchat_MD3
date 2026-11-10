@@ -4,12 +4,24 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.yhchat.canary.R
+
+/**
+ * 头像框开关的 prefs 键。
+ *
+ * 放在这里而不是设置页里：写入方（设置页）和读取方（聊天头像）
+ * 必须用同一个字符串，写错一个字符就变成「开关能拨但界面没反应」，
+ * 而这种错不会报编译错误，只能靠人工对比字符串才能发现。
+ *
+ * 从 components 层导出、让 settings 层去 import，方向是对的 ——
+ * 组件不应该反过来依赖某个具体页面。
+ */
+const val AvatarFramePrefsKey = "show_avatar_frame"
 
 /**
  * 头像外面的装饰框。
@@ -24,61 +36,50 @@ import com.yhchat.canary.R
  * 素材是 512×512，其中内圈直径约占 290px（56.6%）。所以框的整体尺寸
  * 必须是头像的 1/0.566 ≈ 1.77 倍 —— 这样框的内圆才正好跟头像一样大，
  * 装饰往外伸的部分才不会被裁掉。
- *
- * 用 [FrameScale] 这个常量而不是让调用方自己算：调用方只关心「头像是多大」，
- * 换算错了就表现为装饰压到脸上或者框比头小一圈，而且这种错很难一眼看出来。
- */
-@Composable
-fun AvatarFrameOverlay(
-    avatarSize: Dp,
-    modifier: Modifier = Modifier
-) {
-    Image(
-        painter = painterResource(id = R.drawable.avatar_frame_halloween),
-        contentDescription = null,
-        modifier = modifier.size(avatarSize * FrameScale)
-    )
-}
-
-/**
- * 框外径相对头像直径的倍数。
- *
- * 512 的素材里内圆直径约 290，290/512 ≈ 0.566，倒数约 1.77。
- * 取 1.8 而不是 1.77 是为了留一点点余量：装饰的最外沿（麦穗尖、枫叶）
- * 贴近画布边缘，1.77 时抗锯齿会让边缘有点被切掉的感觉。
  */
 private const val FrameScale = 1.8f
 
 /**
  * 头像 + 可选装饰框。
  *
- * 调用方给头像内容和尺寸，是否显示框由参数控制。头像不显示时不画框 ——
- * 空头像上飘一圈装饰比什么都不画更奇怪。
+ * 调用方给头像内容和尺寸，是否显示框由参数控制。
  *
- * 框用 `drawnOver` 的等价做法（Box 里后者盖前者）画在头像上方，
- * 而不是下层：素材的装饰是往外的，画在下层会被头像的光圈挡住边缘。
+ * 框画在头像**上层**（Box 里后者盖前者）：素材的装饰是往外的，
+ * 画在下层会被头像挡住边缘。
  *
  * @param showFrame 是否显示装饰框
- * @param avatarSize 头像本身的直径。框会自动放大到 [FrameScale] 倍
+ * @param avatarSize 头像本身的直径。框会按 [frameScale] 放大
+ * @param frameScale 框相对头像的倍数。默认 [FrameScale] 是按素材内圆
+ *        精确算出来的；聊天列表那种地方头像只有 40dp，用默认值会让整行
+ *        高出一大截，需要传小一点（1.35 左右）—— 代价是框的内圆比头像小，
+ *        装饰环会盖住头像最外一圈，视觉上仍然是「框住」的效果
+ * @param reserveFrameSpace 外层是否按框的尺寸留位。
+ *        true：给框留出完整空间，适合独立摆放的头像（如个人资料页）；
+ *        false：外层保持头像尺寸，框溢出到外面。列表里用这个可以避免
+ *        一行因为加框而变高
  */
 @Composable
 fun FramedAvatar(
     avatarSize: Dp,
     showFrame: Boolean,
     modifier: Modifier = Modifier,
+    frameScale: Float = FrameScale,
+    reserveFrameSpace: Boolean = true,
     avatar: @Composable () -> Unit
 ) {
+    val frameSize = avatarSize * frameScale
     Box(
-        // 外层按「框」的尺寸留位，不然框会溢出到相邻元素上，
-        // 在列表里尤其明显（装饰压到下一行文字上）
-        modifier = modifier.size(if (showFrame) avatarSize * FrameScale else avatarSize),
+        modifier = modifier.size(
+            if (showFrame && reserveFrameSpace) frameSize else avatarSize
+        ),
         contentAlignment = Alignment.Center
     ) {
         avatar()
         if (showFrame) {
-            AvatarFrameOverlay(
-                avatarSize = avatarSize,
-                modifier = Modifier.align(Alignment.Center)
+            Image(
+                painter = painterResource(id = R.drawable.avatar_frame_halloween),
+                contentDescription = null,
+                modifier = Modifier.size(frameSize)
             )
         }
     }

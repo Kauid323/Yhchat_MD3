@@ -78,6 +78,7 @@ import com.yhchat.canary.service.AudioPlayerService
 import com.yhchat.canary.ui.community.BoardDetailActivity
 import com.yhchat.canary.ui.community.PostDetailActivity
 import com.yhchat.canary.ui.components.rememberBooleanPreference
+import com.yhchat.canary.ui.components.AvatarFramePrefsKey
 import com.yhchat.canary.ui.login.LoginActivity
 import com.yhchat.canary.ui.sticker.StickerPackDetailActivity
 import com.yhchat.canary.ui.share.ExternalShareManagerActivity
@@ -1635,15 +1636,6 @@ private fun AvatarFrameSettingItem(
         }
     )
 }
-
-/**
- * 头像框开关的 prefs 键。
- *
- * 抽成常量是因为写入（设置页）和读取（我的页 / 其他显示头像的地方）
- * 必须用同一个字符串 —— 写错一个字符就会变成「开关能拨、但界面没反应」，
- * 而且这种错不会报编译错误，只能靠人工对比字符串才能发现。
- */
-internal const val AvatarFramePrefsKey = "show_avatar_frame"
 
 /**
  * 机器人看板显示设置项

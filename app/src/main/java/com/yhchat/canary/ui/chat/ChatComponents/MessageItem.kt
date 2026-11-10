@@ -71,6 +71,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.yhchat.canary.ui.components.ImageUtils
+import com.yhchat.canary.ui.components.AvatarFramePrefsKey
+import com.yhchat.canary.ui.components.FramedAvatar
 import com.yhchat.canary.ui.components.htmltext.htmlToPlainText
 import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.components.rememberMessageActionMenuLauncher
@@ -539,21 +541,43 @@ fun MessageItem(
         if (isMyMessage) {
             Spacer(modifier = Modifier.width(8.dp))
 
-            AsyncImage(
-                model = ImageUtils.createAvatarImageRequest(
-                    context = LocalContext.current,
-                    url = message.sender.avatarUrl
-                ),
-                contentDescription = "我",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .combinedClickable(
-                        onClick = { onAvatarClick(message.sender.chatId, message.sender.name, message.sender.chatType) },
-                        onLongClick = { onAvatarLongClick(message.sender.chatId, message.sender.name) }
-                    ),
-                contentScale = ContentScale.Crop
+            // 自己发的消息头像加装饰框。
+            //
+            // reserveFrameSpace = false：外层保持 40dp，框溢出绘制。
+            // 如果让外层按框的尺寸（72dp）留位，每一条自己发的消息都会
+            // 把那一行撑到 72dp 高，消息之间出现一处大空白 —— 列表看起来
+            // 是一段一段断开的。溢出绘制不影响行高，装饰只是盖到相邻区域上。
+            //
+            // frameScale = 1.35：40dp 的头像用默认 1.8 会让整圈装饰显得很大，
+            // 而且比同一行里别人的 40dp 头像大太多，像是尺寸不一致。
+            // 1.35 时框外径 54dp，装饰不压到气泡上，跟对方头像的视觉重量也接近。
+            val showAvatarFrame by rememberBooleanPreference(
+                preferencesName = "display_settings",
+                key = AvatarFramePrefsKey,
+                defaultValue = true
             )
+            FramedAvatar(
+                avatarSize = 40.dp,
+                showFrame = showAvatarFrame,
+                frameScale = 1.35f,
+                reserveFrameSpace = false,
+                modifier = Modifier.combinedClickable(
+                    onClick = { onAvatarClick(message.sender.chatId, message.sender.name, message.sender.chatType) },
+                    onLongClick = { onAvatarLongClick(message.sender.chatId, message.sender.name) }
+                )
+            ) {
+                AsyncImage(
+                    model = ImageUtils.createAvatarImageRequest(
+                        context = LocalContext.current,
+                        url = message.sender.avatarUrl
+                    ),
+                    contentDescription = "我",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
     }
 
