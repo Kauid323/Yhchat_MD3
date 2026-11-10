@@ -320,7 +320,9 @@ fun BoardDetailScreen(
                 ) { _, post ->
                     PinnedPostRow(
                         title = post.title,
-                        onClick = { openPost(post) }
+                        onClick = { openPost(post) },
+                        // 置顶被加/取消置顶时滑进滑出，而不是原地闪现
+                        modifier = Modifier.animateItem()
                     )
                 }
 
@@ -334,7 +336,14 @@ fun BoardDetailScreen(
                     items = normalPosts,
                     key = { _, post -> post.id }
                 ) { index, post ->
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    // animateItem 挂在外层 Column 上，不是 PostListItem：
+                    // 删帖/发帖时整行（含上方的分隔线）作为一个整体滑走，
+                    // 只给卡片加动画的话，那条线会留在原地一帧再消失
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem()
+                    ) {
                         if (index > 0) {
                             VerticalHairLine(modifier = Modifier.padding(horizontal = 16.dp))
                         }
@@ -1024,11 +1033,12 @@ private fun VerticalHairLine(modifier: Modifier = Modifier) {
 @Composable
 private fun PinnedPostRow(
     title: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),

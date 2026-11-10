@@ -513,7 +513,10 @@ private fun CommunityFeedScreen(
                         items(latestState.posts, key = { it.id }) { post ->
                             CommunityPostCard(
                                 post = post,
-                                onClick = { onPostClick(post) }
+                                onClick = { onPostClick(post) },
+                                // 下拉刷新后列表整体换新，animateItem 让被替换掉的
+                                // 卡片滑走、新卡片滑进来，而不是整块闪一下
+                                modifier = Modifier.animateItem()
                             )
                         }
 
@@ -603,7 +606,8 @@ private fun CommunityFeedScreen(
                         items(hotState.posts, key = { it.id }) { post ->
                             CommunityPostCard(
                                 post = post,
-                                onClick = { onPostClick(post) }
+                                onClick = { onPostClick(post) },
+                                modifier = Modifier.animateItem()
                             )
                         }
 
@@ -1382,7 +1386,8 @@ fun BoardListContent(
             items(boards, key = { it.id }) { board ->
                 BoardItem(
                     board = board,
-                    onClick = { onBoardClick(board) }
+                    onClick = { onBoardClick(board) },
+                    modifier = Modifier.animateItem()
                 )
             }
             
@@ -1488,7 +1493,10 @@ fun MyPostListContent(
                     },
                     onDelete = {
                         onDeletePost(post.id)
-                    }
+                    },
+                    // 删帖后这张卡片收起来、下面的整体上移，
+                    // 而不是列表突然少一条、位置瞬移
+                    modifier = Modifier.animateItem()
                 )
             }
             

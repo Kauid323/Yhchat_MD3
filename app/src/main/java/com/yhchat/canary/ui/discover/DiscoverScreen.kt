@@ -247,7 +247,9 @@ fun DiscoverScreen(
                     ) { group ->
                         GroupDiscoverCard(
                             group = group,
-                            onClick = { selectedGroup = group }
+                            onClick = { selectedGroup = group },
+                            // 下拉刷新换一批推荐群时，旧卡片滑走、新卡片滑进来
+                            modifier = Modifier.animateItem()
                         )
                     }
 
@@ -475,12 +477,13 @@ fun DiscoverSectionCard(
 @Composable
 fun GroupDiscoverCard(
     group: RecommendGroup,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showImageViewer by remember(group.avatarUrl) { mutableStateOf(false) }
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp)

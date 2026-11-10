@@ -550,7 +550,11 @@ fun ConversationScreen(
                                     isSelectedConversationSticky = viewModel.isConversationSticky(conversation.chatId)
                                     showConversationMenu = true
                                 }
-                            }
+                            },
+                            // 收到新消息时这条会话可能从列表任意位置挪到顶部
+                            // （按最后消息时间排序），animateItem 让它滑上去而不是瞬移。
+                            // 置顶/删除同理。
+                            modifier = Modifier.animateItem()
                         )
                     }
                 }
@@ -806,7 +810,10 @@ fun ConversationScreen(
                                                     isSelectedConversationSticky = true
                                                     showConversationMenu = true
                                                 }
-                                            }
+                                            },
+                                            // 取消置顶时这条会话要滑到下面的普通列表里，
+                                            // 有位移过程才看得出「它去哪了」
+                                            modifier = Modifier.animateItem()
                                         )
                                     }
 
@@ -959,7 +966,10 @@ fun ConversationScreen(
                                             isSelectedConversationSticky = viewModel.isConversationSticky(conversation.chatId)
                                             showConversationMenu = true
                                         }
-                                    }
+                                    },
+                                    // 这条是新消息来之后要往顶部挪的主力，
+                                    // 没有动画的话每次收消息列表都在跳
+                                    modifier = Modifier.animateItem()
                                 )
                             }
                             if (displayConversations.isEmpty() && (!isListLayout || stickyList.isEmpty())) {
@@ -1374,7 +1384,8 @@ fun ConversationItem(
     conversation: Conversation,
     isSticky: Boolean = false,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val avatarUrl72 = remember(conversation.avatarUrl) {
         val url = conversation.avatarUrl
@@ -1417,7 +1428,7 @@ fun ConversationItem(
     }
     
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = if (isSticky) 2.dp else 3.dp),
         color = if (isSticky) {

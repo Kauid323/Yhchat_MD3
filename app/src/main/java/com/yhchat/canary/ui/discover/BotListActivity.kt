@@ -248,13 +248,18 @@ fun BotListScreen(
                         }
                         
                         // 机器人列表
-                        items(bots) { bot ->
+                        items(bots, key = { it.chatId }) { bot ->
                             BotListItem(
                                 bot = bot,
                                 onClick = {
                                     BotDetailActivity.start(context, bot.chatId)
                                 },
-                                modifier = Modifier.padding(horizontal = 16.dp)
+                                // animateItem 要在 padding 之前：
+                                // 先让整行参与位移/淡出，再给它内缩 —— 反过来
+                                // 内缩会被算进动画范围，条目滑动时左右边距会抖
+                                modifier = Modifier
+                                    .animateItem()
+                                    .padding(horizontal = 16.dp)
                             )
                         }
                         
