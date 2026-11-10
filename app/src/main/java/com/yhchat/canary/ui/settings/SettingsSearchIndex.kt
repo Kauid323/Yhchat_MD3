@@ -119,7 +119,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Interface,
             page = SettingsPage.Layout,
             keywords = listOf("布局", "界面布局", "显示项", "自定义", "layout"),
-            scrollKey = SettingsSection.Interface
         )
     )
     add(
@@ -128,7 +127,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Interface,
             page = SettingsPage.Navigation,
             keywords = listOf("导航", "导航栏", "底部", "标签栏", "tab", "navbar"),
-            scrollKey = SettingsSection.Interface
         )
     )
     add(
@@ -166,7 +164,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Account,
             page = SettingsPage.OnlineDevices,
             keywords = listOf("设备", "登录设备", "在线", "devices"),
-            scrollKey = SettingsSection.Account
         )
     )
     add(
@@ -213,7 +210,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Content,
             page = SettingsPage.Html,
             keywords = listOf("html", "网页", "javascript", "网页设置"),
-            scrollKey = SettingsSection.Content
         )
     )
     add(
@@ -231,7 +227,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Content,
             page = SettingsPage.SavedAudios,
             keywords = listOf("语音", "音频", "录音", "audio"),
-            scrollKey = SettingsSection.Content
         )
     )
     add(
@@ -251,7 +246,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.Share,
             page = SettingsPage.Share,
             keywords = listOf("分享", "外部", "share"),
-            scrollKey = SettingsSection.Share
         )
     )
 
@@ -463,7 +457,6 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
             section = SettingsSection.About,
             page = SettingsPage.AppInfo,
             keywords = listOf("版本", "关于", "开发者", "app info", "version"),
-            scrollKey = SettingsSection.About
         )
     )
     add(
