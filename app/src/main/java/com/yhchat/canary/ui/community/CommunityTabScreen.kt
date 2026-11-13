@@ -2,9 +2,6 @@
 package com.yhchat.canary.ui.community
 
 import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -46,15 +43,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
@@ -66,7 +59,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,7 +93,6 @@ import com.yhchat.canary.ui.components.rememberBooleanPreference
 import com.yhchat.canary.ui.settings.SettingsCustomItem
 import com.yhchat.canary.ui.settings.SettingsGroup
 import com.yhchat.canary.ui.settings.SettingsItemCell
-import com.yhchat.canary.utils.ImageUploadUtil
 import kotlinx.coroutines.launch
 
 /**
@@ -735,50 +726,10 @@ fun MoreTabContent(
     val createdBoardListState by viewModel.createdBoardListState.collectAsState()
     var showManageBoardSheet by remember { mutableStateOf(false) }
     var boardToManage by remember { mutableStateOf<CommunityBoard?>(null) }
-    var manageVisibleRange by remember { mutableStateOf(0) }
-    var managePublishAuthority by remember { mutableStateOf(0) }
-    var isManaging by remember { mutableStateOf(false) }
-    var manageError by remember { mutableStateOf<String?>(null) }
-    var followersTotal by remember { mutableStateOf(0) }
 
-    val coroutineScope = rememberCoroutineScope()
-    var isEditingBoard by remember { mutableStateOf(false) }
-    var editedBoardName by remember { mutableStateOf("") }
-    var editedAvatarUrl by remember { mutableStateOf("") }
-    var isUploadingAvatar by remember { mutableStateOf(false) }
-    var editError by remember { mutableStateOf<String?>(null) }
-    var showDeleteBoardDialog by remember { mutableStateOf(false) }
-    var isDeletingBoard by remember { mutableStateOf(false) }
-    var deleteError by remember { mutableStateOf<String?>(null) }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        val selected = uri ?: return@rememberLauncherForActivityResult
-        coroutineScope.launch {
-            isUploadingAvatar = true
-            editError = null
-            try {
-                val uploadToken = ImageUploadUtil.getQiniuUploadToken(context, token)
-                if (uploadToken.isNotEmpty()) {
-                    ImageUploadUtil.uploadImage(context, selected, uploadToken).fold(
-                        onSuccess = { response ->
-                            editedAvatarUrl = "https://chat-img.jwznb.com/${response.key}"
-                        },
-                        onFailure = { e ->
-                            editError = e.message ?: "图片上传失败"
-                        }
-                    )
-                } else {
-                    editError = "获取上传token失败"
-                }
-            } catch (e: Exception) {
-                editError = e.message ?: "图片上传失败"
-            } finally {
-                isUploadingAvatar = false
-            }
-        }
-    }
+    // 这里只剩「开哪个分区的管理弹窗」一个状态。
+    // 可见范围、发布权限、编辑态、删除确认这些全部搬进了 ManageBoardSheet，
+    // 因为分区详情页也要用同一份弹窗，状态跟着组件走才能复用。
     
     // 构建可见的菜单项列表
     val moreMenuItems = buildList<@Composable () -> Unit> {
@@ -941,13 +892,6 @@ fun MoreTabContent(
                                 TextButton(
                                     onClick = {
                                         boardToManage = board
-                                        manageVisibleRange = 0
-                                        managePublishAuthority = 0
-                                        manageError = null
-                                        isEditingBoard = false
-                                        editedBoardName = board.name
-                                        editedAvatarUrl = board.avatar
-                                        editError = null
                                         showManageBoardSheet = true
                                     }
                                 ) {
@@ -975,373 +919,15 @@ fun MoreTabContent(
         )
     }
 
-    if (showManageBoardSheet && boardToManage != null) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showManageBoardSheet = false
-            },
-            sheetState = rememberModalBottomSheetState()
-        ) {
-            val board = boardToManage
-
-            LaunchedEffect(showManageBoardSheet, board?.id) {
-                val id = board?.id ?: return@LaunchedEffect
-                if (!showManageBoardSheet) return@LaunchedEffect
-                viewModel.loadBaFollowerTotal(
-                    token = token,
-                    baId = id,
-                    onSuccess = { total ->
-                        followersTotal = total
-                    },
-                    onError = {
-                        followersTotal = 0
-                    }
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "管理分区",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .clickable(enabled = isEditingBoard && !isUploadingAvatar) {
-                                imagePickerLauncher.launch("image/*")
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val avatarToShow = if (isEditingBoard) editedAvatarUrl else (board?.avatar ?: "")
-                        if (avatarToShow.isNotBlank()) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(avatarToShow)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        } else {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = CircleShape
-                            ) {}
-                        }
-
-                        if (isUploadingAvatar) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEditingBoard) editedBoardName else board?.name.orEmpty(),
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "ID: ${board?.id ?: 0}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Text(
-                            text = "关注列表 ${followersTotal} >",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .clickable {
-                                    val current = board ?: return@clickable
-                                    FollowersListActivity.start(
-                                        context = context,
-                                        token = token,
-                                        baId = current.id,
-                                        baName = current.name
-                                    )
-                                }
-                        )
-                    }
-
-                    TextButton(
-                        onClick = {
-                            val current = board ?: return@TextButton
-                            isEditingBoard = !isEditingBoard
-                            editedBoardName = current.name
-                            editedAvatarUrl = current.avatar
-                            editError = null
-                        }
-                    ) {
-                        Text(if (isEditingBoard) "取消修改" else "修改")
-                    }
-                }
-
-                if (isEditingBoard) {
-                    OutlinedTextField(
-                        value = editedBoardName,
-                        onValueChange = { input ->
-                            if (input.length <= 10) {
-                                editedBoardName = input
-                            }
-                        },
-                        label = { Text("分区名称") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !isUploadingAvatar
-                    )
-
-                    editError?.let { err ->
-                        Text(
-                            text = err,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            val current = board ?: return@Button
-                            val name = editedBoardName.trim()
-                            val avatar = editedAvatarUrl.trim()
-                            if (name.isBlank()) {
-                                editError = "分区名称不能为空"
-                                return@Button
-                            }
-                            if (avatar.isBlank()) {
-                                editError = "分区头像不能为空"
-                                return@Button
-                            }
-                            isManaging = true
-                            viewModel.editBoard(
-                                token = token,
-                                baId = current.id,
-                                name = name,
-                                avatar = avatar,
-                                onSuccess = {
-                                    isManaging = false
-                                    isEditingBoard = false
-                                    boardToManage = current.copy(name = name, avatar = avatar)
-                                },
-                                onError = { msg ->
-                                    isManaging = false
-                                    editError = msg
-                                }
-                            )
-                        },
-                        enabled = !isManaging && !isUploadingAvatar,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isManaging) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("保存中")
-                        } else {
-                            Text("保存修改")
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                Text(
-                    text = "可见范围",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = manageVisibleRange == 0,
-                            onClick = { manageVisibleRange = 0 }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("所有人可见")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = manageVisibleRange == 1,
-                            onClick = { manageVisibleRange = 1 }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("仅分区所有者可见")
-                    }
-                }
-
-                Text(
-                    text = "发布权限",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = managePublishAuthority == 0,
-                            onClick = { managePublishAuthority = 0 }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("所有人都可以发文章和评论")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = managePublishAuthority == 1,
-                            onClick = { managePublishAuthority = 1 }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("仅所有者发文章，任何人可评论")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = managePublishAuthority == 2,
-                            onClick = { managePublishAuthority = 2 }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("仅所有者发文章和评论")
-                    }
-                }
-
-                manageError?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        val board = boardToManage ?: return@Button
-                        isManaging = true
-                        viewModel.manageBoard(
-                            token = token,
-                            baId = board.id,
-                            visibleRange = manageVisibleRange,
-                            publishAuthority = managePublishAuthority,
-                            onSuccess = {
-                                isManaging = false
-                                showManageBoardSheet = false
-                            },
-                            onError = { msg ->
-                                isManaging = false
-                                manageError = msg
-                            }
-                        )
-                    },
-                    enabled = !isManaging && !isUploadingAvatar,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isManaging) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("提交中")
-                    } else {
-                        Text("保存")
-                    }
-                }
-
-                HorizontalDivider()
-
-                deleteError?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        deleteError = null
-                        showDeleteBoardDialog = true
-                    },
-                    enabled = !isManaging && !isUploadingAvatar && !isDeletingBoard,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isDeletingBoard) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("删除中", color = MaterialTheme.colorScheme.onError)
-                    } else {
-                        Text("删除分区", color = MaterialTheme.colorScheme.onError)
-                    }
-                }
-            }
-        }
-
-        if (showDeleteBoardDialog) {
-            val current = boardToManage
-            AlertDialog(
-                onDismissRequest = {
-                    if (!isDeletingBoard) {
-                        showDeleteBoardDialog = false
-                    }
-                },
-                title = { Text("删除分区") },
-                text = {
-                    Text("确定要删除分区「${current?.name.orEmpty()}」吗？删除后不可恢复。")
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val b = current ?: return@Button
-                            isDeletingBoard = true
-                            deleteError = null
-                            viewModel.deleteBoard(
-                                token = token,
-                                baId = b.id,
-                                onSuccess = {
-                                    isDeletingBoard = false
-                                    showDeleteBoardDialog = false
-                                    showManageBoardSheet = false
-                                    boardToManage = null
-                                },
-                                onError = { msg ->
-                                    isDeletingBoard = false
-                                    deleteError = msg
-                                }
-                            )
-                        },
-                        enabled = !isDeletingBoard
-                    ) {
-                        Text("删除", color = MaterialTheme.colorScheme.onError)
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showDeleteBoardDialog = false },
-                        enabled = !isDeletingBoard
-                    ) {
-                        Text("取消")
-                    }
-                }
+    // 管理弹窗已拆到 ManageBoardSheet.kt，这里只负责什么时候开、改完把新数据收回来
+    boardToManage?.let { board ->
+        if (showManageBoardSheet) {
+            ManageBoardSheet(
+                token = token,
+                board = board,
+                viewModel = viewModel,
+                onDismiss = { showManageBoardSheet = false },
+                onBoardUpdated = { updated -> boardToManage = updated }
             )
         }
     }

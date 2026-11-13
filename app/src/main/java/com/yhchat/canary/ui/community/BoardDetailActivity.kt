@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Add
@@ -284,7 +285,15 @@ fun BoardDetailScreen(
                                 context.startActivity(intent)
                             }
                         },
-                        onFollowClick = { viewModel.followBoard(token, boardId) }
+                        onFollowClick = { viewModel.followBoard(token, boardId) },
+                        onInfoClick = {
+                            BoardInfoActivity.start(
+                                context = context,
+                                boardId = boardId,
+                                boardName = board?.name ?: boardName,
+                                token = token
+                            )
+                        }
                     )
                 }
 
@@ -551,7 +560,8 @@ private fun BoardHeader(
     boardName: String,
     followState: FollowState,
     onGroupListClick: () -> Unit,
-    onFollowClick: () -> Unit
+    onFollowClick: () -> Unit,
+    onInfoClick: () -> Unit
 ) {
     var showImageViewer by remember(board?.avatar) { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -583,29 +593,48 @@ private fun BoardHeader(
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                // 标题本身不画（顶栏里那个才画），只占位给顶栏的标题当锚点用
-                Text(
-                    text = board?.name ?: boardName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .matchedGeometryAnchor(BoardNameAnchor)
-                        .graphicsLayer { alpha = 0f }
-                )
-                val created = board?.createTimeText.orEmpty()
-                if (created.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
+            // 点标题区进「分区信息」页。
+            // 加一个 chevron 是因为纯文字区域没有可点的视觉提示，
+            // 用户不可能猜到点头部的名字能进另一个页面。
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClick = onInfoClick)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    // 标题本身不画（顶栏里那个才画），只占位给顶栏的标题当锚点用
                     Text(
-                        text = "创建于 $created",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = board?.name ?: boardName,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .matchedGeometryAnchor(BoardNameAnchor)
+                            .graphicsLayer { alpha = 0f }
                     )
+                    val created = board?.createTimeText.orEmpty()
+                    if (created.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "创建于 $created",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "分区信息",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 

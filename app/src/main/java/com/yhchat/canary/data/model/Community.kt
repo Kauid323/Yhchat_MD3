@@ -41,7 +41,27 @@ data class CommunityBoard(
     val createTimeText: String,
     
     @SerializedName("isFollowed")
-    val isFollowed: String
+    val isFollowed: String,
+    
+    @SerializedName("createBy")
+    val createBy: String = "",
+    
+    @SerializedName("needCoin")
+    val needCoin: Int = 0,
+    
+    @SerializedName("visibleRange")
+    val visibleRange: Int = 0,
+    
+    @SerializedName("publishAuthority")
+    val publishAuthority: Int = 0,
+    
+    /**
+     * 当前登录用户在**这个分区**里的身份等级。
+     * 后端给 100 表示创建者，其它值含义未公开，判断权限时不要依赖它，
+     * 用 baCreater / baMangers 里的 userId 比对更可靠。
+     */
+    @SerializedName("isAdmin")
+    val isAdmin: Int = 0
 )
 
 /**
@@ -399,7 +419,40 @@ data class BoardInfoResponse(
 
 data class BoardInfoData(
     @SerializedName("ba")
-    val board: CommunityBoard
+    val board: CommunityBoard,
+
+    /**
+     * 分区创建者。字段名是后端的拼写 `baCreater`（少了个 o），
+     * 不要「顺手改成 creator」—— Gson 认的是 JSON 里的 key，改了就解析不出来。
+     */
+    @SerializedName("baCreater")
+    val creator: BaMember? = null,
+
+    /**
+     * 分区管理者列表。同样是后端拼写 `baMangers`（manager 少了个 a）。
+     */
+    @SerializedName("baMangers")
+    val managers: List<BaMember> = emptyList()
+)
+
+/**
+ * 分区里的一个管理成员（创建者 / 管理者共用同一个结构）。
+ *
+ * 注意这里字段是下划线风格（`user_id` / `avatar_url`），
+ * 和 [CommunityBoard] 的驼峰风格不一致 —— 这是后端两套表结构造成的，照抄即可。
+ */
+data class BaMember(
+    @SerializedName("id")
+    val id: Int,
+
+    @SerializedName("user_id")
+    val userId: String,
+
+    @SerializedName("nickname")
+    val nickname: String,
+
+    @SerializedName("avatar_url")
+    val avatarUrl: String
 )
 
 /**

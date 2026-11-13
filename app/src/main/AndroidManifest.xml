@@ -162,6 +162,12 @@
         </activity>
 
         <activity
+            android:name=".ui.community.BoardInfoActivity"
+            android:exported="false"
+            android:label="分区信息"
+            android:theme="@style/Theme.YhchatCanary" />
+
+        <activity
             android:name=".ui.community.CreatePostActivity"
             android:exported="false"
             android:label="发布文章"
