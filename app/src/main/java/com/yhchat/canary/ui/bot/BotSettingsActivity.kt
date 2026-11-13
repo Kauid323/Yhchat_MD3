@@ -161,7 +161,13 @@ private fun BotSettingsScreen(
                 // Token 区域
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -222,7 +228,13 @@ private fun BotSettingsScreen(
                 // Webhook 订阅地址区域
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -357,7 +369,13 @@ private fun BotSettingsScreen(
                 // 恢复订阅链接按钮
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -400,7 +418,13 @@ private fun BotSettingsScreen(
                 // 订阅设置
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(text = "事件订阅", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -431,7 +455,13 @@ private fun BotSettingsScreen(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -475,7 +505,13 @@ private fun BotSettingsScreen(
                 // 机器人指令列表
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        // 用 surfaceContainer 而不是 Card 默认的 surfaceContainerHighest：
+                        // 这一页的内容是「一块块并列的设置区」，不是需要浮起来的卡片。
+                        // 用 High 的话六块并排会显得每块都在抢视觉层级，滚动时一片发白。
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
