@@ -116,6 +116,12 @@ fun CommunityTabScreen(
     onMyPostsNavigate: (() -> Unit)? = null,
     onMyCollectPostsNavigate: (() -> Unit)? = null,
     onBlockedUsersNavigate: (() -> Unit)? = null,
+    // 是否启用侧边抽屉。大屏分屏里这个页面只占约 1/3 屏宽（360dp 屏幕上
+    // 只有约 130dp），而 ModalDrawerSheet 有 360dp 的固定宽度下限 ——
+    // 抽屉收起时是「按自己的宽度平移出屏」，容器比抽屉窄，平移量不足，
+    // 左侧就会永远残留一条抽屉内容（截图里那条被切一半的「关注 / 更多」）。
+    // 这种宽度下不该有抽屉，由调用方传 false 直接渲染主内容。
+    enableDrawer: Boolean = true,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -304,17 +310,10 @@ fun CommunityTabScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            // 必须包一层 ModalDrawerSheet：它负责侧边栏的宽度（240~360dp）、圆角、背景色和状态栏内边距。
-            // 直接放 Column 会被按整屏宽度测量，导致侧边栏全屏并且没有背景。
-            ModalDrawerSheet {
-                DrawerBody()
-            }
-        },
-        gesturesEnabled = true
-    ) {
+    // 主内容（顶栏 + 帖子流）。抽成 lambda 是因为下面要按 enableDrawer
+    // 分两条渲染路径：挂抽屉的要包一层 ModalNavigationDrawer，不挂的直接用。
+    // 两边的内容完全一样，不抽出来就要复制一整个 Scaffold。
+    val mainContent: @Composable () -> Unit = {
         Scaffold(
             modifier = modifier.fillMaxSize(),
             topBar = {
@@ -326,11 +325,15 @@ fun CommunityTabScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { openDrawer() }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "打开侧边栏"
-                            )
+                        // 没有抽屉时不要放这个按钮：点了 openDrawer() 不会有任何反应，
+                        // 按钮看着能按却什么也不发生，比没有按钮更让人困惑。
+                        if (enableDrawer) {
+                            IconButton(onClick = { openDrawer() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "打开侧边栏"
+                                )
+                            }
                         }
                     },
                     actions = {
@@ -381,6 +384,29 @@ fun CommunityTabScreen(
                     .padding(paddingValues)
             )
         }
+    }
+
+    if (enableDrawer) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                // 必须包一层 ModalDrawerSheet：它负责侧边栏的宽度（240~360dp）、圆角、背景色和状态栏内边距。
+                // 直接放 Column 会被按整屏宽度测量，导致侧边栏全屏并且没有背景。
+                ModalDrawerSheet {
+                    DrawerBody()
+                }
+            },
+            gesturesEnabled = true
+        ) {
+            mainContent()
+        }
+    } else {
+        // 容器窄到放不下抽屉时，直接渲染主内容，不挂 ModalNavigationDrawer。
+        // 抽屉的收起动画是「按自身宽度（360dp）平移出屏」，容器比它窄时
+        // 平移量必然不够，左侧就会残留一条抽屉内容 —— 与其把宽度调小
+        // （ModalDrawerSheet 的下限就是 240dp，仍可能比容器宽），
+        // 不如在放不下的情况下干脆不要抽屉。
+        mainContent()
     }
 }
 

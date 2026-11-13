@@ -520,6 +520,11 @@ class MainActivity : BaseActivity() {
                                                 ) {
                                                     CommunityTabScreen(
                                                         token = token,
+                                                        // 这一列只占屏宽的 1/3（weight(1f) + 右侧 weight(2f)），
+                                                        // 比 ModalDrawerSheet 的 360dp 下限还窄，抽屉收不干净。
+                                                        // 大屏本身已经有常驻的 NavigationRail 负责导航，
+                                                        // 这里的抽屉是多余的，直接关掉。
+                                                        enableDrawer = false,
                                                         onBoardNavigate = { boardId, boardName ->
                                                             communityBoardId = boardId
                                                             communityBoardName = boardName
