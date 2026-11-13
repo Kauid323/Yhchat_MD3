@@ -129,11 +129,13 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -2134,6 +2136,34 @@ fun PostDetailScreen(
     // 删除确认对话框状态
     var showDeleteDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    // 复制原文：标题 + 空行 + 正文。
+    //
+    // 带上标题是因为复制出去多半是要贴到别处（聊天、笔记），
+    // 只有正文会丢掉「这是哪篇文章」这个信息。
+    // 正文原样复制，不做 markdown 转纯文本 —— 那样会把 **粗体**、
+    // 列表符号这些结构一起抹掉，粘到支持 markdown 的地方就废了。
+    val copyPostText: () -> Unit = {
+        val post = postDetailState.post
+        if (post == null) {
+            Toast.makeText(context, "文章还没加载完", Toast.LENGTH_SHORT).show()
+        } else {
+            val text = buildString {
+                if (post.title.isNotBlank()) {
+                    append(post.title.trim())
+                    append("\n\n")
+                }
+                append(post.content.trim())
+            }
+            if (text.isBlank()) {
+                Toast.makeText(context, "没有可复制的内容", Toast.LENGTH_SHORT).show()
+            } else {
+                clipboardManager.setText(AnnotatedString(text))
+                Toast.makeText(context, "已复制原文", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val canManagePost = postDetailState.post != null &&
             (postDetailState.post?.senderId == postDetailState.currentUserId || postDetailState.isAdmin == 1)
@@ -2393,7 +2423,10 @@ fun PostDetailScreen(
                                     },
                                     visibleCount = visibleComments.size,
                                     filterLzOnly = filterLzOnly,
-                                    onFilterChange = { filterLzOnly = it }
+                                    onFilterChange = { filterLzOnly = it },
+                                    // 这里以前没传，onCopyPost 的默认值是空 lambda，
+                                    // 所以标题栏那个「复制原文」点了没有任何反应
+                                    onCopyPost = copyPostText
                                 )
                             }
 
@@ -2743,6 +2776,19 @@ fun PostDetailScreen(
             onMenuClick = { topMenuExpanded = true },
             onMenuDismiss = { topMenuExpanded = false },
             menuContent = {
+                DropdownMenuItem(
+                    text = { Text("复制原文") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        topMenuExpanded = false
+                        copyPostText()
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("分享") },
                     onClick = {

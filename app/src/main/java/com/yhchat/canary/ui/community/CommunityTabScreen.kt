@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,6 +73,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -85,6 +87,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -127,6 +131,10 @@ fun CommunityTabScreen(
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+
+    // 窄容器下的分区面板（见 openDrawer 的说明）。用 Dialog 承载，
+    // 不参与父容器的测量和裁剪，容器多窄都不会露出半块。
+    var showDrawerDialog by rememberSaveable { mutableStateOf(false) }
 
     // 获取布局设置
     val showHotTab by rememberBooleanPreference("layout_settings", "community_show_hot", true)
@@ -172,7 +180,18 @@ fun CommunityTabScreen(
     }
 
     fun openDrawer() {
-        coroutineScope.launch { drawerState.open() }
+        // 两套承载方式：
+        //  - enableDrawer：用 ModalNavigationDrawer，抽屉从左边滑出来
+        //  - !enableDrawer（大屏分栏那种窄容器）：ModalDrawerSheet 有 240dp
+        //    的宽度下限，容器比它窄就永远收不干净，左侧残留一条。这种情况
+        //    改用 Dialog 承载同一份分区内容 —— Dialog 是独立窗口，不存在
+        //    「按自身宽度平移出屏」的问题，怎么窄都不会残留。
+        // 两种情况下菜单按钮的位置和行为对用户是一致的，只是呈现方式不同。
+        if (enableDrawer) {
+            coroutineScope.launch { drawerState.open() }
+        } else {
+            showDrawerDialog = true
+        }
     }
 
     fun closeDrawer() {
@@ -325,15 +344,13 @@ fun CommunityTabScreen(
                         )
                     },
                     navigationIcon = {
-                        // 没有抽屉时不要放这个按钮：点了 openDrawer() 不会有任何反应，
-                        // 按钮看着能按却什么也不发生，比没有按钮更让人困惑。
-                        if (enableDrawer) {
-                            IconButton(onClick = { openDrawer() }) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "打开侧边栏"
-                                )
-                            }
+                        // 这个按钮始终显示：两种模式下都能打开分区面板，
+                        // 只是承载方式不同（宽容器滑抽屉、窄容器开 Dialog）。
+                        IconButton(onClick = { openDrawer() }) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "打开侧边栏"
+                            )
                         }
                     },
                     actions = {
@@ -401,12 +418,29 @@ fun CommunityTabScreen(
             mainContent()
         }
     } else {
-        // 容器窄到放不下抽屉时，直接渲染主内容，不挂 ModalNavigationDrawer。
-        // 抽屉的收起动画是「按自身宽度（360dp）平移出屏」，容器比它窄时
-        // 平移量必然不够，左侧就会残留一条抽屉内容 —— 与其把宽度调小
-        // （ModalDrawerSheet 的下限就是 240dp，仍可能比容器宽），
-        // 不如在放不下的情况下干脆不要抽屉。
+        // 容器窄到放不下抽屉（ModalDrawerSheet 宽度下限 240dp，大屏分栏里
+        // 这一列往往只有 130dp 左右）。此时不挂 ModalNavigationDrawer，
+        // 主内容直接渲染；分区面板改用 Dialog 弹出，内容复用 DrawerBody。
         mainContent()
+
+        if (showDrawerDialog) {
+            Dialog(
+                onDismissRequest = { showDrawerDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                // Dialog 默认内容宽度很窄（约 280dp），这里自己给一个
+                // 与抽屉观感接近的固定宽度，并按屏宽收一下，避免小窗口里顶满。
+                Surface(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .fillMaxHeight(0.9f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    DrawerBody()
+                }
+            }
+        }
     }
 }
 

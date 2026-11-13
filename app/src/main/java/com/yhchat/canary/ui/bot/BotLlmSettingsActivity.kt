@@ -28,6 +28,13 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Reply
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import com.yhchat.canary.ui.settings.SettingsCustomItem
+import com.yhchat.canary.ui.settings.SettingsGroup
+import com.yhchat.canary.ui.settings.SettingsSwitchItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -53,19 +60,15 @@ import com.yhchat.canary.ui.bot.viewmodel.ParamVariableType
 import com.yhchat.canary.ui.bot.viewmodel.ParamVariableUi
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -113,12 +116,10 @@ private fun ParamVariableRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        )
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -168,38 +169,227 @@ private fun ParamVariableRow(
     }
 }
 
-@Composable
-private fun JsonPreviewCard(
-    title: String,
-    json: String,
-    onCopy: (() -> Unit)? = null
+/**
+ * MCP 配置里的一条服务。
+ *
+ * 标准 MCP 配置长这样：
+ * ```json
+ * {"mcpServers": {
+ *   "filesystem": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"], "env": {"ROOT": "/tmp"}},
+ *   "remote":     {"url": "https://example.com/sse"}
+ * }}
+ * ```
+ * 关键点是它**不是数组**，而是一个「名字 → 配置」的对象。所以渲染时不能
+ * 当成列表逐项套同一个模板，得按 name 逐条展开成卡片，每条再按自己有没有
+ * command / url / args / env 分别显示 —— 本地进程型和远程 URL 型字段不一样。
+ *
+ * type 用来标注这条走哪种连接方式，界面上一眼能分出来：
+ *  - Local：有 command，是本地起的进程
+ *  - Remote：只有 url，是远程服务
+ *  - Unknown：都没有，配置本身不完整
+ */
+private data class McpServer(
+    val name: String,
+    val command: String? = null,
+    val args: List<String> = emptyList(),
+    val env: Map<String, String> = emptyMap(),
+    val url: String? = null
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 12.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-        )
+    val type: String
+        get() = when {
+            command != null -> "本地进程"
+            url != null -> "远程服务"
+            else -> "配置不完整"
+        }
+}
+
+/**
+ * 解析 mcpJson。
+ *
+ * 容错优先：这段文本用户可以随便改，随时可能是半截 JSON、数组形态、
+ * 或者根本不是一个合法对象。任何一步失败都只返回空列表，让界面显示
+ * 「无法解析」提示，而不是抛异常把整页打崩。
+ *
+ * 两种形态都认：
+ *   {"mcpServers": {...}}  ← 标准 MCP 配置
+ *   {...}                  ← 直接把 server 表当根对象（有些用户这么写）
+ */
+private fun parseMcpJson(json: String): List<McpServer> {
+    if (json.isBlank()) return emptyList()
+    return runCatching {
+        val root = JsonParser.parseString(json)
+        if (!root.isJsonObject) return emptyList()
+        val obj = root.asJsonObject
+        // 优先取标准里的 mcpServers；没有就把根对象当作 server 表
+        val servers = obj.getAsJsonObject("mcpServers") ?: obj
+        servers.entrySet().mapNotNull { (name, element) ->
+            if (!element.isJsonObject) return@mapNotNull null
+            val server = element.asJsonObject
+            McpServer(
+                name = name,
+                command = server.get("command")?.takeIf { it.isJsonPrimitive }?.asString,
+                // args 必须是数组；写成单个字符串的配置也见过，包成单元素列表
+                args = when {
+                    server.get("args")?.isJsonArray == true ->
+                        server.getAsJsonArray("args").mapNotNull { it.asStringOrNull() }
+                    server.get("args")?.isJsonPrimitive == true ->
+                        listOf(server.get("args").asString)
+                    else -> emptyList()
+                },
+                env = server.getAsJsonObject("env")
+                    ?.entrySet()
+                    ?.associate { (k, v) -> k to (v.asStringOrNull() ?: "") }
+                    .orEmpty(),
+                url = server.get("url")?.takeIf { it.isJsonPrimitive }?.asString
+            )
+        }
+    }.getOrElse { emptyList() }
+}
+
+/** JSON 元素取字符串；非字符串（数字/布尔/null）返回 null，由调用方决定怎么显示 */
+private fun JsonElement.asStringOrNull(): String? =
+    if (isJsonPrimitive && !asJsonPrimitive.isBoolean && !asJsonPrimitive.isNumber) asString
+    else if (isJsonPrimitive) asString
+    else null
+
+/**
+ * 一条 MCP 服务的卡片。
+ *
+ * 字段按「有才显示」排列：本地进程型显示命令/参数/环境变量，远程型显示 URL。
+ * 空字段不占位 —— 一条只有 url 的服务如果还占着「命令：无」两行，
+ * 卡片会显得比信息本身还长。
+ */
+@Composable
+private fun McpServerCard(server: McpServer) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
-                if (onCopy != null) {
+                Text(
+                    text = server.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                // 类型标签用性别的胶囊样式，跟下面的键值行区分开
+                Text(
+                    text = server.type,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+
+            if (server.command != null) {
+                McpField(label = "命令", value = server.command)
+            }
+            if (server.args.isNotEmpty()) {
+                McpField(label = "参数", value = server.args.joinToString(" "))
+            }
+            if (server.env.isNotEmpty()) {
+                McpField(
+                    label = "环境变量",
+                    value = server.env.entries.joinToString("\n") { "${it.key}=${it.value}" }
+                )
+            }
+            if (server.url != null) {
+                McpField(label = "URL", value = server.url)
+            }
+        }
+    }
+}
+
+/** 卡片里的一行「标签 + 值」。值用等宽字体，路径/参数这类内容更好读 */
+@Composable
+private fun McpField(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(64.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
+ * 原始 JSON 折叠区。
+ *
+ * 结构化渲染之后，原始文本仍然要留一个入口 —— 用户可能要把整段拷走，
+ * 或者核对解析有没有丢东西。默认收起，点开才显示，避免和上面的结构化
+ * 内容重复占屏。
+ */
+@Composable
+private fun RawJsonSection(
+    json: String,
+    onCopy: () -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "原始 JSON",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onCopy) {
-                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "复制 JSON")
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制原始 JSON",
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp
+                        else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (expanded) "收起" else "展开",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            Text(
-                text = json.ifBlank { "[]" },
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-            )
+
+            AnimatedVisibility(visible = expanded) {
+                Text(
+                    text = json.ifBlank { "[]" },
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
         }
     }
 }
@@ -375,36 +565,50 @@ private fun BotLlmSettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                // 分组自带 16dp 水平内边距和 8dp 垂直内边距，外层只留上下，
+                // 否则两边叠起来会比设置页整体往里缩一圈
+                .padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (uiState.isLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             }
 
             uiState.error?.let { errorText ->
                 Text(
                     text = errorText,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
 
-            CardSection(title = "基础开关") {
-                SettingsSwitchRow(
-                    title = "启用大模型",
-                    subtitle = "开启后机器人将使用所选 LLM 响应",
-                    checked = uiState.isBigModel,
-                    onCheckedChange = viewModel::toggleBigModel
+            // 开关组直接走 SettingsGroup，不套 CardSection：
+            // SettingsSwitchItem 自带 16dp 内边距，再被 CardSection 的
+            // Column(padding 16dp) 包一层就变成 32dp，跟上面的分组对不齐。
+            SettingsGroup(
+                title = "基础开关",
+                items = listOf(
+                    {
+                        SettingsSwitchItem(
+                            icon = Icons.Default.PowerSettingsNew,
+                            title = "启用大模型",
+                            subtitle = "开启后机器人将使用所选 LLM 响应",
+                            checked = uiState.isBigModel,
+                            onCheckedChange = viewModel::toggleBigModel
+                        )
+                    },
+                    {
+                        SettingsSwitchItem(
+                            icon = Icons.Default.Reply,
+                            title = "需要自动回复",
+                            subtitle = "开启后机器人收到消息会使用 LLM 回复",
+                            checked = uiState.isNeedReply,
+                            onCheckedChange = viewModel::toggleNeedReply
+                        )
+                    }
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                SettingsSwitchRow(
-                    title = "需要自动回复",
-                    subtitle = "开启后机器人收到消息会使用 LLM 回复",
-                    checked = uiState.isNeedReply,
-                    onCheckedChange = viewModel::toggleNeedReply
-                )
-            }
+            )
 
             CardSection(title = "模型选择") {
                 Row(
@@ -537,8 +741,10 @@ private fun BotLlmSettingsScreen(
                     }
                 }
 
-                JsonPreviewCard(
-                    title = "paramJson 预览",
+                // 结构化列表在上面已经展示了每个变量的名称/类型/选项，
+                // 这里再摆一份原始 JSON 全文就是同一份数据看两遍。
+                // 原始文本收进折叠区，需要核对或整段拷走时才展开。
+                RawJsonSection(
                     json = uiState.paramJson,
                     onCopy = {
                         clipboardManager.setText(AnnotatedString(uiState.paramJson))
@@ -548,16 +754,68 @@ private fun BotLlmSettingsScreen(
             }
 
             CardSection(title = "MCP 配置") {
-                OutlinedTextField(
-                    value = uiState.mcpJson,
-                    onValueChange = viewModel::updateMcpJson,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("MCP 定义 (mcpJson)") },
-                    minLines = 4
-                )
+                // 解析当前编辑中的文本，实时跟着输入更新 ——
+                // 注意这里解析的是 uiState.mcpJson（输入框里的内容），
+                // 不是回包里的 mcpJson，否则改了输入框上面的卡片不会变。
+                val mcpServers = remember(uiState.mcpJson) {
+                    parseMcpJson(uiState.mcpJson)
+                }
+                // 编辑模式：默认收起输入框，只显示结构化结果。
+                // 一直摊着 4 行 JSON 输入框，等于把「配置界面」变成「文本编辑器」，
+                // 那正是之前这个页面看着像调试工具的原因。
+                var editingMcp by rememberSaveable { mutableStateOf(false) }
 
-                JsonPreviewCard(
-                    title = "mcpJson 预览",
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "MCP 服务",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (mcpServers.isEmpty()) "尚未配置服务" else "已配置 ${mcpServers.size} 个服务",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = { editingMcp = !editingMcp }) {
+                        Text(if (editingMcp) "完成" else "编辑")
+                    }
+                }
+
+                if (mcpServers.isEmpty()) {
+                    Text(
+                        text = if (uiState.mcpJson.isBlank()) {
+                            "还没有 MCP 配置。点「编辑」粘贴 mcpServers 配置。"
+                        } else {
+                            "当前内容无法解析成 MCP 配置，点「编辑」检查 JSON 格式。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        mcpServers.forEach { server ->
+                            McpServerCard(server)
+                        }
+                    }
+                }
+
+                if (editingMcp) {
+                    OutlinedTextField(
+                        value = uiState.mcpJson,
+                        onValueChange = viewModel::updateMcpJson,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("mcpJson（JSON）") },
+                        minLines = 6
+                    )
+                }
+
+                RawJsonSection(
                     json = uiState.mcpJson,
                     onCopy = {
                         clipboardManager.setText(AnnotatedString(uiState.mcpJson))
@@ -593,50 +851,36 @@ private fun BotLlmSettingsScreen(
     }
 }
 
+/**
+ * 一页设置分组。
+ *
+ * 内部用 [SettingsGroup]：它负责标题颜色（primary）、圆角（24dp）、
+ * 条目间的 2dp 间隙和分组的 surfaceContainerHigh 底色 —— 跟设置页完全一致。
+ * 这里把整块内容包进一个 [SettingsCustomItem] 里当「一条」，
+ * 因为这几块的内容是自由排版的表单，不是一行行的标准设置项。
+ *
+ * 为什么不再用 Surface 手搓：那样每个区块的圆角、内边距、底色都得自己写，
+ * 五个区块就是五份重复的排版代码，而且跟设置页差几个 dp 也看不出来。
+ */
 @Composable
 private fun CardSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            content()
-        }
-    }
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+    SettingsGroup(
+        title = title,
+        items = listOf(
+            {
+                SettingsCustomItem {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        content()
+                    }
+                }
+            }
+        )
+    )
 }
 
 @Composable
