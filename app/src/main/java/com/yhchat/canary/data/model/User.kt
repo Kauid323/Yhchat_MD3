@@ -127,6 +127,88 @@ data class CaptchaData(
 )
 
 /**
+ * 滑块验证码响应（POST v1/captcha/get）
+ *
+ * 和上面的图形验证码不是同一个接口：图形码直接返回一张带字符的图，
+ * 滑块码返回一张底图 + 一张拼图碎片，需要用户把碎片拖到缺口位置，
+ * 后端只认最终的 x 坐标。
+ */
+data class SlideCaptchaResponse(
+    @SerializedName("code")
+    val code: Int,
+
+    @SerializedName("msg")
+    val message: String? = null,
+
+    @SerializedName("data")
+    val data: SlideCaptchaData? = null
+)
+
+/**
+ * 滑块验证码数据
+ *
+ * master_image / tile_image 都是完整的 data URI（`data:image/jpeg;base64,...`），
+ * 用之前要先截掉逗号前的部分再解码。
+ */
+data class SlideCaptchaData(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("master_image")
+    val masterImage: String,
+
+    @SerializedName("master_size")
+    val masterSize: SlideImageSize? = null,
+
+    @SerializedName("tile_image")
+    val tileImage: String,
+
+    @SerializedName("tile_size")
+    val tileSize: SlideImageSize? = null,
+
+    /** 碎片在底图上的纵向位置（底图像素坐标，不是 dp） */
+    @SerializedName("tile_y")
+    val tileY: Int = 0,
+
+    @SerializedName("type")
+    val type: String? = null
+)
+
+/**
+ * 图片尺寸。后端用的是底图像素坐标，缩放时要按这里的宽高换算。
+ */
+data class SlideImageSize(
+    @SerializedName("width")
+    val width: Int,
+
+    @SerializedName("height")
+    val height: Int
+)
+
+/**
+ * 滑块验证码方式获取短信验证码的请求体
+ *
+ * 注意和 [SmsCaptchaRequest] 的区别：这个没有 `code`（用户没输字符），
+ * 换成 `captcha_type` + `x`。x 是碎片在底图上的最终横坐标。
+ */
+data class SlideSmsCaptchaRequest(
+    @SerializedName("mobile")
+    val mobile: String,
+
+    @SerializedName("platform")
+    val platform: String,
+
+    @SerializedName("captcha_type")
+    val captchaType: String = "slide",
+
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("x")
+    val x: Int
+)
+
+/**
  * 获取短信验证码请求
  */
 data class SmsCaptchaRequest(

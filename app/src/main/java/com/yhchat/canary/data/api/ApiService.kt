@@ -8,6 +8,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.Headers
 import retrofit2.http.POST
 
 /**
@@ -86,9 +87,28 @@ interface ApiService {
     @POST("v1/user/captcha")
     suspend fun getCaptcha(): Response<CaptchaResponse>
 
+    /**
+     * 获取滑块验证码。
+     *
+     * 这个接口的请求体是空的（抓包就是 content-length: 0 + content-type: application/json），
+     * 所以不传 @Body，只手动补一个 Content-Type —— 不带 body 时 Retrofit 不会自动加这个头，
+     * 而服务端按 JSON 接口处理，缺了可能直接 400。
+     */
+    @POST("v1/captcha/get")
+    @Headers("Content-Type: application/json")
+    suspend fun getSlideCaptcha(): Response<SlideCaptchaResponse>
+
     @POST("v1/verification/get-verification-code")
     suspend fun getSmsCaptcha(
         @Body request: SmsCaptchaRequest
+    ): Response<Map<String, Any>>
+
+    /**
+     * 用滑块验证码换取短信验证码。路径和上面一样，只是请求体不同。
+     */
+    @POST("v1/verification/get-verification-code")
+    suspend fun getSmsCaptchaBySlide(
+        @Body request: SlideSmsCaptchaRequest
     ): Response<Map<String, Any>>
 
     @POST("v1/verification/get-email-verification-code")

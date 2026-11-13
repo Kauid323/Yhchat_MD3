@@ -342,6 +342,65 @@ class UserRepository @Inject constructor(
     }
 
     /**
+     * 获取滑块验证码。
+     *
+     * 返回的底图/碎片是 base64 data URI，这里原样交给上层，由 UI 决定怎么解码，
+     * 避免在数据层引入 Android 的 Bitmap 依赖。
+     */
+    suspend fun getSlideCaptcha(): Result<SlideCaptchaData> {
+        return try {
+            val response = apiService.getSlideCaptcha()
+            println("滑块验证码API响应状态: ${response.code()}")
+            if (response.isSuccessful) {
+                val body = response.body()
+                val data = body?.data
+                if (body?.code == 1 && data != null) {
+                    Result.success(data)
+                } else {
+                    Result.failure(Exception(body?.message ?: "获取滑块验证码失败"))
+                }
+            } else {
+                Result.failure(Exception("获取滑块验证码失败: ${response.code()} - ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            println("获取滑块验证码异常: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 用滑块验证码获取短信验证码。
+     *
+     * @param x 碎片在底图上的最终横坐标（底图原始像素，不是屏幕 dp）
+     */
+    suspend fun getSmsCaptchaBySlide(mobile: String, captchaId: String, x: Int): Result<Boolean> {
+        return try {
+            val request = SlideSmsCaptchaRequest(
+                mobile = mobile,
+                platform = "yhchat canary 21.7 dev",
+                id = captchaId,
+                x = x
+            )
+            val response = apiService.getSmsCaptchaBySlide(request)
+            println("滑块短信验证码API响应状态: ${response.code()}")
+            println("滑块短信验证码API响应体: ${response.body()}")
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body?.get("code") == 1) {
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(body?.get("msg")?.toString() ?: "获取短信验证码失败"))
+                }
+            } else {
+                Result.failure(Exception("获取短信验证码失败: ${response.code()} - ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            println("滑块短信验证码异常: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 首页搜索
      */
     suspend fun homeSearch(word: String): Result<com.yhchat.canary.data.model.SearchData> {

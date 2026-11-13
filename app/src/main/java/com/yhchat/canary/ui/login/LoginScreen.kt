@@ -14,10 +14,12 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,6 +99,7 @@ import kotlinx.coroutines.delay
 /**
  * 登录界面 - 原生质感、符合人体工学交互
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: (String, String) -> Unit,
@@ -106,6 +109,7 @@ fun LoginScreen(
     val clipboardManager = LocalClipboardManager.current
     val uiState by viewModel.uiState.collectAsState()
     val captchaData by viewModel.captchaData.collectAsState()
+    val slideCaptcha by viewModel.slideCaptcha.collectAsState()
     
     var selectedTab by remember { mutableIntStateOf(0) }
     var mobile by remember { mutableStateOf("") }
@@ -402,7 +406,11 @@ fun LoginScreen(
                                         singleLine = true
                                     )
 
-                                    // 图形码预览及点击刷新区域
+                                    // 图形码预览区。
+                                    // 点击 = 换一张（原有逻辑），长按 = 改用滑块验证码。
+                                    // 用 combinedClickable 而不是外面再套一层长按手势：
+                                    // 同一块区域两个手势必须由同一个手势识别器仲裁，
+                                    // 分成两层的话长按会先被内层 clickable 吃掉。
                                     Surface(
                                         modifier = Modifier
                                             .height(56.dp)
@@ -413,9 +421,11 @@ fun LoginScreen(
                                                 color = MaterialTheme.colorScheme.outlineVariant,
                                                 shape = RoundedCornerShape(8.dp)
                                             )
-                                            .clickable(enabled = !uiState.isLoading) {
-                                                viewModel.getCaptcha()
-                                            },
+                                            .combinedClickable(
+                                                enabled = !uiState.isLoading,
+                                                onClick = { viewModel.getCaptcha() },
+                                                onLongClick = { viewModel.loadSlideCaptcha() }
+                                            ),
                                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                                     ) {
                                         Box(
@@ -425,7 +435,7 @@ fun LoginScreen(
                                             if (captchaBitmap != null) {
                                                 Image(
                                                     bitmap = captchaBitmap,
-                                                    contentDescription = "验证码，点击刷新",
+                                                    contentDescription = "验证码，点击刷新，长按使用滑块验证",
                                                     modifier = Modifier.fillMaxSize(),
                                                     contentScale = ContentScale.Fit
                                                 )
@@ -748,6 +758,19 @@ fun LoginScreen(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 滑块验证码弹窗：长按图形验证码后出现。
+        // 挂在 Box 这一层而不是 Column 里面 —— Column 是可滚动的，
+        // Dialog 虽然是独立窗口不受裁剪影响，但状态宿主放外层语义更清楚。
+        slideCaptcha?.let { slide ->
+            SlideCaptchaDialog(
+                data = slide,
+                onDismiss = { viewModel.clearSlideCaptcha() },
+                onConfirm = { x ->
+                    viewModel.getSmsCaptchaBySlide(mobile.trim(), x)
+                }
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.yhchat.canary.data.api.ApiService
 import com.yhchat.canary.data.model.CaptchaData
 import com.yhchat.canary.data.model.LoginData
+import com.yhchat.canary.data.model.SlideCaptchaData
 import com.yhchat.canary.data.model.UserProfile
 import com.yhchat.canary.data.repository.AccountRepository
 import com.yhchat.canary.data.repository.TokenRepository
@@ -57,6 +58,12 @@ class LoginViewModel @Inject constructor(
     // 验证码数据
     private val _captchaData = MutableStateFlow<CaptchaData?>(null)
     val captchaData: StateFlow<CaptchaData?> = _captchaData.asStateFlow()
+
+    /**
+     * 滑块验证码。null 表示当前没有待用的滑块，界面据此决定是否弹窗。
+     */
+    private val _slideCaptcha = MutableStateFlow<SlideCaptchaData?>(null)
+    val slideCaptcha: StateFlow<SlideCaptchaData?> = _slideCaptcha.asStateFlow()
     
     /**
      * 获取验证码
@@ -74,6 +81,88 @@ class LoginViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = error.message
+                    )
+                }
+        }
+    }
+
+    /**
+     * 获取滑块验证码。
+     *
+     * 和 [getCaptcha] 是两条独立的通道：图形码走 v1/user/captcha，
+     * 滑块走 v1/captcha/get。这里不覆盖 _captchaData，否则图形码那张图
+     * 会被顶掉，用户长按弹滑块、取消之后图形码就没了。
+     */
+    fun loadSlideCaptcha() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+            userRepository.getSlideCaptcha()
+                .onSuccess { slide ->
+                    _slideCaptcha.value = slide
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "获取滑块验证码失败: ${error.message}"
+                    )
+                }
+        }
+    }
+
+    /**
+     * 关闭滑块弹窗时清掉这份数据。
+     *
+     * 滑块 id 是一次性的：验证过一次或超时后就不能再用，
+     * 留着下次长按直接复用会拿到「验证已过期」。
+     */
+    fun clearSlideCaptcha() {
+        _slideCaptcha.value = null
+    }
+
+    /**
+     * 用滑块验证码获取短信验证码。
+     *
+     * @param x 碎片在底图上的最终横坐标（底图原始像素）
+     */
+    fun getSmsCaptchaBySlide(mobile: String, x: Int) {
+        if (mobile.isBlank()) {
+            _uiState.value = _uiState.value.copy(error = "请输入手机号")
+            return
+        }
+
+        val slide = _slideCaptcha.value
+        if (slide == null) {
+            _uiState.value = _uiState.value.copy(error = "滑块验证已失效，请重新长按验证码")
+            return
+        }
+
+        // 先清掉再发请求：滑块 id 是一次性的，留着的话
+        //  1) 弹窗不会关，用户能连点两次，第二次必然失败；
+        //  2) 失败后同一张图再拖一次也过不了。
+        // 清空后弹窗立即消失，失败时用户重新长按会拿一张新的。
+        _slideCaptcha.value = null
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+            userRepository.getSmsCaptchaBySlide(mobile, slide.id, x)
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = null,
+                        smsSuccess = true
+                    )
+                }
+                .onFailure { error ->
+                    // 这里刻意不动 smsSuccess：界面上的倒计时是
+                    // LaunchedEffect(smsSuccess) 驱动的，把它置回 false 会
+                    // 让正在跑的倒计时协程被取消，秒数永远停在当前值。
+                    // 之前发过一条短信的话，那个倒计时本来就该继续走。
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "获取短信验证码失败: ${error.message}"
                     )
                 }
         }
