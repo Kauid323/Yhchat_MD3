@@ -1478,8 +1478,14 @@ private fun CommentFilterChip(
         modifier = Modifier
             .clip(CircleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .onGloballyPositioned { onWidthMeasured(it.size.width) },
+            // 必须放在 padding **之前**，量到的才是这一格的完整宽度。
+            //
+            // 放在 padding 之后时，量到的是 padding 之内的内容区 ——
+            // 只有文字本身那么宽，比实际格子窄了左右各 10dp。
+            // 于是指示器宽度比格子小一圈、位移也按小格子算，
+            // 表现就是滑块变成一个正圆、还偏在文字左边。
+            .onGloballyPositioned { onWidthMeasured(it.size.width) }
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(

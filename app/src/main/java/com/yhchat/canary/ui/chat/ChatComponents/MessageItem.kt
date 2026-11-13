@@ -543,14 +543,18 @@ fun MessageItem(
 
             // 自己发的消息头像加装饰框。
             //
-            // reserveFrameSpace = false：外层保持 40dp，框溢出绘制。
-            // 如果让外层按框的尺寸（72dp）留位，每一条自己发的消息都会
-            // 把那一行撑到 72dp 高，消息之间出现一处大空白 —— 列表看起来
-            // 是一段一段断开的。溢出绘制不影响行高，装饰只是盖到相邻区域上。
+            // frameScale = 1.8（用默认值）：这是素材本身的几何关系决定的。
+            // 图里内圆只占画布 57%，框的外径必须是头像的 1/0.57 ≈ 1.77 倍，
+            // 内圆才正好跟头像一样大。之前设 1.35，外径 54dp、内圆只有 31dp，
+            // **比 40dp 的头像还小** —— 头像从内圆里溢出来，装饰环压在脸上了。
             //
-            // frameScale = 1.35：40dp 的头像用默认 1.8 会让整圈装饰显得很大，
-            // 而且比同一行里别人的 40dp 头像大太多，像是尺寸不一致。
-            // 1.35 时框外径 54dp，装饰不压到气泡上，跟对方头像的视觉重量也接近。
+            // 所以这里不能为了「看起来不那么大」去缩倍数，缩了就不是框住头像，
+            // 而是框盖在头像上。要控制视觉重量只能改头像尺寸，不能改倍数。
+            //
+            // reserveFrameSpace = false：外层仍保持 40dp，框溢出绘制。
+            // 让外层按框的尺寸（72dp）留位的话，每条自己发的消息都会把
+            // 那一行撑到 72dp 高，消息之间出现大段空白，列表看起来断成一截截。
+            // 溢出绘制不参与行高测量，行高不变，装饰只是盖到相邻区域上。
             val showAvatarFrame by rememberBooleanPreference(
                 preferencesName = "display_settings",
                 key = AvatarFramePrefsKey,
@@ -559,7 +563,6 @@ fun MessageItem(
             FramedAvatar(
                 avatarSize = 40.dp,
                 showFrame = showAvatarFrame,
-                frameScale = 1.35f,
                 reserveFrameSpace = false,
                 modifier = Modifier.combinedClickable(
                     onClick = { onAvatarClick(message.sender.chatId, message.sender.name, message.sender.chatType) },
