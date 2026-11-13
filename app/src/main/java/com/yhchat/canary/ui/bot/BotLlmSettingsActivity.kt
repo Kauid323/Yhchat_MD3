@@ -6,6 +6,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,9 +36,6 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import com.yhchat.canary.ui.settings.SettingsCustomItem
-import com.yhchat.canary.ui.settings.SettingsGroup
-import com.yhchat.canary.ui.settings.SettingsSwitchItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -42,9 +43,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -54,10 +57,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.bot.viewmodel.BotLlmSettingsViewModel
 import com.yhchat.canary.ui.bot.viewmodel.ParamVariableType
-import com.yhchat.canary.ui.bot.viewmodel.ParamVariableUi
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,10 +73,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.yhchat.canary.ui.bot.viewmodel.ParamVariableUi
+import com.yhchat.canary.ui.settings.SettingsCustomItem
+import com.yhchat.canary.ui.settings.SettingsGroup
+import com.yhchat.canary.ui.settings.SettingsSwitchItem
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
 
 class BotLlmSettingsActivity : BaseActivity() {
@@ -221,7 +230,15 @@ private fun parseMcpJson(json: String): List<McpServer> {
         if (!root.isJsonObject) return emptyList()
         val obj = root.asJsonObject
         // 优先取标准里的 mcpServers；没有就把根对象当作 server 表
-        val servers = obj.getAsJsonObject("mcpServers") ?: obj
+        //
+        // 这里用 get() + isJsonObject 判断，不能用 getAsJsonObject()：
+        // 后者在「字段存在但不是对象」时会抛 ClassCastException，而整个解析
+        // 被 runCatching 包着，一个字段写错就会让所有服务一起消失，
+        // 界面上表现为「已配置 0 个服务」，比不显示更难排查。
+        val servers = obj.get("mcpServers")
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
+            ?: obj
         servers.entrySet().mapNotNull { (name, element) ->
             if (!element.isJsonObject) return@mapNotNull null
             val server = element.asJsonObject
@@ -236,7 +253,10 @@ private fun parseMcpJson(json: String): List<McpServer> {
                         listOf(server.get("args").asString)
                     else -> emptyList()
                 },
-                env = server.getAsJsonObject("env")
+                // 同理，env 不是对象时当没有，而不是让整份配置解析失败
+                env = server.get("env")
+                    ?.takeIf { it.isJsonObject }
+                    ?.asJsonObject
                     ?.entrySet()
                     ?.associate { (k, v) -> k to (v.asStringOrNull() ?: "") }
                     .orEmpty(),
@@ -246,11 +266,9 @@ private fun parseMcpJson(json: String): List<McpServer> {
     }.getOrElse { emptyList() }
 }
 
-/** JSON 元素取字符串；非字符串（数字/布尔/null）返回 null，由调用方决定怎么显示 */
+/** JSON 元素取字符串；对象/数组/null 返回 null，由调用方决定怎么显示 */
 private fun JsonElement.asStringOrNull(): String? =
-    if (isJsonPrimitive && !asJsonPrimitive.isBoolean && !asJsonPrimitive.isNumber) asString
-    else if (isJsonPrimitive) asString
-    else null
+    if (isJsonPrimitive) asString else null
 
 /**
  * 一条 MCP 服务的卡片。
