@@ -34,8 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.yhchat.canary.ui.chat.viewmodel.SplitDownloadProgress
-import com.yhchat.canary.ui.chat.viewmodel.SplitDownloadStage
+import com.yhchat.canary.ui.chat.SplitDownloadProgress
+import com.yhchat.canary.ui.chat.SplitDownloadStage
 import com.yhchat.canary.utils.splitfile.SplitTransferTask
 
 /**

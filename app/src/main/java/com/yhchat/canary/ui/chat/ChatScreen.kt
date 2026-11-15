@@ -122,22 +122,21 @@ fun ChatScreen(
     val splitProgressMap = viewModel.splitProgress
 
     // 哪些消息属于「已建卡的任务」需要折叠：key = msgId
-    val collapsedSplitMsgIds by remember(splitTasks) {
+    //
+    // 注意这里不能写 remember(splitTasks) { derivedStateOf { ... } }：
+    // splitTasks 是 SnapshotStateList，它的 equals 是引用比较，
+    // 内容变了但实例没变，remember 的 key 判定为"没变"，derivedStateOf 就不会重算。
+    // 直接让 derivedStateOf 在快照读取时登记依赖即可。
+    val collapsedSplitMsgIds by remember {
         derivedStateOf {
             splitTasks.flatMap { task -> task.chunks.map { it.msgId } }.toSet()
         }
     }
 
-    // 清单消息 msgId -> 任务，用于给清单那条消息挂上卡片
-    val manifestMsgIdToTask by remember(splitTasks) {
+    // transferId -> 任务，用于给清单那条消息挂上卡片
+    val manifestMsgIdToTask by remember {
         derivedStateOf {
-            // 清单消息本身也带 transferId 语义，但任务里没直接存清单 msgId，
-            // 所以用「消息文本解析出 transferId」来匹配（解析成本低且已有缓存）
-            buildMap {
-                splitTasks.forEach { task ->
-                    put(task.key.transferId, task)
-                }
-            }
+            splitTasks.associateBy { task -> task.key.transferId }
         }
     }
 
@@ -714,11 +713,9 @@ fun ChatScreen(
 
                         // 分块：这条消息是清单就在卡片上渲染，否则走普通消息
                         val splitMode = viewModel.splitDisplayModeOf(message)
-                        val splitTaskForKey = when (val m = splitMode) {
-                            is com.yhchat.canary.utils.splitfile.SplitDisplayMode.ManifestCard ->
-                                manifestMsgIdToTask[m.manifest.transferId]
-                            else -> null
-                        }
+                        val splitTaskForKey =
+                            (splitMode as? com.yhchat.canary.utils.splitfile.SplitDisplayMode.ManifestCard)
+                                ?.let { manifestMsgIdToTask[it.manifest.transferId] }
                         val splitProgress = splitTaskForKey?.let {
                             splitProgressMap[it.key.transferId]
                         }

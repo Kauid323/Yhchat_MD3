@@ -25,6 +25,7 @@ import com.yhchat.canary.data.repository.SendMessagePayload
 import com.yhchat.canary.data.repository.TokenRepository
 import com.yhchat.canary.data.websocket.MessageEvent
 import com.yhchat.canary.data.websocket.WebSocketManager
+import com.yhchat.canary.ui.settings.isAutoCleanSplitCacheEnabled
 import com.yhchat.canary.proto.bot.board
 import com.yhchat.canary.proto.bot.bot_info
 import com.yhchat.canary.proto.group.Bot_data
@@ -173,11 +174,18 @@ class ChatViewModel @Inject constructor(
     // ------------------------------------------------------------------
     private val splitFileAdapter = com.yhchat.canary.utils.splitfile.SplitFileAdapter()
     private val _splitTasks = mutableStateListOf<com.yhchat.canary.utils.splitfile.SplitTransferTask>()
-    val splitTasks: List<com.yhchat.canary.utils.splitfile.SplitTransferTask> = _splitTasks
+
+    // 暴露成 SnapshotStateList 而不是 List：
+    // 声明成 List 的话 Compose 读不到快照写入，界面不会随任务变化重组。
+    // （messages 那边也是同样的写法，参考 _messages）
+    val splitTasks: SnapshotStateList<com.yhchat.canary.utils.splitfile.SplitTransferTask> = _splitTasks
 
     /** 分块下载进度：transferId -> 已完成块数 / 总块数 */
     private val _splitProgress = mutableStateMapOf<String, SplitDownloadProgress>()
-    val splitProgress: Map<String, SplitDownloadProgress> = _splitProgress
+
+    // 同理，必须暴露 SnapshotStateMap 才能被观察
+    val splitProgress: androidx.compose.runtime.snapshots.SnapshotStateMap<String, SplitDownloadProgress> =
+        _splitProgress
 
     private val splitDownloader by lazy {
         com.yhchat.canary.utils.splitfile.SplitFileDownloader(context)
@@ -253,8 +261,7 @@ class ChatViewModel @Inject constructor(
                 is com.yhchat.canary.utils.splitfile.SplitFileDownloader.Result.Success -> {
                     // 协议：开启「传完自动清缓存」时，在合并 + 完整校验 + 发布成功之后清理分块。
                     // 只在 Success 分支执行 —— 失败/取消/未完成都不清，断点要能续传。
-                    val autoClean = com.yhchat.canary.ui.settings
-                        .isAutoCleanSplitCacheEnabled(context)
+                    val autoClean = isAutoCleanSplitCacheEnabled(context)
                     if (autoClean) {
                         // 清分块但保留 merged 后的成品文件
                         splitDownloader.clearChunksOnly(transferId)

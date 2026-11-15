@@ -80,7 +80,7 @@ import com.yhchat.canary.ui.webview.WebViewActivity
 import com.yhchat.canary.ui.share.ExternalShareUtils
 import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.FavoriteMessageStore
-import com.yhchat.canary.ui.chat.viewmodel.SplitDownloadProgress
+import com.yhchat.canary.ui.chat.SplitDownloadProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
