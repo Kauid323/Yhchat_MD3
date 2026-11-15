@@ -412,15 +412,20 @@ private fun HtmlGenericNode(
         return
     }
 
-    if (forceBlockLayout || (isBlockTag(node.tag) && !isInlineTag(node.tag)) || (isLink && hasBoxStyle(node.style))) {
+    if (forceBlockLayout || (isBlockTag(node.tag) && !isInlineTag(node.tag)) || isLink) {
+        // 链接只要带 href 就整块可点。
+        //
+        // 之前这里多加了 `&& hasBoxStyle(node.style)` 的限制，导致
+        // `<a style="display:block;text-decoration:none">` 这类**没有 padding/背景/border**
+        // 的块级链接完全没有点击区域 —— 里面写了 cursor:pointer 也没用，
+        // 因为 cursor 对 Compose 没有意义。块级链接在聊天卡片里非常常见
+        // （整张卡片就是链接），必须默认可点。
         val clickableModifier = if (isLink && !href.isNullOrBlank()) {
-            Modifier.clickable {
-                onLinkClick?.invoke(href)
-            }
+            Modifier.clickable { onLinkClick?.invoke(href) }
         } else {
             Modifier
         }
-        
+
         Column(
             modifier = (if (avoidFillMaxWidth) Modifier else Modifier.fillMaxWidth())
                 .then(clickableModifier)
@@ -578,13 +583,13 @@ private fun buildInlineAnnotated(
                         "a" -> {
                             val href = node.attrs["href"].orEmpty()
                             pushStringAnnotation(tag = "URL", annotation = href)
-                            withStyle(
-                                SpanStyle(
-                                    color = merged.color ?: linkColor,
-                                    textDecoration = merged.textDecoration ?: TextDecoration.Underline
-                                )
-                            ) {
-                                node.children.forEach { appendNode(it, merged.copy(color = merged.color ?: linkColor)) }
+                            // 链接样式走统一判定：写了 color:inherit / text-decoration:none
+                            // 就照办，不要强行染蓝加下划线
+                            val linkStyle = buildLinkSpanStyle(merged, inheritedText, linkColor)
+                            withStyle(linkStyle) {
+                                node.children.forEach {
+                                    appendNode(it, merged.copy(color = linkStyle.color.takeIf { c -> c != Color.Unspecified }))
+                                }
                             }
                             runCatching { pop() }
                         }
@@ -658,13 +663,11 @@ private fun buildInlineAnnotatedWithLink(
                             // 宓屽鐨?<a> 鏍囩锛屼娇鐢ㄥ叾鑷韩鐨?href
                             val nestedHref = node.attrs["href"].orEmpty()
                             pushStringAnnotation(tag = "URL", annotation = nestedHref)
-                            withStyle(
-                                SpanStyle(
-                                    color = merged.color ?: linkColor,
-                                    textDecoration = merged.textDecoration ?: TextDecoration.Underline
-                                )
-                            ) {
-                                node.children.forEach { appendNode(it, merged.copy(color = merged.color ?: linkColor)) }
+                            val linkStyle = buildLinkSpanStyle(merged, inheritedText, linkColor)
+                            withStyle(linkStyle) {
+                                node.children.forEach {
+                                    appendNode(it, merged.copy(color = linkStyle.color.takeIf { c -> c != Color.Unspecified }))
+                                }
                             }
                             runCatching { pop() }
                         }
@@ -705,6 +708,45 @@ private fun buildInlineAnnotatedWithLink(
     return annotated to baseStyle
 }
 
+/**
+ * 构造链接的 SpanStyle，尊重作者的显式样式意图。
+ *
+ * 默认行为是"染成主题色 + 加下划线"，但真实 HTML 里经常写：
+ * ```html
+ * <a href="..." style="display:block;text-decoration:none;color:inherit">
+ * ```
+ * 这种写法是在说「这是一个整块的点击区域，但**看起来要像普通文字**」——
+ * 常见于把整张卡片做成链接的机器人消息。如果我们仍然强行染色加下划线，
+ * 卡片标题就会变成蓝色的带下划线文本，跟设计稿完全对不上。
+ *
+ * 判定规则：
+ *   - `color:inherit` → 用父级颜色，不染链接色
+ *   - `text-decoration:none` → 不加下划线
+ *   - 显式给了 color → 用作者给的颜色
+ */
+private fun buildLinkSpanStyle(
+    merged: CssStyle,
+    inheritedText: CssStyle,
+    linkColor: Color
+): SpanStyle {
+    val resolvedColor = when {
+        // 作者明确写了 color:inherit → 跟随父级
+        merged.colorInherit -> inheritedText.color ?: Color.Unspecified
+        // 作者给了具体颜色
+        merged.color != null -> merged.color
+        // 都没写 → 才用链接色
+        else -> linkColor
+    }
+    // textDecoration 为 null 表示没写；写了 none 时 parseTextDecoration 会返回 TextDecoration.None，
+    // 这里据此判断是否要补默认下划线
+    val resolvedDecoration = merged.textDecoration ?: TextDecoration.Underline
+
+    return SpanStyle(
+        color = resolvedColor,
+        textDecoration = resolvedDecoration
+    )
+}
+
 @Composable
 private fun HtmlImageNode(
     node: HtmlNode.Element,
@@ -731,16 +773,28 @@ private fun HtmlImageNode(
         else -> ContentScale.Fit
     }
 
+    // 老式 HTML 里图片尺寸常写成属性（width="36" height="36"）而不是 style，
+    // 只读 style 会让这类图片丢掉尺寸、被拉伸成整行宽 —— 这是最常见的头像变形原因。
+    // 优先级：style > 属性（和浏览器一致，style 覆盖 attributes）。
+    val attrWidth = node.attrs["width"]?.let { parseHtmlSizeAttr(it) }
+    val attrHeight = node.attrs["height"]?.let { parseHtmlSizeAttr(it) }
+
     val hasExplicitSize = node.style.width != null || node.style.height != null ||
-        node.style.widthPercent != null || node.style.heightPercent != null
+        node.style.widthPercent != null || node.style.heightPercent != null ||
+        attrWidth != null || attrHeight != null
 
     // 用 BoxWithConstraints 拿到可用宽度：百分比尺寸（width:100%）要算成实际 Dp。
     BoxWithConstraints {
+        // 把属性尺寸并进 style，交给统一的 media box 处理（含圆角裁剪）
+        val effectiveStyle = node.style.copy(
+            width = node.style.width ?: attrWidth,
+            height = node.style.height ?: attrHeight
+        )
         val modifier = Modifier
             .then(if (onImageClick != null) Modifier.clickable { onImageClick(src) } else Modifier)
-            .htmlMediaBoxModel(node.style, maxWidth.takeIf { it > 0.dp && it < Dp.Infinity })
+            .htmlMediaBoxModel(effectiveStyle, maxWidth.takeIf { it > 0.dp && it < Dp.Infinity })
             // 没有显式尺寸的图片才给兜底最小尺寸；
-            // 有尺寸（比如 24px 头像）时再套 minWidth=120dp 会把头像撑成一块大方图
+            // 有尺寸（比如 36px 头像）时再套 minWidth=120dp 会把头像撑成一块大方图
             .then(
                 if (hasExplicitSize) Modifier
                 else Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 80.dp)
@@ -753,6 +807,21 @@ private fun HtmlImageNode(
             contentScale = imageScale
         )
     }
+}
+
+/**
+ * 解析图片的 width/height 属性。
+ *
+ * HTML 属性可以是纯数字（`width="36"`，单位 px），也可能带单位或百分号。
+ * 解析不出来就返回 null，交给后续兜底。
+ */
+private fun parseHtmlSizeAttr(raw: String): Dp? {
+    val value = raw.trim()
+    if (value.isEmpty()) return null
+    // 百分比（width="100%"）交给 style 的百分比通道，这里不处理
+    if (value.endsWith("%")) return null
+    val numeric = value.removeSuffix("px").removeSuffix("PX").trim()
+    return numeric.toFloatOrNull()?.dp
 }
 
 @Composable

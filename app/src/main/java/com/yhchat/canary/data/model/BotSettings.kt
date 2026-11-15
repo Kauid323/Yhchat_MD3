@@ -57,7 +57,15 @@ data class BotSettingItem(
     @SerializedName("selectIndex")
     val selectIndex: Int? = null,
     @SerializedName("selectValue")
-    val selectValue: String? = null
+    val selectValue: String? = null,
+    /**
+     * checkbox 的勾选状态，与 [options] 一一对应。
+     *
+     * 注意服务端只有部分项会给这个字段（有的项第一次读取时没有），
+     * 所以是 nullable，读取侧要按 options 长度补齐。
+     */
+    @SerializedName("selectStatus")
+    val selectStatus: List<Boolean>? = null
 ) {
     /** 显示名优先用 propsValue.label；它为空时退回 title，再退回 id */
     val label: String
@@ -72,7 +80,11 @@ data class BotSettingItem(
             ?: ""
 
     /**
-     * 单选的可选项。服务端用 `#` 分隔，例如 "文本#Markdown#HTML"。
+     * 可选项列表。服务端用 `#` 分隔，例如 "文本#Markdown#HTML"。
+     *
+     * radio / select / checkbox 共用这个字段：
+     *   - radio / select 靠 selectIndex 定位当前项；
+     *   - checkbox 靠 selectStatus 与它逐位对应。
      *
      * 注意 props 里同名 type 的 value 是空的，真正的选项在 propsValue.options。
      */
@@ -81,6 +93,37 @@ data class BotSettingItem(
             .split('#')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+
+    /**
+     * 单选的当前选项文本。
+     *
+     * radio / select 都用这个。服务端在「未选」时会给 selectIndex = -1，
+     * 但 selectValue 里仍带着默认文案，所以不能用 index 反推文本。
+     */
+    val currentSelectValue: String
+        get() = selectValue?.takeIf { it.isNotBlank() }
+            ?: options.getOrNull(selectIndex ?: -1).orEmpty()
+
+    /** 当前选中下标；-1 或越界都当"未选中"处理 */
+    val currentSelectIndex: Int
+        get() {
+            val index = selectIndex ?: -1
+            return if (index in options.indices) index else -1
+        }
+
+    /**
+     * 多选状态，长度已对齐 [options]。
+     *
+     * 服务端有时不给 selectStatus（首次读取），有时给的数组比 options 短，
+     * 这里统一补齐成 options 长度，避免界面上出现"选项比状态多"的错位。
+     */
+    val checkboxStates: List<Boolean>
+        get() {
+            val states = selectStatus.orEmpty()
+            val count = options.size
+            if (count == 0) return states
+            return List(count) { i -> states.getOrNull(i) ?: false }
+        }
 
     /** 文本值。布尔或 null 都当成空串 —— 只有文本控件会读它 */
     val textValue: String
@@ -138,14 +181,25 @@ data class BotSettingPropsValue(
 /**
  * 控件种类。
  *
- * 以字符串 `type` 为准；[fromType] 里把已知的几种映射过来，未知的返回 [Unknown]，
- * 调用方据此决定"不渲染"还是"当文本渲染"。
+ * 以字符串 `type` 为准；[fromType] 里把已知的几种映射过来，未知的返回 [Unknown]。
+ *
+ * key 与 type 的对应关系（来自真实接口样本）：
+ *   key=0 → radio    单选框
+ *   key=1 → input    单行输入框
+ *   key=2 → switch   开关
+ *   key=3 → checkbox 多选框
+ *   key=4 → textarea 多行输入框
+ *   key=5 → select   选择器（下拉）
  */
 enum class BotSettingType {
     Switch,
     TextArea,
     Radio,
     Text,
+    /** 多选框：值在 selectStatus 里，是布尔数组 */
+    Checkbox,
+    /** 选择器：语义同 radio，但选项多时更适合下拉展示 */
+    Select,
     Unknown;
 
     companion object {
@@ -153,12 +207,17 @@ enum class BotSettingType {
             "switch" -> Switch
             "textarea", "text-area", "text_area" -> TextArea
             "radio" -> Radio
+            "select", "dropdown", "picker" -> Select
+            "checkbox", "multi-select", "multi_select" -> Checkbox
             "text", "input" -> Text
-            // type 缺失时用 key 兜底：0=单选 2=开关 4=多行文本
+            // type 缺失时用 key 兜底（与真实接口的编号一致）
             "" -> when (key) {
                 0 -> Radio
+                1 -> Text
                 2 -> Switch
+                3 -> Checkbox
                 4 -> TextArea
+                5 -> Select
                 else -> Unknown
             }
             else -> Unknown
@@ -173,14 +232,18 @@ val BotSettingItem.controlType: BotSettingType
 /**
  * 提交时每一项的形状。
  *
- * 服务端要的是「id -> 一项」的映射，而不是数组，所以这里用树形结构再序列化：
+ * 服务端要的是「id -> 一项」的映射，而不是数组：
  *   {"yofkyi":{"id":"yofkyi","type":"switch","label":"…","value":true}, …}
  *
- * 类型差异（这条容易踩）：switch 的 value 是**布尔**，其余是**字符串**；
- * radio 走 selectIndex + selectValue 而不是 value。少一个字段那一项就保存不上。
+ * 各控件的提交字段（来自真实请求样本）：
+ *   - switch   → "value": true                    布尔
+ *   - textarea / input → "value": "..."           字符串
+ *   - radio    → "selectIndex": 0, "selectValue": "…"
+ *   - select   → "selectIndex": 0, "selectValue": "…"（与 radio 一致）
+ *   - checkbox → "selectStatus": [true,false], "selectValues": []
  *
- * 因为同一个 `value` key 可能是布尔也可能是字符串，用 data class 定不住类型，
- * 所以提交时直接拼 JsonObject，见 [BotSettingSubmitter]。
+ * 注意同一个 `value` key 在不同控件下类型不同，用 data class 定不住，
+ * 所以最终由 [BotSettingSubmitter] 手拼 JsonObject。
  */
 data class BotSettingSubmit(
     val id: String,
@@ -188,9 +251,11 @@ data class BotSettingSubmit(
     val label: String,
     /** switch 用这个 */
     val booleanValue: Boolean? = null,
-    /** textarea / text 用这个 */
+    /** textarea / input 用这个 */
     val textValue: String? = null,
-    /** radio 用这两个 */
+    /** radio / select 用这两个 */
     val selectIndex: Int? = null,
-    val selectValue: String? = null
+    val selectValue: String? = null,
+    /** checkbox 用这个，与选项一一对应 */
+    val checkboxStates: List<Boolean>? = null
 )

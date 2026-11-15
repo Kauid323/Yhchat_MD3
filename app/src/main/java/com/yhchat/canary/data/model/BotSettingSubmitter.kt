@@ -15,13 +15,14 @@ import com.google.gson.JsonObject
  * }
  * ```
  * 内层是「id -> 一项」的映射，而且要**再序列化成字符串**塞进 settingJson 字段。
- * 服务端这么设计估计是为了让机器人侧直接按字符串透传，客户端只能照做。
  *
- * 单看某个字段的话，类型是随控件变的：
- *   - switch   → {"value": true}                    （布尔）
- *   - textarea → {"value": "..."}                   （字符串）
- *   - radio    → {"selectIndex": 2, "selectValue": "HTML"}，不带 value
- * 所以这里逐项手拼 JsonObject，不能用一个固定的 data class 表达。
+ * 每个控件的字段差异（全部来自真实请求样本）：
+ *   - switch   → {"value": true}                      布尔
+ *   - input / textarea → {"value": "..."}             字符串
+ *   - radio / select   → {"selectIndex": 0, "selectValue": "…"}，不带 value
+ *   - checkbox → {"selectStatus": [true,false], "selectValues": []}
+ *
+ * 因为是同名字段承载不同类型，只能逐项手拼 JsonObject。
  */
 object BotSettingSubmitter {
 
@@ -40,12 +41,25 @@ object BotSettingSubmitter {
                 // 服务端可能写 "Switch"、"textarea"、"text-area"，
                 // 裸 lowercase() 比较会漏掉别名，那一项就带着错误的值提交上去
                 when (BotSettingType.fromType(item.type)) {
-                    BotSettingType.Switch -> addProperty("value", item.booleanValue ?: false)
-                    BotSettingType.Radio -> {
-                        // radio 不提交 value，只提交索引和选项文本
+                    BotSettingType.Switch ->
+                        addProperty("value", item.booleanValue ?: false)
+
+                    BotSettingType.Radio, BotSettingType.Select -> {
+                        // radio / select 不提交 value，只提交索引和选项文本
                         item.selectIndex?.let { addProperty("selectIndex", it) }
                         addProperty("selectValue", item.selectValue.orEmpty())
                     }
+
+                    BotSettingType.Checkbox -> {
+                        // checkbox 提交布尔数组，外加一个（服务端会忽略的）空 selectValues。
+                        // 真实请求样本里两者总是同时出现，缺了 selectValues 可能被判定为格式不符，
+                        // 所以照抄。
+                        val statuses = com.google.gson.JsonArray()
+                        item.checkboxStates.orEmpty().forEach { statuses.add(it) }
+                        add("selectStatus", statuses)
+                        add("selectValues", com.google.gson.JsonArray())
+                    }
+
                     else -> addProperty("value", item.textValue.orEmpty())
                 }
             }

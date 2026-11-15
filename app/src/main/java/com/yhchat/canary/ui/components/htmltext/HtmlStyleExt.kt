@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 
 internal fun CssStyle.mergeText(parent: CssStyle): CssStyle = CssStyle(
     color = color ?: parent.color,
+    // 子级写了 inherit 就跟随父级；否则保留自己的标记
+    colorInherit = colorInherit || (color == null && parent.colorInherit),
     fontSize = fontSize ?: parent.fontSize,
     fontWeight = fontWeight ?: parent.fontWeight,
     fontStyle = fontStyle ?: parent.fontStyle,
@@ -42,6 +44,7 @@ internal fun CssStyle.mergeText(parent: CssStyle): CssStyle = CssStyle(
 
 internal fun CssStyle.mergeWith(override: CssStyle): CssStyle = CssStyle(
     color = override.color ?: color,
+    colorInherit = override.colorInherit || colorInherit,
     backgroundColor = override.backgroundColor ?: backgroundColor,
     fontSize = override.fontSize ?: fontSize,
     fontWeight = override.fontWeight ?: fontWeight,

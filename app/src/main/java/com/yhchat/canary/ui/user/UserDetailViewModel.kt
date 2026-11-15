@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import com.yhchat.canary.proto.user.get_user_send
@@ -323,16 +324,24 @@ class UserDetailViewModel(context: Context) : ViewModel() {
                     }
                 )
 
-                // 作者创建的表情包。走第三方目录服务，和云湖接口完全独立：
-                // 它挂了也只是一栏空着，不能让整个用户详情页变成错误页，
-                // 所以这里不设置 error 状态。
+                // 作者创建的表情包。走第三方目录服务，和云湖接口完全独立。
+                //
+                // 用独立协程启动，不 await：第三方服务响应可能很慢甚至挂住，
+                // 串在这条主链路上会把后面的群成员加载一起拖死，表现就是
+                // 「详情页一直转圈」。它拿到结果自己更新状态即可。
                 _uiState.update { it.copy(isLoadingStickerPacks = true) }
-                val packs = stickerCatalogRepository.getPacksByAuthor(userId)
-                _uiState.update {
-                    it.copy(
-                        isLoadingStickerPacks = false,
-                        createdStickerPacks = packs
-                    )
+                viewModelScope.launch {
+                    // 再套一层超时：OkHttp 的超时管不到 DNS 卡住之类的场景，
+                    // 这里兜底 12 秒，避免 loading 状态永远不结束。
+                    val packs = withTimeoutOrNull(12_000L) {
+                        stickerCatalogRepository.getPacksByAuthor(userId)
+                    }.orEmpty()
+                    _uiState.update {
+                        it.copy(
+                            isLoadingStickerPacks = false,
+                            createdStickerPacks = packs
+                        )
+                    }
                 }
 
                 if (groupId != null) {

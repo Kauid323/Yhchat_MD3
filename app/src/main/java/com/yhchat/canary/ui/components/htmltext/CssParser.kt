@@ -77,7 +77,15 @@ data class CssStyle(
     val borderSpacing: Dp? = null,
     val listStyleType: String? = null,
     val transition: String? = null,
-    val outline: String? = null
+    val outline: String? = null,
+    /**
+     * `color: inherit` —— 显式要求继承父级颜色。
+     *
+     * 必须和"没写 color"区分开：链接默认会被染成主题色并加下划线，
+     * 而 `color:inherit;text-decoration:none` 是作者明确要求"看起来像普通文字"。
+     * 两者都解析成 `color == null` 的话，这个意图就丢了。
+     */
+    val colorInherit: Boolean = false
 )
 
 /**
@@ -119,9 +127,12 @@ object CssParser {
             ?: backgroundShorthand?.let { parseBackgroundColor(it) }
         val radiusRaw = properties["border-radius"]
         val marginRaw = properties["margin"]
+        val colorRaw = properties["color"]?.trim()
 
         return CssStyle(
-            color = properties["color"]?.let { parseColor(it) },
+            color = colorRaw?.let { parseColor(it) },
+            // color:inherit 单独记下来：它要求"跟随父级"，不能当作"没设置"
+            colorInherit = colorRaw?.equals("inherit", ignoreCase = true) == true,
             backgroundColor = resolvedBackgroundColor,
             fontSize = properties["font-size"]?.let { parseFontSize(it) },
             fontWeight = properties["font-weight"]?.let { parseFontWeight(it) },

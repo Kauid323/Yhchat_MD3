@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -34,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -46,6 +49,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -278,11 +282,32 @@ private fun BotSettingFormContent(
                     onCheckedChange = { viewModel.setSwitch(item.id, it) }
                 )
 
-                BotSettingType.Radio -> RadioSettingCard(
+                // radio 和 select 语义相同，都渲染成一组选项；
+                // 区别只在 select 的选项通常更长（可能带 emoji 和一整句话），
+                // 所以 select 用纵向排列，radio 用横向 chip
+                BotSettingType.Radio -> OptionSettingCard(
                     item = item,
-                    selectedIndex = uiState.radios[item.id] ?: (item.selectIndex ?: 0),
+                    selectedIndex = uiState.radios[item.id] ?: item.currentSelectIndex,
                     enabled = !uiState.isSaving,
+                    vertical = false,
                     onSelect = { viewModel.setRadio(item.id, it) }
+                )
+
+                BotSettingType.Select -> OptionSettingCard(
+                    item = item,
+                    selectedIndex = uiState.radios[item.id] ?: item.currentSelectIndex,
+                    enabled = !uiState.isSaving,
+                    vertical = true,
+                    onSelect = { viewModel.setRadio(item.id, it) }
+                )
+
+                BotSettingType.Checkbox -> CheckboxSettingCard(
+                    item = item,
+                    states = uiState.checkboxes[item.id] ?: item.checkboxStates,
+                    enabled = !uiState.isSaving,
+                    onToggle = { index, checked ->
+                        viewModel.toggleCheckbox(item.id, index, checked)
+                    }
                 )
 
                 BotSettingType.TextArea, BotSettingType.Text -> TextSettingCard(
@@ -345,15 +370,19 @@ private fun SwitchSettingCard(
 }
 
 /**
- * 单选项：标签 + 一排 FilterChip。
+ * 单选 / 选择器项。
  *
- * 服务端用 `#` 分隔选项；选项数量不多（这里是 3 个），横向铺开比下拉更直观。
+ * radio 和 select 在数据结构上完全一样（options + selectIndex），
+ * 区别只是选项长度：radio 通常是「文本 / Markdown / HTML」这种短词，
+ * select 常常是「⚙️[设置1]阶梯式违规处置 → 先礼后兵+严打叛逆（智能）」这种长句。
+ * 所以短选项横排 chip，长选项纵向列表。
  */
 @Composable
-private fun RadioSettingCard(
+private fun OptionSettingCard(
     item: BotSettingItem,
     selectedIndex: Int,
     enabled: Boolean,
+    vertical: Boolean,
     onSelect: (Int) -> Unit
 ) {
     val options = item.options
@@ -372,8 +401,43 @@ private fun RadioSettingCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                return@Column
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (vertical) {
+                // 纵向：每行一个，带单选圆点，长文案能换行不挤
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    options.forEachIndexed { index, option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(enabled = enabled) { onSelect(index) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = index == selectedIndex,
+                                onClick = { if (enabled) onSelect(index) },
+                                enabled = enabled
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = option,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (index == selectedIndex) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                }
             } else {
-                Spacer(modifier = Modifier.height(8.dp))
+                // 横向：短选项用 chip，一行铺开
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     options.forEachIndexed { index, option ->
                         FilterChip(
@@ -383,6 +447,70 @@ private fun RadioSettingCard(
                             label = { Text(option) }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 多选项。
+ *
+ * 值是布尔数组（selectStatus），与 options 一一对应。
+ * 提交时长度必须和 options 对齐，否则服务端保存后勾选会整体错位。
+ */
+@Composable
+private fun CheckboxSettingCard(
+    item: BotSettingItem,
+    states: List<Boolean>,
+    enabled: Boolean,
+    onToggle: (Int, Boolean) -> Unit
+) {
+    val options = item.options
+
+    SettingCard {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = item.label,
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            if (options.isEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "该项没有可选项",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            options.forEachIndexed { index, option ->
+                val checked = states.getOrNull(index) ?: false
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = enabled) { onToggle(index, !checked) }
+                        .padding(vertical = 2.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = if (enabled) {
+                            { onToggle(index, it) }
+                        } else {
+                            null
+                        },
+                        enabled = enabled
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }

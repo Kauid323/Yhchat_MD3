@@ -77,9 +77,11 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -845,8 +847,13 @@ fun UserDetailContent(
     // 页签：创建的分区排第一（用户点开详情时最关心的往往是「这个人建了什么」），
     // 其次是表情包，最后才是备注/资料这种纯信息。
     val tabs = remember { listOf("创建的分区", "表情包", "备注与资料") }
-    val pagerState = rememberPagerState(pageCount = { tabs.size })
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // 用普通 state 记当前页，不要用 rememberPagerState。
+    //
+    // 之前用 pagerState + animateScrollToPage 切换，但布局里并没有 HorizontalPager
+    // （内容是靠 when(currentPage) 渲染的），而 PagerState 只有在真正挂上 Pager
+    // 之后才会响应滚动，于是 currentPage 永远不会变 —— 点页签完全没反应。
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     LazyColumn(
         state = listState,
@@ -875,30 +882,26 @@ fun UserDetailContent(
         // 页签栏钉在列表里而不是 Scaffold 的 bottomBar：
         // 内容不高时列表能自然滚动，不会留一条空白的固定栏
         item(key = "tabs") {
-            SecondaryTabRow(selectedTabIndex = pagerState.currentPage) {
+            SecondaryTabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
-                        selected = index == pagerState.currentPage,
-                        onClick = {
-                            scope.launch {
-                                pagerState.animateScrollToPage(index)
-                            }
-                        },
+                        selected = index == selectedTab,
+                        onClick = { selectedTab = index },
                         text = { Text(title) }
                     )
                 }
             }
         }
 
-        item(key = "pager") {
-            // 高度自适应：每种页签内容用 Box 包住，让 LazyColumn 自己量高。
+        item(key = "content") {
+            // 每种页签内容用 Box 包住，让 LazyColumn 自己量高。
             // 不用固定高度的 HorizontalPager，否则短内容会留白、长内容会被裁掉
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
             ) {
-                when (pagerState.currentPage) {
+                when (selectedTab) {
                     0 -> BoardsTab(
                         boards = createdBoards,
                         isLoading = isLoadingBoards,

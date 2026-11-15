@@ -55,8 +55,15 @@ class BotSettingFormViewModel(application: Application) : AndroidViewModel(appli
                             }
                             .associate { it.id to it.textValue },
                         radios = items
-                            .filter { it.controlType == BotSettingType.Radio }
-                            .associate { it.id to (it.selectIndex ?: 0) }
+                            // radio 和 select 共用同一个索引通道：语义一样，只是展示方式不同
+                            .filter {
+                                it.controlType == BotSettingType.Radio ||
+                                    it.controlType == BotSettingType.Select
+                            }
+                            .associate { it.id to it.currentSelectIndex },
+                        checkboxes = items
+                            .filter { it.controlType == BotSettingType.Checkbox }
+                            .associate { it.id to it.checkboxStates }
                     )
                 },
                 onFailure = { error ->
@@ -90,6 +97,18 @@ class BotSettingFormViewModel(application: Application) : AndroidViewModel(appli
         )
     }
 
+    /** 切换多选里的某一项 */
+    fun toggleCheckbox(itemId: String, index: Int, checked: Boolean) {
+        val current = _uiState.value.checkboxes[itemId].orEmpty()
+        val next = current.toMutableList()
+        while (next.size <= index) next.add(false)
+        next[index] = checked
+        _uiState.value = _uiState.value.copy(
+            checkboxes = _uiState.value.checkboxes + (itemId to next),
+            isDirty = true
+        )
+    }
+
     fun save(botId: String, groupId: String, onSaved: () -> Unit) {
         if (_uiState.value.isSaving) return
 
@@ -105,19 +124,42 @@ class BotSettingFormViewModel(application: Application) : AndroidViewModel(appli
                         label = item.label,
                         booleanValue = state.switches[item.id] ?: item.switchValue
                     )
-                    BotSettingType.Radio -> {
-                        val index = state.radios[item.id] ?: (item.selectIndex ?: 0)
+
+                    // radio 和 select 的提交格式完全一致，共用一套
+                    BotSettingType.Radio, BotSettingType.Select -> {
+                        val index = state.radios[item.id] ?: item.currentSelectIndex
                         val options = item.options
                         BotSettingSubmit(
                             id = item.id,
-                            type = item.type.ifBlank { "radio" },
+                            type = item.type.ifBlank {
+                                if (item.controlType == BotSettingType.Select) "select" else "radio"
+                            },
                             label = item.label,
+                            // 未选中时真实请求里给的是 -1，不是 0
                             selectIndex = index,
                             // 选项文本要跟着索引走：用户换了选项，selectValue 必须同步，
-                            // 只发索引的话服务端存下来的是旧文本
-                            selectValue = options.getOrNull(index).orEmpty()
+                            // 只发索引的话服务端存下来的是旧文本。
+                            // index 为 -1（未选）时保留原来的 selectValue。
+                            selectValue = if (index >= 0) {
+                                options.getOrNull(index).orEmpty()
+                            } else {
+                                item.currentSelectValue
+                            }
                         )
                     }
+
+                    BotSettingType.Checkbox -> {
+                        val states = state.checkboxes[item.id] ?: item.checkboxStates
+                        // 长度必须和选项数对齐，否则服务端保存后勾选会错位
+                        val aligned = List(item.options.size) { i -> states.getOrNull(i) ?: false }
+                        BotSettingSubmit(
+                            id = item.id,
+                            type = item.type.ifBlank { "checkbox" },
+                            label = item.label,
+                            checkboxStates = aligned
+                        )
+                    }
+
                     else -> BotSettingSubmit(
                         id = item.id,
                         type = item.type.ifBlank { "textarea" },
@@ -167,6 +209,8 @@ data class BotSettingFormUiState(
     val switches: Map<String, Boolean> = emptyMap(),
     /** 文本 / 多行文本的编辑值 */
     val texts: Map<String, String> = emptyMap(),
-    /** 单选的编辑值（索引） */
-    val radios: Map<String, Int> = emptyMap()
+    /** 单选的编辑值（索引）。radio 和 select 共用；-1 表示未选中 */
+    val radios: Map<String, Int> = emptyMap(),
+    /** 多选的编辑值，与该项的选项列表一一对应 */
+    val checkboxes: Map<String, List<Boolean>> = emptyMap()
 )
