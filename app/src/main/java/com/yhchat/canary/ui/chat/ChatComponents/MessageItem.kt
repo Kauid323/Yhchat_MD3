@@ -124,6 +124,8 @@ fun MessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
+    /** 点击 .splitfiles 分块清单文件的回调 */
+    onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -491,7 +493,8 @@ fun MessageItem(
                         onForward = onForward,
                         onFavorite = { _ -> favoriteMessage() },
                         onMultiSelect = onMultiSelect,
-                        isStreaming = isStreaming
+                        isStreaming = isStreaming,
+                        onSplitFileClick = onSplitFileClick
                     )
                 }
             }
@@ -1003,7 +1006,9 @@ fun AnimatedMessageItem(
     isCollapsed: Boolean = false,
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
-    enableContextMenu: Boolean = true
+    enableContextMenu: Boolean = true,
+    /** 点击 .splitfiles 分块清单文件的回调 */
+    onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
     val isNewMessage = remember(message.msgId) {
         val currentTime = System.currentTimeMillis()
@@ -1065,6 +1070,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    onSplitFileClick = onSplitFileClick,
                 )
             }
         }
@@ -1125,6 +1131,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    onSplitFileClick = onSplitFileClick,
                 )
             }
         }

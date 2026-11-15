@@ -178,7 +178,10 @@ class LocalApiRouter(private val context: Context) {
                 "registerTime" to detail.registerTime,
                 "onlineDay" to detail.onlineDay,
                 "ipGeo" to (detail.ipGeo ?: ""),
-                "medals" to (detail.medalList ?: emptyList<Any>()).map { it.name }
+                // medalList 声明为非空 List<MedalInfo>，不需要 ?: 兜底。
+                // 之前写成 `?: emptyList<Any>()` 会把整个表达式推断成 List<Any>，
+                // 于是 it.name 找不到 —— 这里直接用即可。
+                "medals" to detail.medalList.map { it.name }
             )
         )
     }
@@ -361,7 +364,10 @@ class LocalApiRouter(private val context: Context) {
         "timestamp" to timestampMs,
         "unreadCount" to unreadMessage,
         "doNotDisturb" to (doNotDisturb == 1),
-        "isTop" to (timestamp != 0L && at != 0L)
+        // 注意：Conversation 模型里没有"是否置顶"的字段。
+        // 之前这里写的是 (timestamp != 0L && at != 0L)，拿两个不相关的字段凑了个
+        // 恒为 false 的值，等于骗调用方。宁可不出这个字段，也不给错的值。
+        "mentioned" to (at == 1)
     )
 
     private fun ok(data: Any?): HttpResponse {

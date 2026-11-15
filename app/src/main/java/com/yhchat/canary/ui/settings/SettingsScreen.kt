@@ -591,6 +591,11 @@ fun SettingsScreen(
                     )
                 )
             }
+
+            // 大文件发送：非 VIP 分块上传
+            item {
+                SplitUploadSettingsGroup(context = context)
+            }
             
             // 显示设置
             item {

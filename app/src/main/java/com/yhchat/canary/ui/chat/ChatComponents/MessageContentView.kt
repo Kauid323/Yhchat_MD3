@@ -122,7 +122,9 @@ fun MessageContentView(
     onForward: (ChatMessage) -> Unit = {},
     onFavorite: (ChatMessage) -> Unit = {},
     onMultiSelect: (() -> Unit)? = null,
-    isStreaming: Boolean = false
+    isStreaming: Boolean = false,
+    /** 点击 `.splitfiles` 分块清单文件时触发（fileUrl, fileName） */
+    onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
     val textColor = if (isMyMessage) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -278,28 +280,35 @@ fun MessageContentView(
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
                                     onClick = {
-                                        when (downloadState) {
-                                            is DownloadState.Idle, is DownloadState.Error, is DownloadState.Cancelled -> {
-                                                DownloadManager.startDownload(
-                                                    context = context,
-                                                    fileUrl = fileUrl,
-                                                    fileName = fileName,
-                                                    fileSize = content.fileSize ?: 0L,
-                                                    msgId = message.msgId
-                                                )
-                                            }
-                                            is DownloadState.Completed -> {
-                                                // 文件已下载完成，可以打开文件
-                                                handleFileDownload(
-                                                    context = context,
-                                                    fileUrl = fileUrl,
-                                                    fileName = fileName,
-                                                    fileSize = content.fileSize ?: 0L,
-                                                    msgId = message.msgId
-                                                )
-                                            }
-                                            else -> {
-                                                // 正在下载中，不做任何操作
+                                        // `.splitfiles` 不是普通文件，点了要走"解析清单 → 询问 → 下载还原"
+                                        if (com.yhchat.canary.utils.splitfile.SplitFileUploader
+                                                .isSplitFile(fileName)
+                                        ) {
+                                            onSplitFileClick(fileUrl, fileName)
+                                        } else {
+                                            when (downloadState) {
+                                                is DownloadState.Idle, is DownloadState.Error, is DownloadState.Cancelled -> {
+                                                    DownloadManager.startDownload(
+                                                        context = context,
+                                                        fileUrl = fileUrl,
+                                                        fileName = fileName,
+                                                        fileSize = content.fileSize ?: 0L,
+                                                        msgId = message.msgId
+                                                    )
+                                                }
+                                                is DownloadState.Completed -> {
+                                                    // 文件已下载完成，可以打开文件
+                                                    handleFileDownload(
+                                                        context = context,
+                                                        fileUrl = fileUrl,
+                                                        fileName = fileName,
+                                                        fileSize = content.fileSize ?: 0L,
+                                                        msgId = message.msgId
+                                                    )
+                                                }
+                                                else -> {
+                                                    // 正在下载中，不做任何操作
+                                                }
                                             }
                                         }
                                     },

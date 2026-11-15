@@ -56,7 +56,9 @@ data class ChatUiState(
     val chatBackgroundUrl: String? = null,  // 聊天背景图片URL
     val menuButtons: List<com.yhchat.canary.data.model.MenuButton> = emptyList(),  // 群聊菜单按钮
     val uploadProgress: Float? = null, // 上传进度 (0.0 - 1.0)
-    val scrollToMsgId: String? = null
+    val scrollToMsgId: String? = null,
+    /** 分块上传进度；非空表示正在分块发送大文件 */
+    val splitUploadProgress: com.yhchat.canary.data.model.SplitUploadProgress? = null
 )
 
 @HiltViewModel
@@ -959,6 +961,29 @@ class ChatViewModel @Inject constructor(
                 Log.d(tag, "当前chatId: $currentChatId, chatType: $currentChatType")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
 
+                // ---- 非 VIP 分块上传 ----
+                // 开关打开且文件超过阈值时，走「切块 → 逐块上传 → 生成 .splitfiles」这条路，
+                // 最终把清单本身当作一个小文件发出去。
+                val splitEnabled = com.yhchat.canary.ui.settings.isSplitUploadEnabled(context)
+                val sourceSize = queryFileSize(context, fileUri)
+                if (splitEnabled && sourceSize >
+                    com.yhchat.canary.utils.splitfile.SplitFileSettings.SPLIT_THRESHOLD_BYTES
+                ) {
+                    Log.d(tag, "大文件走分块上传: $sourceSize 字节")
+                    uploadSplitFile(
+                        context = context,
+                        fileUri = fileUri,
+                        sourceSize = sourceSize,
+                        quoteMsgId = quoteMsgId,
+                        quoteMsgText = quoteMsgText,
+                        quoteImageUrl = quoteImageUrl,
+                        quoteImageName = quoteImageName,
+                        quoteVideoUrl = quoteVideoUrl,
+                        quoteVideoTime = quoteVideoTime
+                    )
+                    return@launch
+                }
+
                 val uploadToken = getQiniuUploadToken("文件") {
                     apiService.getQiniuFileToken(it)
                 } ?: return@launch
@@ -1037,6 +1062,119 @@ class ChatViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(uploadProgress = null)
                 uploadJob = null
             }
+        }
+    }
+
+    /** 查询 content:// 或 file:// 的文件大小 */
+    private fun queryFileSize(context: android.content.Context, uri: android.net.Uri): Long {
+        return runCatching {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                ?: runCatching {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (cursor.moveToFirst() && idx >= 0) cursor.getLong(idx) else -1L
+                    }
+                }.getOrNull()
+                ?: -1L
+        }.getOrDefault(-1L)
+    }
+
+    /**
+     * 分块上传：切块 → 逐块传七牛 → 生成 .splitfiles → 把清单当小文件发出去。
+     *
+     * 复用的还是 [uploadAndSendFile] 那条发送链路，只是把「上传的对象」
+     * 从原文件换成了清单文件。
+     */
+    private suspend fun uploadSplitFile(
+        context: android.content.Context,
+        fileUri: android.net.Uri,
+        sourceSize: Long,
+        quoteMsgId: String?,
+        quoteMsgText: String?,
+        quoteImageUrl: String?,
+        quoteImageName: String?,
+        quoteVideoUrl: String?,
+        quoteVideoTime: Long?
+    ) {
+        _uiState.value = _uiState.value.copy(splitUploadProgress = com.yhchat.canary.data.model.SplitUploadProgress())
+
+        val uploadToken = getQiniuUploadToken("文件") {
+            apiService.getQiniuFileToken(it)
+        } ?: return
+
+        val originalName = getFileNameFromUri(context, fileUri) ?: "未知文件"
+
+        // 分块大小由设置决定（1–40MB，默认 32）
+        val chunkSize = com.yhchat.canary.utils.splitfile.SplitFileSettings
+            .chunkSizeBytes(context)
+        Log.d(tag, "分块大小: ${chunkSize / 1024 / 1024} MB")
+
+        val splitResult = com.yhchat.canary.utils.splitfile.SplitFileUploader.splitAndUpload(
+            context = context,
+            fileUri = fileUri,
+            uploadToken = uploadToken,
+            chunkSize = chunkSize,
+            originalName = originalName,
+            onProgress = { progress ->
+                _uiState.value = _uiState.value.copy(
+                    splitUploadProgress = progress,
+                    uploadProgress = progress.fraction
+                )
+            }
+        )
+
+        val manifestFile = splitResult.getOrElse { e ->
+            Log.e(tag, "分块上传失败", e)
+            _uiState.value = _uiState.value.copy(
+                error = "分块上传失败: ${e.message}",
+                splitUploadProgress = null
+            )
+            return
+        }
+
+        try {
+            // 清单本身很小，直接走普通文件上传
+            val manifestUri = android.net.Uri.fromFile(manifestFile)
+            val manifestUpload = com.yhchat.canary.utils.FileUploadUtil.uploadFile(
+                context = context,
+                fileUri = manifestUri,
+                uploadToken = uploadToken
+            ).getOrElse { e ->
+                Log.e(tag, "清单上传失败", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "清单上传失败: ${e.message}",
+                    splitUploadProgress = null
+                )
+                return
+            }
+
+            val sendResult = messageRepository.sendMessage(
+                chatId = currentChatId,
+                chatType = currentChatType,
+                payload = SendMessagePayload(
+                    contentType = 4,
+                    fileName = manifestFile.name,
+                    fileKey = manifestUpload.key,
+                    fileSize = manifestUpload.fsize,
+                    quoteMsgId = quoteMsgId,
+                    quoteMsgText = quoteMsgText,
+                    quoteImageUrl = quoteImageUrl,
+                    quoteImageName = quoteImageName,
+                    quoteVideoUrl = quoteVideoUrl,
+                    quoteVideoTime = quoteVideoTime
+                )
+            )
+
+            sendResult.fold(
+                onSuccess = { loadMessages(refresh = true) },
+                onFailure = { e ->
+                    Log.e(tag, "发送清单消息失败", e)
+                    _uiState.value = _uiState.value.copy(error = "发送清单失败: ${e.message}")
+                }
+            )
+        } finally {
+            runCatching { manifestFile.delete() }
+            _uiState.value = _uiState.value.copy(splitUploadProgress = null)
         }
     }
 

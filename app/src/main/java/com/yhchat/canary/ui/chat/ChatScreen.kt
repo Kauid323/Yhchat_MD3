@@ -162,6 +162,11 @@ fun ChatScreen(
     // 图片预览状态
     var showImageViewer by rememberSaveable { mutableStateOf(false) }
     var currentImageUrl by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // 用户点了某个 .splitfiles 后，解析出的清单暂存在这里，非空时显示下载弹窗
+    var pendingSplitManifest by remember {
+        mutableStateOf<com.yhchat.canary.data.model.SplitFileManifest?>(null)
+    }
     var currentImageGallery by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var currentImageIndex by rememberSaveable { mutableStateOf(0) }
     val chatImageGallery by remember(messages) {
@@ -697,6 +702,22 @@ fun ChatScreen(
                             isSelected = selectedMessageIds.contains(message.msgId),
                             isStreaming = isStreaming,
                             enableContextMenu = enableChatContextMenu,
+                            onSplitFileClick = { fileUrl, fileName ->
+                                // 点 .splitfiles：拉清单 → 解出分块信息 → 弹窗询问是否下载还原
+                                coroutineScope.launch {
+                                    val manifest = com.yhchat.canary.ui.chat.ChatComponents
+                                        .loadSplitManifest(context, fileUrl)
+                                    if (manifest == null) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "无法解析分块清单：$fileName",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        pendingSplitManifest = manifest
+                                    }
+                                }
+                            },
                             onSelectionToggle = { msgId ->
                                 selectedMessageIds = if (selectedMessageIds.contains(msgId)) {
                                     selectedMessageIds - msgId
@@ -1495,6 +1516,15 @@ fun ChatScreen(
         )
     }
     
+    // .splitfiles 清单的下载还原弹窗
+    pendingSplitManifest?.let { manifest ->
+        com.yhchat.canary.ui.chat.ChatComponents.SplitFileDownloadDialog(
+            context = context,
+            manifest = manifest,
+            onDismiss = { pendingSplitManifest = null }
+        )
+    }
+
     // 消息编辑对话框
     if (showEditDialog && messageToEdit != null) {
         MessageEditDialog(
