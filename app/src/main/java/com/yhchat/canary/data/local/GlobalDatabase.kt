@@ -11,14 +11,18 @@ import com.yhchat.canary.data.model.SavedAccount
  */
 @Database(
     entities = [
-        SavedAccount::class
+        SavedAccount::class,
+        KnownDevice::class
     ],
-    version = 1,
+    // 从 1 升到 2：新增 known_devices 表（已知设备 / 历史设备）
+    version = 2,
     exportSchema = false
 )
 abstract class GlobalDatabase : RoomDatabase() {
 
     abstract fun savedAccountDao(): SavedAccountDao
+
+    abstract fun knownDeviceDao(): KnownDeviceDao
 
     companion object {
         @Volatile

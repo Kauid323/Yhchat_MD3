@@ -941,6 +941,35 @@ class UserRepository @Inject constructor(
     }
     
     /**
+     * 让指定设备下线。
+     *
+     * 成功后该设备会从在线列表消失，但本地仍保留历史记录。
+     */
+    suspend fun offlineDevice(deviceId: String): Result<Boolean> {
+        return try {
+            val token = getToken() ?: return Result.failure(Exception("未登录"))
+            if (deviceId.isBlank()) return Result.failure(Exception("设备ID为空"))
+
+            val response = apiService.offlineDevice(
+                token = token,
+                request = com.yhchat.canary.data.model.DeviceOfflineRequest(deviceId = deviceId)
+            )
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null && body.code == 1) {
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(body?.message ?: "下线失败"))
+                }
+            } else {
+                Result.failure(Exception("网络请求失败: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 获取在线设备列表
      */
     suspend fun getOnlineDevices(): Result<List<com.yhchat.canary.data.model.DeviceInfo>> {

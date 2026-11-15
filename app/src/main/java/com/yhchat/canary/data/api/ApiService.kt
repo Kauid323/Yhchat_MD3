@@ -1113,6 +1113,16 @@ interface ApiService {
         @Header("token") token: String
     ): Response<okhttp3.ResponseBody>
 
+    /**
+     * 让指定设备下线
+     * POST /v1/user/device-offline
+     */
+    @POST("v1/user/device-offline")
+    suspend fun offlineDevice(
+        @Header("token") token: String,
+        @Body request: com.yhchat.canary.data.model.DeviceOfflineRequest
+    ): Response<com.yhchat.canary.data.model.ApiStatus>
+
     @POST("v1/user/invite/change-user-invite-code")
     suspend fun changeInviteCode(
         @Header("token") token: String,

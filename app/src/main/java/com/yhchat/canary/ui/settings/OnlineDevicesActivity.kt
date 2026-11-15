@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,6 +108,14 @@ fun OnlineDevicesScreen(
     LaunchedEffect(Unit) {
         deviceViewModel.init(context)
         deviceViewModel.loadOnlineDevices()
+    }
+
+    // 下线结果提示
+    LaunchedEffect(deviceState.userMessage) {
+        deviceState.userMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            deviceViewModel.consumeUserMessage()
+        }
     }
     
     Scaffold(
@@ -178,10 +190,43 @@ fun OnlineDevicesScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(deviceState.devices) { device ->
-                    DeviceItem(device = device)
+                // ---- 在线设备 ----
+                if (deviceState.onlineDevices.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "在线设备",
+                            count = deviceState.onlineDevices.size
+                        )
+                    }
+                    items(deviceState.onlineDevices, key = { "online_${it.deviceId}" }) { device ->
+                        DeviceItem(
+                            device = device,
+                            isOperating = device.deviceId in deviceState.operatingDeviceIds,
+                            onOffline = { deviceViewModel.offlineDevice(device) }
+                        )
+                    }
                 }
-                
+
+                // ---- 历史设备 ----
+                // 服务端只返回在线设备，这里展示的是本地记录过的、当前已不在线的设备。
+                // 没有它的话，用户一下线就再也看不到那台设备了。
+                if (deviceState.historyDevices.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "历史设备",
+                            count = deviceState.historyDevices.size,
+                            subtitle = "曾经登录过，当前不在线"
+                        )
+                    }
+                    items(deviceState.historyDevices, key = { "history_${it.deviceId}" }) { device ->
+                        DeviceItem(
+                            device = device,
+                            isOperating = false,
+                            onOffline = null
+                        )
+                    }
+                }
+
                 // 空状态
                 if (deviceState.devices.isEmpty() && !deviceState.isLoading) {
                     item {
@@ -202,7 +247,7 @@ fun OnlineDevicesScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "暂无在线设备",
+                                    text = "暂无设备记录",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -210,7 +255,7 @@ fun OnlineDevicesScreen(
                         }
                     }
                 }
-                
+
                 // 加载状态
                 if (deviceState.isLoading) {
                     item {
@@ -248,16 +293,90 @@ fun OnlineDevicesScreen(
 }
 
 /**
- * 设备列表项
+ * 分组标题：在线设备 / 历史设备
+ */
+@Composable
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    subtitle: String? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (subtitle != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+/**
+ * 设备列表项。
+ *
+ * @param onOffline 非空时显示"下线"按钮；历史设备传 null（它已经不在线了）
+ * @param isOperating 下线请求进行中，禁用按钮并显示进度
  */
 @Composable
 fun DeviceItem(
     device: DeviceInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isOperating: Boolean = false,
+    onOffline: (() -> Unit)? = null
 ) {
+    var showConfirm by remember { mutableStateOf(false) }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("下线该设备？") },
+            text = {
+                Text("「${device.getPlatformDisplayName()}」将被强制下线，需要重新登录才能继续使用。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showConfirm = false
+                    onOffline?.invoke()
+                }) {
+                    Text("下线", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (device.isOnline) {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            } else {
+                // 历史设备压暗一档，和在线设备拉开层次
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+        )
     ) {
         Row(
             modifier = Modifier
@@ -270,34 +389,73 @@ fun DeviceItem(
                 imageVector = device.getPlatformIcon(),
                 contentDescription = device.platform,
                 modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = if (device.isOnline) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                }
             )
             
             Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                // 平台名称
-                Text(
-                    text = device.getPlatformDisplayName(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = device.getPlatformDisplayName(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (device.isOnline) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    if (device.isOnline) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // 在线状态点：比纯文字更省空间，也更容易扫读
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                // 设备ID
                 Text(
                     text = "设备ID: ${device.deviceId}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
-                // 登录时间
                 Text(
-                    text = "登录时间: ${device.getFormattedLoginTime()}",
+                    text = "${if (device.isOnline) "登录时间" else "最后登录"}: ${device.getFormattedLoginTime()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // 下线按钮：只给在线设备
+            if (onOffline != null && device.isOnline) {
+                Spacer(modifier = Modifier.width(8.dp))
+                if (isOperating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    TextButton(onClick = { showConfirm = true }) {
+                        Text(
+                            text = "下线",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
     }

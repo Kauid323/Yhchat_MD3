@@ -121,6 +121,13 @@
             android:label="机器人设置"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.YhchatCanary" />
+
+        <!-- 本地 API 管理页 -->
+        <activity
+            android:name=".ui.settings.LocalApiActivity"
+            android:exported="false"
+            android:label="本地 API"
+            android:theme="@style/Theme.YhchatCanary" />
         
         <activity
             android:name=".ui.group.ChatSearchActivity"

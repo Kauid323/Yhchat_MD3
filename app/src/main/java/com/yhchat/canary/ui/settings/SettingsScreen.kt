@@ -574,6 +574,23 @@ fun SettingsScreen(
             item {
                 NtfySettingsGroup(context = context)
             }
+
+            // 高级：本地 API
+            item {
+                SettingsGroup(
+                    title = "高级",
+                    items = listOf(
+                        {
+                            SettingsItemCell(
+                                icon = Icons.Default.Dns,
+                                title = "本地 API",
+                                subtitle = "把会话 / 消息 / 详情 / 发送暴露成本地 JSON 接口，供 agent 调用",
+                                onClick = { LocalApiActivity.start(context) }
+                            )
+                        }
+                    )
+                )
+            }
             
             // 显示设置
             item {

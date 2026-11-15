@@ -258,4 +258,14 @@ object RepositoryFactory {
         val database = com.yhchat.canary.data.local.GlobalDatabase.getDatabase(context)
         return com.yhchat.canary.data.repository.AccountRepository(database.savedAccountDao(), context.applicationContext)
     }
+
+    /**
+     * 获取设备仓库实例。
+     *
+     * 设备记录存在 GlobalDatabase 里（按 userId + deviceId 双主键隔离），
+     * 一个实例就能管所有账号的设备历史。
+     */
+    fun getDeviceRepository(context: Context): com.yhchat.canary.data.repository.DeviceRepository {
+        return com.yhchat.canary.data.repository.DeviceRepository(context.applicationContext)
+    }
 }

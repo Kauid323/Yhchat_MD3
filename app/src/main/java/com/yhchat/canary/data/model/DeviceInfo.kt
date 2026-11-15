@@ -6,6 +6,15 @@ import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.google.gson.annotations.SerializedName
+
+/**
+ * 让设备下线：`POST /v1/user/device-offline`
+ */
+data class DeviceOfflineRequest(
+    @SerializedName("deviceId")
+    val deviceId: String
+)
 
 /**
  * 设备信息数据模型
@@ -14,7 +23,14 @@ data class DeviceInfo(
     val userId: String,
     val platform: String,
     val deviceId: String,
-    val loginTimestamp: Long
+    val loginTimestamp: Long,
+    /**
+     * 是否当前在线。
+     *
+     * 服务端只返回在线设备，但界面要把「历史设备」也列出来，
+     * 所以同一个模型要能表达离线状态。
+     */
+    val isOnline: Boolean = true
 ) {
     /**
      * 获取平台显示名称

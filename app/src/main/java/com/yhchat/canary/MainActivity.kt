@@ -257,6 +257,34 @@ class MainActivity : BaseActivity() {
             }
         }
 
+        // 启动时同步一次设备列表。
+        //
+        // 目的有两个：
+        //   1. 把当前在线的设备记录到本地（下次打开就能看到「历史设备」）；
+        //   2. 顺便刷新 lastSeen，让「最近使用过的设备」排序准确。
+        //
+        // 放在后台协程里、失败不提示：这是纯后台维护动作，
+        // 网络不通不该在启动时糊用户一脸错误。
+        LaunchedEffect(isLoggedIn) {
+            if (!isLoggedIn) return@LaunchedEffect
+            runCatching {
+                val deviceRepository = com.yhchat.canary.data.di.RepositoryFactory
+                    .getDeviceRepository(applicationContext)
+                val userRepository = com.yhchat.canary.data.di.RepositoryFactory
+                    .getUserRepository(applicationContext)
+                val tokenRepository = com.yhchat.canary.data.di.RepositoryFactory
+                    .getTokenRepository(applicationContext)
+                userRepository.setTokenRepository(tokenRepository)
+
+                val currentUserId = tokenRepository.getUserIdSync().orEmpty()
+                if (currentUserId.isNotBlank()) {
+                    userRepository.getOnlineDevices().onSuccess { online ->
+                        deviceRepository.mergeOnlineDevices(currentUserId, online)
+                    }
+                }
+            }
+        }
+
         when {
             !isLoggedIn -> {
                 // 未登录，显示登录界面

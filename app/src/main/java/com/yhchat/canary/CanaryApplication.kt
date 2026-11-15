@@ -27,6 +27,14 @@ class CanaryApplication : Application() {
         CrashHandler.install(this)
         AppForegroundTracker.init()
         startMemoryAutoCleanLoop()
+
+        // 上次开着本地 API 的话，重启后自动恢复。
+        // 放到后台线程做：绑定端口是阻塞操作，不能在 onCreate 里卡主线程。
+        appScope.launch {
+            runCatching {
+                com.yhchat.canary.utils.localapi.LocalApiServer.restoreIfEnabled(this@CanaryApplication)
+            }
+        }
     }
 
     private fun startMemoryAutoCleanLoop() {
