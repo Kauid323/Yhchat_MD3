@@ -29,7 +29,7 @@ object SplitFileDownloader {
     private const val TAG = "SplitFileDownloader"
 
     /** 七牛资源的基础访问地址（和 Disk 那边的拼法保持一致） */
-    private const val FILE_BASE_URL = "https://chat-img.jwznb.com/"
+    private const val FILE_BASE_URL = "https://chat-file.jwznb.com/"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
