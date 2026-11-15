@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,17 +53,21 @@ internal fun CssStyle.mergeWith(override: CssStyle): CssStyle = CssStyle(
     minWidth = override.minWidth ?: minWidth,
     height = override.height ?: height,
     minHeight = override.minHeight ?: minHeight,
+    widthPercent = override.widthPercent ?: widthPercent,
+    heightPercent = override.heightPercent ?: heightPercent,
     margin = override.margin ?: margin,
     marginTop = override.marginTop ?: marginTop,
     marginRight = override.marginRight ?: marginRight,
     marginBottom = override.marginBottom ?: marginBottom,
     marginLeft = override.marginLeft ?: marginLeft,
+    marginAuto = override.marginAuto || marginAuto,
     padding = override.padding ?: padding,
     paddingTop = override.paddingTop ?: paddingTop,
     paddingRight = override.paddingRight ?: paddingRight,
     paddingBottom = override.paddingBottom ?: paddingBottom,
     paddingLeft = override.paddingLeft ?: paddingLeft,
     borderRadius = override.borderRadius ?: borderRadius,
+    borderRadiusIsCircle = override.borderRadiusIsCircle || borderRadiusIsCircle,
     border = override.border ?: border,
     borderTop = override.borderTop ?: borderTop,
     borderRight = override.borderRight ?: borderRight,
@@ -126,7 +132,12 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
     val paddingStart = (style.paddingLeft ?: style.padding ?: 0.dp).coerceAtLeast(0.dp)
     val paddingEnd = (style.paddingRight ?: style.padding ?: 0.dp).coerceAtLeast(0.dp)
     val radius = style.borderRadius
-    val shape = radius?.let { RoundedCornerShape(it) }
+    // border-radius:50% 或 任意不小于短边的圆角都当圆形处理
+    val shape: androidx.compose.ui.graphics.Shape? = when {
+        style.borderRadiusIsCircle -> CircleShape
+        radius != null -> RoundedCornerShape(radius)
+        else -> null
+    }
 
     var modifier = this.padding(
         top = marginTop,
@@ -181,6 +192,39 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
         start = paddingStart,
         end = paddingEnd
     )
+}
+
+/**
+ * 给图片 / 头像用的外壳：在 [htmlBoxModel] 之外补上圆角裁剪和百分比尺寸。
+ *
+ * 之前的图片节点完全不经过 htmlBoxModel，所以 `border-radius:50%` 被丢掉，
+ * 群聊卡片里的圆头像一直显示成方图。这里单独抽一个函数，
+ * 因为它需要父容器宽度来解百分比（[containerWidth]）。
+ */
+internal fun Modifier.htmlMediaBoxModel(style: CssStyle, containerWidth: Dp?): Modifier {
+    var modifier = this
+    // 百分比宽高换算成实际 Dp；解析不出就退回绝对尺寸
+    val resolvedWidth = style.width
+        ?: style.widthPercent?.let { pct -> containerWidth?.let { it * pct } }
+    val resolvedHeight = style.height
+        ?: style.heightPercent?.let { pct -> containerWidth?.let { it * pct } }
+
+    val radius = style.borderRadius
+    when {
+        style.borderRadiusIsCircle -> modifier = modifier.clip(CircleShape)
+        radius != null -> modifier = modifier.clip(RoundedCornerShape(radius))
+        else -> Unit
+    }
+
+    modifier = modifier.htmlBoxModel(
+        style.copy(
+            width = resolvedWidth,
+            height = resolvedHeight,
+            borderRadius = null,
+            borderRadiusIsCircle = false
+        )
+    )
+    return modifier
 }
 
 internal fun parseBorderColor(border: String): Color {

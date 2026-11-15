@@ -484,6 +484,30 @@ interface ApiService {
         @Header("token") token: String,
         @Body request: BotGroupPermissionGetRequest
     ): Response<BotGroupPermissionGetResponse>
+
+    /**
+     * 获取机器人自己的设置表单（结构由机器人的 setting 定义决定）
+     * POST /v1/bot/get-user-settings-json
+     */
+    @POST("v1/bot/get-user-settings-json")
+    suspend fun getBotUserSettings(
+        @Header("token") token: String,
+        @Body request: BotUserSettingsGetRequest
+    ): Response<com.yhchat.canary.data.model.BotSettingsResponse>
+
+    /**
+     * 提交机器人设置
+     * POST /v1/bot/send-setting-json
+     *
+     * 用 JsonObject 而不是 data class：settingJson 是「序列化后再塞进字符串」的
+     * 双层结构，而且里面 value 的类型随控件变（switch 布尔、其余字符串），
+     * 用强类型模型反而要靠自定义 TypeAdapter 才能表达。
+     */
+    @POST("v1/bot/send-setting-json")
+    suspend fun sendBotSettings(
+        @Header("token") token: String,
+        @Body request: com.google.gson.JsonObject
+    ): Response<com.yhchat.canary.data.model.ApiStatus>
     
     /**
      * 批量撤回消息 - 使用protobuf
@@ -2351,6 +2375,17 @@ data class BotGroupPermissionGetRequest(
     val botId: String,
     @SerializedName("groupId")
     val groupId: String
+)
+
+/**
+ * 读取机器人设置。注意请求里叫 chatId，提交时叫 groupId —— 这是服务端的命名不一致，
+ * 不是笔误，两边都按文档来。
+ */
+data class BotUserSettingsGetRequest(
+    @SerializedName("botId")
+    val botId: String,
+    @SerializedName("chatId")
+    val chatId: String
 )
 
 data class BotGroupPermissionGetResponse(

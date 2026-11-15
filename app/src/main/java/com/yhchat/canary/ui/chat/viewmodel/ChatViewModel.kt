@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -59,6 +60,55 @@ data class ChatUiState(
     val scrollToMsgId: String? = null
 )
 
+/** 分块任务当前所处的阶段 */
+enum class SplitDownloadStage {
+    /** 空闲（未开始 / 已取消 / 失败待重试） */
+    Idle,
+    /** 正在下载分块 */
+    Downloading,
+    /** 正在拼接 */
+    Merging,
+    /** 正在校验 */
+    Verifying,
+    /** 已完成 */
+    Completed
+}
+
+/** 一个分块任务的下载进度，供卡片渲染 */
+data class SplitDownloadProgress(
+    val totalChunks: Int = 0,
+    val doneChunks: Int = 0,
+    val isRunning: Boolean = false,
+    val isCompleted: Boolean = false,
+    val isFailed: Boolean = false,
+    val stage: SplitDownloadStage = SplitDownloadStage.Idle,
+    /** 当前正在下载的块号 */
+    val currentChunk: Int = 0,
+    /** 当前块已接收字节 */
+    val currentBytes: Long = 0L,
+    /** 当前块总字节，服务端没给 Content-Length 时为 -1 */
+    val currentChunkBytes: Long = -1L,
+    /** 失败原因 */
+    val errorMessage: String? = null,
+    /** 失败的块号，用于"重试只补缺块"的提示 */
+    val failedChunks: List<Int> = emptyList(),
+    /** 完成后本机文件路径 */
+    val savedFilePath: String? = null
+) {
+    /** 总进度 0f..1f */
+    val fraction: Float
+        get() {
+            if (totalChunks <= 0) return 0f
+            val base = doneChunks.toFloat() / totalChunks
+            // 正在下载当前块时，把它的字节进度也算进去，避免进度条一格一格跳
+            if (isRunning && currentChunkBytes > 0L && currentChunk > 0) {
+                val within = (currentBytes.toFloat() / currentChunkBytes).coerceIn(0f, 1f)
+                return ((doneChunks + within) / totalChunks).coerceIn(0f, 1f)
+            }
+            return base.coerceIn(0f, 1f)
+        }
+}
+
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -113,6 +163,152 @@ class ChatViewModel @Inject constructor(
 
     private val _messages = mutableStateListOf<ChatMessage>()
     val messages: List<ChatMessage> = _messages
+
+    // ------------------------------------------------------------------
+    // 大文件分块消息适配
+    //
+    // 分块协议是一层"消息之上"的语义：若干条文件消息 + 一条 JSON 清单
+    // 共同拼成一个传输任务。这里持有索引，并在消息变化时把任务快照
+    // 同步到一个可观察列表里供界面渲染。
+    // ------------------------------------------------------------------
+    private val splitFileAdapter = com.yhchat.canary.utils.splitfile.SplitFileAdapter()
+    private val _splitTasks = mutableStateListOf<com.yhchat.canary.utils.splitfile.SplitTransferTask>()
+    val splitTasks: List<com.yhchat.canary.utils.splitfile.SplitTransferTask> = _splitTasks
+
+    /** 分块下载进度：transferId -> 已完成块数 / 总块数 */
+    private val _splitProgress = mutableStateMapOf<String, SplitDownloadProgress>()
+    val splitProgress: Map<String, SplitDownloadProgress> = _splitProgress
+
+    private val splitDownloader by lazy {
+        com.yhchat.canary.utils.splitfile.SplitFileDownloader(context)
+    }
+    private val splitDownloadJobs =
+        mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    /**
+     * 把一批消息喂给分块索引，并刷新任务快照。
+     *
+     * 顺序无关（协议明确支持历史倒序与实时乱序），所以这里直接在
+     * 消息列表变化时整体重喂一次拿不到增量收益，但正确性最好保证 ——
+     * 索引内部对重复输入做了去重，重喂是幂等的。
+     */
+    private fun refreshSplitTasks() {
+        splitFileAdapter.offerAll(_messages.toList())
+        val tasks = splitFileAdapter.tasks()
+        _splitTasks.clear()
+        _splitTasks.addAll(tasks)
+    }
+
+    /** 某条消息该不该在消息流里被折叠（属于已建卡的任务） */
+    fun splitDisplayModeOf(
+        message: ChatMessage
+    ): com.yhchat.canary.utils.splitfile.SplitDisplayMode =
+        splitFileAdapter.displayModeOf(message)
+
+    /**
+     * 启动 / 继续下载某个传输任务。
+     *
+     * 分块和合并都在 IO 上跑，进度通过 [_splitProgress] 回到界面。
+     * 失败时保留已下好的块，用户再点一次就只补缺块。
+     */
+    fun downloadSplitTask(task: com.yhchat.canary.utils.splitfile.SplitTransferTask) {
+        val transferId = task.key.transferId
+        if (splitDownloadJobs[transferId]?.isActive == true) return
+
+        _splitProgress[transferId] = SplitDownloadProgress(
+            totalChunks = task.manifest.chunkCount,
+            doneChunks = 0,
+            isRunning = true
+        )
+
+        splitDownloadJobs[transferId] = viewModelScope.launch {
+            val result = splitDownloader.download(
+                task = task,
+                listener = object : com.yhchat.canary.utils.splitfile.SplitFileDownloader.ProgressListener {
+                    override fun onChunkStart(chunkIndex: Int, totalChunks: Int) = Unit
+                    override fun onChunkProgress(chunkIndex: Int, bytesRead: Long, totalBytes: Long) {
+                        val current = _splitProgress[transferId] ?: return
+                        _splitProgress[transferId] = current.copy(
+                            currentBytes = bytesRead,
+                            currentChunk = chunkIndex,
+                            currentChunkBytes = totalBytes
+                        )
+                    }
+                    override fun onChunkDone(chunkIndex: Int) {
+                        val current = _splitProgress[transferId] ?: return
+                        _splitProgress[transferId] = current.copy(doneChunks = current.doneChunks + 1)
+                    }
+                    override fun onMerging() {
+                        val current = _splitProgress[transferId] ?: return
+                        _splitProgress[transferId] = current.copy(stage = SplitDownloadStage.Merging)
+                    }
+                    override fun onVerifying() {
+                        val current = _splitProgress[transferId] ?: return
+                        _splitProgress[transferId] = current.copy(stage = SplitDownloadStage.Verifying)
+                    }
+                }
+            )
+
+            _splitProgress[transferId] = when (result) {
+                is com.yhchat.canary.utils.splitfile.SplitFileDownloader.Result.Success -> {
+                    // 协议：开启「传完自动清缓存」时，在合并 + 完整校验 + 发布成功之后清理分块。
+                    // 只在 Success 分支执行 —— 失败/取消/未完成都不清，断点要能续传。
+                    val autoClean = com.yhchat.canary.ui.settings
+                        .isAutoCleanSplitCacheEnabled(context)
+                    if (autoClean) {
+                        // 清分块但保留 merged 后的成品文件
+                        splitDownloader.clearChunksOnly(transferId)
+                    }
+
+                    SplitDownloadProgress(
+                        totalChunks = task.manifest.chunkCount,
+                        doneChunks = task.manifest.chunkCount,
+                        isRunning = false,
+                        isCompleted = true,
+                        savedFilePath = result.file.absolutePath,
+                        stage = SplitDownloadStage.Completed
+                    )
+                }
+                is com.yhchat.canary.utils.splitfile.SplitFileDownloader.Result.Failed ->
+                    (_splitProgress[transferId] ?: SplitDownloadProgress()).copy(
+                        isRunning = false,
+                        isFailed = true,
+                        errorMessage = result.message,
+                        failedChunks = result.failedChunks,
+                        stage = SplitDownloadStage.Idle
+                    )
+                com.yhchat.canary.utils.splitfile.SplitFileDownloader.Result.Cancelled ->
+                    (_splitProgress[transferId] ?: SplitDownloadProgress()).copy(
+                        isRunning = false,
+                        stage = SplitDownloadStage.Idle
+                    )
+            }
+        }
+    }
+
+    fun cancelSplitDownload(transferId: String) {
+        splitDownloadJobs[transferId]?.cancel()
+        splitDownloadJobs.remove(transferId)
+        _splitProgress[transferId] = (_splitProgress[transferId] ?: SplitDownloadProgress()).copy(
+            isRunning = false,
+            stage = SplitDownloadStage.Idle
+        )
+    }
+
+    /** 清理某个任务的分块缓存 */
+    fun clearSplitCache(transferId: String) {
+        splitDownloader.clearCache(transferId)
+        _splitProgress.remove(transferId)
+    }
+
+    /** 切换会话时清空分块索引，避免不同会话的 transferId 串到一起 */
+    private fun resetSplitState() {
+        splitFileAdapter.clear()
+        _splitTasks.clear()
+        _splitProgress.clear()
+        splitDownloadJobs.values.forEach { it.cancel() }
+        splitDownloadJobs.clear()
+    }
     
     // 长消息折叠状态
     private val _collapsedMessageIds = mutableStateListOf<String>()
@@ -234,6 +430,9 @@ class ChatViewModel @Inject constructor(
         // 清空之前的消息
         _messages.clear()
         _collapsedMessageIds.clear()
+        // 分块索引必须跟着清：不同会话里 transferId 可能重名，
+        // 不清会把上一个会话的任务卡片带过来
+        resetSplitState()
         hasMoreMessages = true
         oldestMsgSeq = 0
         oldestMsgId = null
@@ -1454,6 +1653,7 @@ class ChatViewModel @Inject constructor(
                         
                         _messages.clear()
                         _messages.addAll(filteredMessages.sortedBy { it.sendTime })
+                        refreshSplitTasks()
 
                         // 更新最旧消息的序列号和ID
                         if (newMessages.isNotEmpty()) {
@@ -1599,6 +1799,7 @@ class ChatViewModel @Inject constructor(
                     _messages.clear()
                     _messages.addAll(combinedMessages)
                     handleAutoCollapseForMessages(accumulatedMessages)
+                    refreshSplitTasks()
                     
                     // 更新最旧消息的序列号和ID
                     val oldest = _messages.minByOrNull { it.sendTime }
@@ -1678,13 +1879,14 @@ class ChatViewModel @Inject constructor(
                             Log.d(tag, "Filtered out ${newMessages.size - filteredMessages.size} messages from blocked users")
                         }
                         
-                        if (refresh) {
+                            if (refresh) {
                             // 刷新时替换所有消息
                             _messages.clear()
                             _collapsedMessageIds.clear()
                             val sortedMessages = filteredMessages.sortedBy { it.sendTime }
                             _messages.addAll(sortedMessages)
                             handleAutoCollapseForMessages(sortedMessages)
+                            refreshSplitTasks()
                         } else {
                             // 加载更多时与现有消息合并去重并严格按发送时间升序排列
                             val combined = (filteredMessages + _messages)
@@ -1693,6 +1895,7 @@ class ChatViewModel @Inject constructor(
                             _messages.clear()
                             _messages.addAll(combined)
                             handleAutoCollapseForMessages(filteredMessages)
+                            refreshSplitTasks()
                         }
 
                         // 更新最旧消息的序列号和ID
@@ -2641,6 +2844,7 @@ class ChatViewModel @Inject constructor(
                             val sortedMessages = _messages.sortedBy { it.sendTime }
                             _messages.clear()
                             _messages.addAll(sortedMessages)
+                            refreshSplitTasks()
                         }
 
                         _uiState.value = _uiState.value.copy(isRefreshing = false, error = null)

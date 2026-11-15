@@ -574,6 +574,11 @@ fun SettingsScreen(
             item {
                 NtfySettingsGroup(context = context)
             }
+
+            // 大文件分块与传输任务
+            item {
+                SplitFileSettingsGroup(context = context)
+            }
             
             // 显示设置
             item {

@@ -31,6 +31,9 @@ data class UserDetailUiState(
     val userDetail: UserDetail? = null,
     val createdBoards: List<BoardsByCreateItem> = emptyList(),
     val isLoadingBoards: Boolean = false,
+    /** 作者创建的表情包（第三方目录服务，失败时为空，不影响页面其它部分） */
+    val createdStickerPacks: List<com.yhchat.canary.data.model.StickerCatalogPack> = emptyList(),
+    val isLoadingStickerPacks: Boolean = false,
     val token: String = "",
     val isInAddressBook: Boolean = false,
     val isCheckingAddressBook: Boolean = true,
@@ -79,6 +82,8 @@ class UserDetailViewModel(context: Context) : ViewModel() {
     private val communityRepository: CommunityRepository = RepositoryFactory.getCommunityRepository(appContext)
     private val friendRepository: FriendRepository = RepositoryFactory.getFriendRepository(appContext)
     private val groupRepository: GroupRepository = RepositoryFactory.getGroupRepository(appContext)
+    private val stickerCatalogRepository =
+        com.yhchat.canary.data.repository.StickerCatalogRepository()
 
     private val _uiState = MutableStateFlow(UserDetailUiState())
     val uiState: StateFlow<UserDetailUiState> = _uiState.asStateFlow()
@@ -317,6 +322,18 @@ class UserDetailViewModel(context: Context) : ViewModel() {
                         _uiState.update { it.copy(isLoadingBoards = false) }
                     }
                 )
+
+                // 作者创建的表情包。走第三方目录服务，和云湖接口完全独立：
+                // 它挂了也只是一栏空着，不能让整个用户详情页变成错误页，
+                // 所以这里不设置 error 状态。
+                _uiState.update { it.copy(isLoadingStickerPacks = true) }
+                val packs = stickerCatalogRepository.getPacksByAuthor(userId)
+                _uiState.update {
+                    it.copy(
+                        isLoadingStickerPacks = false,
+                        createdStickerPacks = packs
+                    )
+                }
 
                 if (groupId != null) {
                     var page = 1

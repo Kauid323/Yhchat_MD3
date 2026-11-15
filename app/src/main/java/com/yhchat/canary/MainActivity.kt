@@ -36,7 +36,6 @@ import coil.request.CachePolicy
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.data.websocket.WebSocketService
 import com.yhchat.canary.ui.base.BaseActivity
-import com.yhchat.canary.ui.chat.ChatAddActivity
 import com.yhchat.canary.ui.chat.ChatScreen
 import com.yhchat.canary.ui.community.*
 import com.yhchat.canary.ui.components.AdaptiveNavigationBar
@@ -1032,14 +1031,20 @@ class MainActivity : BaseActivity() {
     
     /**
      * 处理 Deep Link
+     *
+     * 以前只认 chat-add，其它 scheme（含第三方扩展协议里的
+     * sticker-detail / expression-detail / send-msg）从系统外面点进来全部无反应。
+     * 现在统一交给 [UnifiedLinkHandler]：它内部已按 scheme 分派，
+     * 这里只负责"是不是我们能处理"这一层判断。
      */
     private fun handleDeepLink() {
         intent?.data?.toString()?.let { uriString ->
-            if (UnifiedLinkHandler.isChatAddLink(uriString)) {
-                // 延迟执行，确保 Activity 初始化完成
-                window.decorView.post {
-                    ChatAddActivity.start(this, uriString)
-                }
+            if (!UnifiedLinkHandler.isHandleableLink(uriString)) {
+                return@let
+            }
+            // 延迟执行，确保 Activity 初始化完成
+            window.decorView.post {
+                UnifiedLinkHandler.handleLink(this, uriString)
             }
         }
     }

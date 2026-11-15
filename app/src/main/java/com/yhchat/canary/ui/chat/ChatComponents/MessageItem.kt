@@ -80,6 +80,7 @@ import com.yhchat.canary.ui.webview.WebViewActivity
 import com.yhchat.canary.ui.share.ExternalShareUtils
 import com.yhchat.canary.ui.chat.ChatComponents.appendToAutoQueue
 import com.yhchat.canary.utils.FavoriteMessageStore
+import com.yhchat.canary.ui.chat.viewmodel.SplitDownloadProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,7 +124,18 @@ fun MessageItem(
     isCollapsed: Boolean = false,
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
-    enableContextMenu: Boolean = true
+    enableContextMenu: Boolean = true,
+    // ---- 大文件分块传输 ----
+    // 该消息在分块协议里的角色。Normal 表示与分块无关，走原有渲染。
+    splitDisplayMode: com.yhchat.canary.utils.splitfile.SplitDisplayMode =
+        com.yhchat.canary.utils.splitfile.SplitDisplayMode.Normal,
+    // 当前消息所属的传输任务（清单消息 / 任务内分块时非空）
+    splitTask: com.yhchat.canary.utils.splitfile.SplitTransferTask? = null,
+    splitProgress: SplitDownloadProgress? = null,
+    onSplitDownload: (() -> Unit)? = null,
+    onSplitCancel: (() -> Unit)? = null,
+    onSplitClearCache: (() -> Unit)? = null,
+    onSplitOpenFile: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -474,25 +486,43 @@ fun MessageItem(
                         }
                     }
                 } else {
-                    MessageContentView(
-                        message = message,
-                        content = message.content,
-                        contentType = message.contentType,
-                        isMyMessage = isMyMessage,
-                        conversationChatType = conversationChatType,
-                        modifier = Modifier.padding(12.dp),
-                        onImageClick = { imageUrl -> onImageClick(imageUrl) },
-                        onLongClick = openMessageActions,
-                        onQuoteMessageClick = onQuoteMessageClick,
-                        onQuote = onQuote,
-                        onEdit = onEdit,
-                        onRecall = onRecall,
-                        onPlusOne = onPlusOne,
-                        onForward = onForward,
-                        onFavorite = { _ -> favoriteMessage() },
-                        onMultiSelect = onMultiSelect,
-                        isStreaming = isStreaming
-                    )
+                    // 分块传输：清单消息渲染成任务卡片；属于已建卡任务的分块消息
+                    // 不在这里单独出现（由 ChatScreen 过滤），所以这里只需处理清单。
+                    val showSplitCard = splitDisplayMode is
+                        com.yhchat.canary.utils.splitfile.SplitDisplayMode.ManifestCard &&
+                        splitTask != null
+
+                    if (showSplitCard) {
+                        SplitTransferCard(
+                            task = splitTask!!,
+                            progress = splitProgress,
+                            isMyMessage = isMyMessage,
+                            onDownloadClick = { onSplitDownload?.invoke() },
+                            onCancelClick = { onSplitCancel?.invoke() },
+                            onClearCacheClick = { onSplitClearCache?.invoke() },
+                            onOpenFileClick = { path -> onSplitOpenFile?.invoke(path) }
+                        )
+                    } else {
+                        MessageContentView(
+                            message = message,
+                            content = message.content,
+                            contentType = message.contentType,
+                            isMyMessage = isMyMessage,
+                            conversationChatType = conversationChatType,
+                            modifier = Modifier.padding(12.dp),
+                            onImageClick = { imageUrl -> onImageClick(imageUrl) },
+                            onLongClick = openMessageActions,
+                            onQuoteMessageClick = onQuoteMessageClick,
+                            onQuote = onQuote,
+                            onEdit = onEdit,
+                            onRecall = onRecall,
+                            onPlusOne = onPlusOne,
+                            onForward = onForward,
+                            onFavorite = { _ -> favoriteMessage() },
+                            onMultiSelect = onMultiSelect,
+                            isStreaming = isStreaming
+                        )
+                    }
                 }
             }
 
@@ -1003,7 +1033,15 @@ fun AnimatedMessageItem(
     isCollapsed: Boolean = false,
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
-    enableContextMenu: Boolean = true
+    enableContextMenu: Boolean = true,
+    splitDisplayMode: com.yhchat.canary.utils.splitfile.SplitDisplayMode =
+        com.yhchat.canary.utils.splitfile.SplitDisplayMode.Normal,
+    splitTask: com.yhchat.canary.utils.splitfile.SplitTransferTask? = null,
+    splitProgress: SplitDownloadProgress? = null,
+    onSplitDownload: (() -> Unit)? = null,
+    onSplitCancel: (() -> Unit)? = null,
+    onSplitClearCache: (() -> Unit)? = null,
+    onSplitOpenFile: ((String) -> Unit)? = null
 ) {
     val isNewMessage = remember(message.msgId) {
         val currentTime = System.currentTimeMillis()
@@ -1064,7 +1102,14 @@ fun AnimatedMessageItem(
                     isCollapsed = isCollapsed,
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
-                    enableContextMenu = enableContextMenu
+                    enableContextMenu = enableContextMenu,
+                    splitDisplayMode = splitDisplayMode,
+                    splitTask = splitTask,
+                    splitProgress = splitProgress,
+                    onSplitDownload = onSplitDownload,
+                    onSplitCancel = onSplitCancel,
+                    onSplitClearCache = onSplitClearCache,
+                    onSplitOpenFile = onSplitOpenFile
                 )
             }
         }
@@ -1124,7 +1169,14 @@ fun AnimatedMessageItem(
                     isCollapsed = isCollapsed,
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
-                    enableContextMenu = enableContextMenu
+                    enableContextMenu = enableContextMenu,
+                    splitDisplayMode = splitDisplayMode,
+                    splitTask = splitTask,
+                    splitProgress = splitProgress,
+                    onSplitDownload = onSplitDownload,
+                    onSplitCancel = onSplitCancel,
+                    onSplitClearCache = onSplitClearCache,
+                    onSplitOpenFile = onSplitOpenFile
                 )
             }
         }

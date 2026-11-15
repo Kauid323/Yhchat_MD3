@@ -165,7 +165,8 @@ jobs:
           fi
           cp "$APK_PATH" "dist/${{ matrix.asset_name }}"
 
-          # 顺手把 R8 的 mapping.txt 一起收进产物目录，供崩溃栈反混淆用。
+          # R8 的 mapping.txt 一起收进 dist，后面会随 Release 一起发出去，
+          # 让用户拿到 APK 的同时也能拿到反混淆表（release 开了 R8，没它崩溃栈读不了）。
           #
           # mapping 的目录名是变体名：assembleStandardRelease -> standardRelease。
           # 先用变体名精确找，找不到再退回全盘搜索（多 flavor 混在一个 job 里时
@@ -181,6 +182,8 @@ jobs:
             echo "Collected mapping: ${MAPPING_PATH}"
           else
             echo "WARN: no mapping.txt produced for ${{ matrix.flavor }} (minify disabled?)"
+            echo "--- app/build/outputs/mapping 树 ---"
+            find app/build/outputs/mapping -type f 2>/dev/null || echo "(目录不存在)"
           fi
 
           ls -lh dist
@@ -189,7 +192,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          # mapping 跟 APK 放同一个 artifact，抓崩溃日志时不用再翻别的产物
+          # mapping 跟 APK 放同一个 artifact：Release 那一步按 release-assets/*.apk
+          # 和 mapping-*.txt 一起取，不会漏
           path: |
             dist/${{ matrix.asset_name }}
             dist/mapping-${{ matrix.flavor }}.txt

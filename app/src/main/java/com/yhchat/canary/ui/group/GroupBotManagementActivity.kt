@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -203,6 +205,18 @@ fun GroupBotManagementScreen(
                                     // 跳转到机器人详情页
                                   BotDetailActivity.start(context, bot.botId, bot.name)
                                 },
+                                // 只有自带设置定义的机器人才有设置入口。
+                                // 判断依据是 Bot_data.setting —— 服务端只在机器人声明了
+                                // 设置表单时才下发它，其它机器人为空串。
+                                hasSettings = bot.setting.isNotBlank(),
+                                onSettingsClick = {
+                                    BotSettingFormActivity.start(
+                                        context = context,
+                                        botId = bot.botId,
+                                        botName = bot.name,
+                                        groupId = groupId
+                                    )
+                                },
                                 canRemove = true // TODO: 根据用户权限设置，普通成员设为 false
                             )
                         }
@@ -280,7 +294,10 @@ fun BotCard(
     onRemoveClick: () -> Unit,
     onManageClick: () -> Unit,
     onBotClick: () -> Unit,
-    canRemove: Boolean = true  // 是否可以删除机器人
+    canRemove: Boolean = true,  // 是否可以删除机器人
+    // 机器人是否自带设置表单（由 Bot_data.setting 决定），有才显示"设置"按钮
+    hasSettings: Boolean = false,
+    onSettingsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -343,6 +360,21 @@ fun BotCard(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 有设置定义的机器人：多给一个"设置"按钮。
+                // 用不同的按钮层级区分：管理权限是每次都要用的次要操作，做成 Outlined；
+                // 设置只在支持的机器人上出现，做成图标按钮，避免两个 Filled 按钮并列抢视线
+                if (hasSettings) {
+                    OutlinedButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "机器人设置",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("设置")
+                    }
+                }
+
                 Button(onClick = onManageClick) {
                     Icon(
                         imageVector = Icons.Default.Settings,

@@ -115,8 +115,38 @@ fun ChatScreen(
     val liveRoomsState by liveRoomsViewModel.uiState.collectAsStateWithLifecycle()
     val messages = viewModel.messages
     val collapsedMessageIds = viewModel.collapsedMessageIds
-    val reversedMessages by remember {
-        derivedStateOf { messages.asReversed().toList() }
+
+    // 分块任务状态。清单消息渲染成卡片，属于该任务的分块消息从消息流里摘掉 ——
+    // 不摘的话一个 500MB 的文件会往聊天记录里灌几百条 .part，把正常对话顶没。
+    val splitTasks = viewModel.splitTasks
+    val splitProgressMap = viewModel.splitProgress
+
+    // 哪些消息属于「已建卡的任务」需要折叠：key = msgId
+    val collapsedSplitMsgIds by remember(splitTasks) {
+        derivedStateOf {
+            splitTasks.flatMap { task -> task.chunks.map { it.msgId } }.toSet()
+        }
+    }
+
+    // 清单消息 msgId -> 任务，用于给清单那条消息挂上卡片
+    val manifestMsgIdToTask by remember(splitTasks) {
+        derivedStateOf {
+            // 清单消息本身也带 transferId 语义，但任务里没直接存清单 msgId，
+            // 所以用「消息文本解析出 transferId」来匹配（解析成本低且已有缓存）
+            buildMap {
+                splitTasks.forEach { task ->
+                    put(task.key.transferId, task)
+                }
+            }
+        }
+    }
+
+    val reversedMessages by remember(collapsedSplitMsgIds) {
+        derivedStateOf {
+            messages.asReversed()
+                .filterNot { it.msgId in collapsedSplitMsgIds }
+                .toList()
+        }
     }
     val messageItemKeys by remember {
         derivedStateOf { buildMessageItemKeys(reversedMessages) }
@@ -681,7 +711,18 @@ fun ChatScreen(
                         }
                         val isStreaming = viewModel.isMessageStreaming(message.msgId)
                         val itemModifier = Modifier.fillMaxWidth()
-                        
+
+                        // 分块：这条消息是清单就在卡片上渲染，否则走普通消息
+                        val splitMode = viewModel.splitDisplayModeOf(message)
+                        val splitTaskForKey = when (val m = splitMode) {
+                            is com.yhchat.canary.utils.splitfile.SplitDisplayMode.ManifestCard ->
+                                manifestMsgIdToTask[m.manifest.transferId]
+                            else -> null
+                        }
+                        val splitProgress = splitTaskForKey?.let {
+                            splitProgressMap[it.key.transferId]
+                        }
+
                         AnimatedMessageItem(
                             message = message,
                             isMyMessage = isMyMessage,
@@ -693,6 +734,50 @@ fun ChatScreen(
                             isSelected = selectedMessageIds.contains(message.msgId),
                             isStreaming = isStreaming,
                             enableContextMenu = enableChatContextMenu,
+                            splitDisplayMode = splitMode,
+                            splitTask = splitTaskForKey,
+                            splitProgress = splitProgress,
+                            onSplitDownload = {
+                                splitTaskForKey?.let { viewModel.downloadSplitTask(it) }
+                            },
+                            onSplitCancel = {
+                                splitTaskForKey?.let {
+                                    viewModel.cancelSplitDownload(it.key.transferId)
+                                }
+                            },
+                            onSplitClearCache = {
+                                splitTaskForKey?.let {
+                                    viewModel.clearSplitCache(it.key.transferId)
+                                }
+                            },
+                            onSplitOpenFile = { path ->
+                                // 用系统意图打开合并后的文件
+                                runCatching {
+                                    val file = java.io.File(path)
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file
+                                    )
+                                    val intent = android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW
+                                    ).apply {
+                                        setDataAndType(
+                                            uri,
+                                            context.contentResolver.getType(uri)
+                                                ?: "*/*"
+                                        )
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "无法打开文件：${it.message}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
                             onSelectionToggle = { msgId ->
                                 selectedMessageIds = if (selectedMessageIds.contains(msgId)) {
                                     selectedMessageIds - msgId

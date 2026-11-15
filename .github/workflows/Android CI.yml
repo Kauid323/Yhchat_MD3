@@ -140,36 +140,56 @@ jobs:
             exit 1
           fi
           cp "$APK_PATH" "dist/${{ matrix.asset_name }}"
-
-          # 顺手把 R8 的 mapping.txt 一起收进产物目录。
-          #
-          # mapping 的目录名是变体名：assembleStandardRelease -> standardRelease。
-          # 只靠 find 全盘扫有风险（多 flavor 混在一个 job 里时会拿错文件），
-          # 所以先用变体名的精确路径找，找不到才退回全盘搜索。
-          # release 开了 isMinifyEnabled，正常情况下一定会有。
-          VARIANT_DIR=$(printf '%s' "${{ matrix.gradle_task }}" | sed -E 's/^assemble//' | sed -E 's/^(.)/\L\1/')
-          MAPPING_PATH="app/build/outputs/mapping/${VARIANT_DIR}/mapping.txt"
-          if [ ! -f "$MAPPING_PATH" ]; then
-            echo "WARN: ${MAPPING_PATH} not found, falling back to search"
-            MAPPING_PATH=$(find app/build/outputs/mapping -type f -name mapping.txt 2>/dev/null | head -n 1)
-          fi
-          if [ -n "${MAPPING_PATH}" ] && [ -f "${MAPPING_PATH}" ]; then
-            cp "$MAPPING_PATH" "dist/mapping-${{ matrix.flavor }}.txt"
-            echo "Collected mapping: ${MAPPING_PATH}"
-          else
-            echo "WARN: no mapping.txt produced for ${{ matrix.flavor }} (minify disabled?)"
-          fi
-
           ls -lh dist
 
       - name: Upload ${{ matrix.flavor }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          # mapping 跟 APK 放同一个 artifact，抓崩溃日志时不用再翻别的产物
-          path: |
-            dist/${{ matrix.asset_name }}
-            dist/mapping-${{ matrix.flavor }}.txt
+          path: dist/${{ matrix.asset_name }}
+          retention-days: 30
+
+      # R8 的 mapping.txt 单独发一个 artifact。
+      #
+      # 之前是塞进 APK 那个 artifact 里的，页面上只显示 apk-standard 一行，
+      # 完全看不出里面有 mapping —— 得下载解压才发现。而且文件名是
+      # mapping-standard.txt，搜 "mapping.txt" 也搜不到。
+      # 现在独立成一个叫 mapping-standard 的 artifact，列表里一眼可见，
+      # 解压出来就是标准的 mapping.txt，可以直接丢给 R8 retrace。
+      - name: Collect ${{ matrix.flavor }} mapping
+        run: |
+          mkdir -p mapping-out
+
+          # mapping 的目录名是变体名：assembleStandardRelease -> standardRelease。
+          # 先用变体名精确找；找不到再退回全盘搜索（多 flavor 混在一个 job 里时
+          # 全盘 find 有拿错文件的风险，所以只作兜底）。
+          VARIANT_DIR=$(printf '%s' "${{ matrix.gradle_task }}" | sed -E 's/^assemble//' | sed -E 's/^(.)/\L\1/')
+          MAPPING_PATH="app/build/outputs/mapping/${VARIANT_DIR}/mapping.txt"
+
+          if [ ! -f "$MAPPING_PATH" ]; then
+            echo "WARN: ${MAPPING_PATH} not found, falling back to search"
+            MAPPING_PATH=$(find app/build/outputs/mapping -type f -name mapping.txt 2>/dev/null | head -n 1)
+          fi
+
+          if [ -n "${MAPPING_PATH}" ] && [ -f "${MAPPING_PATH}" ]; then
+            # 统一叫 mapping.txt：retrace 直接认这个名，解压后不用改名
+            cp "$MAPPING_PATH" "mapping-out/mapping.txt"
+            echo "Collected mapping: ${MAPPING_PATH}"
+            ls -lh mapping-out
+          else
+            echo "WARN: no mapping.txt produced for ${{ matrix.flavor }}"
+            echo "（isMinifyEnabled 是否开启？或 R8 任务被跳过？）"
+            # 顺带把 mapping 目录内容打出来，下次排查不用再猜路径
+            echo "--- app/build/outputs/mapping 树 ---"
+            find app/build/outputs/mapping -type f 2>/dev/null || echo "(目录不存在)"
+          fi
+
+      - name: Upload ${{ matrix.flavor }} mapping artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping-${{ matrix.flavor }}
+          path: mapping-out/mapping.txt
+          # 万一某个 flavor 真没产出 mapping，不要让整个 job 失败
           if-no-files-found: warn
           retention-days: 30
 

@@ -17,58 +17,46 @@ class ComprehensiveSearchViewModel(application: Application) : AndroidViewModel(
     private val webApiService = RepositoryFactory.webApiService
     private val friendRepository = RepositoryFactory.getFriendRepository(application)
     private val tokenRepository = RepositoryFactory.getTokenRepository(application)
+    private val groupRepository = RepositoryFactory.getGroupRepository(application)
     
     private val _uiState = MutableStateFlow(ComprehensiveSearchUiState())
     val uiState: StateFlow<ComprehensiveSearchUiState> = _uiState.asStateFlow()
     
-    fun searchGroup(groupId: String) {
+    /**
+     * 群聊搜索。
+     *
+     * 走 proto 的 /v1/group/info-add-friend（群口令查询），和 [SearchViewModel] 保持一致。
+     *
+     * 以前这里用的是 webApiService.getGroupInfo（Web 端 JSON 接口），有两个问题：
+     *   1. JSON 响应缺字段，只能拿一堆硬编码值兜底（permissionLevel=0、adminIds=空、
+     *      communityName=""、directJoin 和 historyMsgEnabled 还被赋成同一个 readHistory），
+     *      导致搜索结果里私密/免打扰/社区/管理员这些信息全是错的；
+     *   2. 它查的是 groupId，而群口令搜索才是这个入口真正要的语义。
+     *
+     * proto 接口返回的 GroupDetail 字段是全的，不需要再猜。
+     */
+    fun searchGroup(keyword: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            try {
-                val response = webApiService.getGroupInfo(mapOf("groupId" to groupId))
-                val responseBody = response.body()
-                if (responseBody != null) {
+
+            groupRepository.getGroupByKeyword(keyword).fold(
+                onSuccess = { group ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        groupResult = GroupDetail(
-                            groupId = responseBody.data.group.groupId,
-                            name = responseBody.data.group.name,
-                            avatarUrl = responseBody.data.group.avatarUrl,
-                            introduction = responseBody.data.group.introduction,
-                            memberCount = responseBody.data.group.headcount,
-                            createBy = responseBody.data.group.createBy,
-                            directJoin = responseBody.data.group.readHistory == 1,
-                            permissionLevel = 0,
-                            historyMsgEnabled = responseBody.data.group.readHistory == 1,
-                            categoryName = "",
-                            categoryId = 0,
-                            isPrivate = false,
-                            doNotDisturb = false,
-                            hideGroupMembers = false,
-                            denyMembersUploadToGroupDisk = false,
-                            communityId = 0,
-                            communityName = "",
-                            isTop = false,
-                            adminIds = emptyList(),
-                            ownerId = responseBody.data.group.createBy,
-                            limitedMsgType = "",
-                            avatarId = responseBody.data.group.avatarId.toLong(),
-                            recommendation = null
-                        ),
+                        groupResult = group,
                         error = null
                     )
-                } else {
+                },
+                onFailure = { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "响应数据为空"
+                        groupResult = null,
+                        // 群口令查不到时服务端返回的是「无此群」之类的文案，直接透给用户；
+                        // 空消息就退回到通用提示，避免 Toast 上什么都看不到
+                        error = error.message?.takeIf { it.isNotBlank() } ?: "未找到对应的群聊"
                     )
                 }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "网络错误"
-                )
-            }
+            )
         }
     }
     

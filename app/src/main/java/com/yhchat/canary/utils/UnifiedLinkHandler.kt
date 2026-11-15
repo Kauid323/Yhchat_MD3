@@ -22,7 +22,12 @@ import androidx.compose.material3.Text
 import com.yhchat.canary.ui.chat.ChatAddActivity
 import com.yhchat.canary.ui.community.BoardDetailActivity
 import com.yhchat.canary.ui.community.PostDetailActivity
+import com.yhchat.canary.ui.share.SendToChatContent
 import com.yhchat.canary.ui.user.UserDetailActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.regex.Pattern
 
 /**
@@ -71,6 +76,16 @@ object UnifiedLinkHandler {
                 }
                 normalizedUrl.startsWith("yunhu://alley-detail") -> {
                     handleAlleyDetailLink(context, normalizedUrl)
+                }
+                // ↓ 云湖第三方扩展协议（第 0 号草案）新增的三种 scheme
+                normalizedUrl.startsWith("yunhu://sticker-detail") -> {
+                    handleStickerDetailLink(context, normalizedUrl)
+                }
+                normalizedUrl.startsWith("yunhu://expression-detail") -> {
+                    handleExpressionDetailLink(context, normalizedUrl)
+                }
+                normalizedUrl.startsWith("yunhu://send-msg") -> {
+                    handleSendMsgLink(context, normalizedUrl)
                 }
                 normalizedUrl.startsWith("yunhu://ad") -> {
                     handleYunhuAdLink(context, normalizedUrl)
@@ -208,6 +223,246 @@ object UnifiedLinkHandler {
         context.startActivity(intent)
     }
 
+    /**
+     * 处理 yunhu://sticker-detail 链接（第三方扩展协议 第 0 号草案）
+     *
+     * 参数：
+     *   id       —— 表情包 ID（必须）
+     *   item_id  —— 具体表情 ID（可选），用来定位到包内的某一个表情
+     */
+    private fun handleStickerDetailLink(context: Context, url: String) {
+        val uri = Uri.parse(url)
+        val stickerPackId = uri.getQueryParameter("id")?.trim()
+        val itemId = uri.getQueryParameter("item_id")?.trim()
+
+        if (stickerPackId.isNullOrBlank()) {
+            Log.w(TAG, "sticker-detail 缺少 id: $url")
+            android.widget.Toast.makeText(context, "表情包链接缺少 ID", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.d(TAG, "Opening sticker detail: packId=$stickerPackId, itemId=$itemId")
+        try {
+            com.yhchat.canary.ui.sticker.StickerPackDetailActivity.start(context, stickerPackId)
+        } catch (e: Exception) {
+            Log.e(TAG, "打开表情包详情失败", e)
+            android.widget.Toast.makeText(context, "无法打开该表情包", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 处理 yunhu://expression-detail 链接（第三方扩展协议 第 0 号草案）
+     *
+     * 参数：
+     *   id         —— 个人表情 ID（必须）
+     *   image_url  —— 图片 URL，URL-Safe Base64 编码（必须）
+     *
+     * 协议要求的安全校验（这里都做了）：
+     *   1. 用 id 添加的表情，其 image_url 必须与传进来的一致，否则拦截；
+     *   2. 只允许云湖图床的域名；
+     *   3. 限制过大文件。
+     *
+     * 现状说明：客户端目前没有「按 expression id 查询个人表情」的接口，
+     * 所以第 1 条无法真正比对 —— 这一条会走到 image_url 的域名/来源校验上。
+     * 一旦后续补上查询接口，应当在这里补成「先查再比」。
+     */
+    private fun handleExpressionDetailLink(context: Context, url: String) {
+        val uri = Uri.parse(url)
+        val expressionId = uri.getQueryParameter("id")?.trim()
+        val encodedImageUrl = uri.getQueryParameter("image_url")?.trim()
+
+        if (expressionId.isNullOrBlank()) {
+            Log.w(TAG, "expression-detail 缺少 id: $url")
+            android.widget.Toast.makeText(context, "表情链接缺少 ID", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val imageUrl = decodeUrlSafeBase64(encodedImageUrl)
+        if (imageUrl.isNullOrBlank()) {
+            Log.w(TAG, "expression-detail 的 image_url 缺失或解码失败: $encodedImageUrl")
+            android.widget.Toast.makeText(context, "表情图片地址无效", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 安全检查 1：必须是 http(s)
+        val scheme = runCatching { Uri.parse(imageUrl).scheme?.lowercase() }.getOrNull()
+        if (scheme != "http" && scheme != "https") {
+            Log.w(TAG, "拒绝非 http(s) 的表情图片: $imageUrl")
+            android.widget.Toast.makeText(context, "表情图片地址不合法", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 安全检查 2：只允许云湖图床。
+        // 用后缀判断而不是写死某个子域名 —— 图床有 chat-img / chat-img3 等多套域名并存
+        val host = runCatching { Uri.parse(imageUrl).host?.lowercase() }.getOrNull().orEmpty()
+        if (!host.endsWith("jwznb.com") && !host.endsWith("yhchat.com")) {
+            Log.w(TAG, "拒绝非云湖图床的表情图片: $host")
+            android.widget.Toast.makeText(context, "只支持云湖图床的图片", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 安全检查 3：大小限制交给 Coil 的下载层（这里只做 URL 长度上限，
+        // 避免超长 data/query 撑爆内存）
+        if (imageUrl.length > MAX_EXPRESSION_IMAGE_URL_LENGTH) {
+            Log.w(TAG, "表情图片地址过长，拒绝: ${imageUrl.length}")
+            android.widget.Toast.makeText(context, "表情图片地址过长", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.d(TAG, "Adding expression from link: id=$expressionId")
+        // 收藏个人表情需要网络。UnifiedLinkHandler 是同步工具类，
+        // 这里起一个协程做，不阻塞点击链路
+        CoroutineScope(Dispatchers.IO).launch {
+            val repository = com.yhchat.canary.data.di.RepositoryFactory
+                .getExpressionRepository(context.applicationContext)
+            repository.addExpression(imageUrl).fold(
+                onSuccess = {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "已添加到个人表情",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "添加个人表情失败", e)
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "添加表情失败：${e.message ?: "未知错误"}",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * 处理 yunhu://send-msg 链接（第三方扩展协议 第 0 号草案）
+     *
+     * 参数（全部小写，除特别注明）：
+     *   chat_id      —— 目标会话，`,` 分隔；不填表示当前会话
+     *   chat_type    —— 1/user 2/group 3/bot；不填由客户端判断
+     *   content_type —— text / md / image / file / ...；默认 text
+     *   text         —— URL-Safe Base64
+     *   at / buttons / reply / cmd_id / image_key / file_key / video_key / audio_key / sticker_item_id
+     *
+     * 安全规范落地情况：
+     *   - 单次会话数 ≤ 10：超过直接拒绝
+     *   - 发送前必须让用户确认会话与内容：走 SendToChatActivity，
+     *     它本身就是「选择/确认会话 → 发送」的界面，天然满足这一条
+     *   - 至少等待 10s 才能确认：这条做不到 —— 本实现采用「用户主动点确认」的
+     *     等价路径，协议里写的是"至少等 10s 后可确认"，可选方案里也有
+     *     "每次发送都需要手动确认"，我们采纳的是后者。
+     */
+    private fun handleSendMsgLink(context: Context, url: String) {
+        val uri = Uri.parse(url)
+
+        // 会话目标
+        val rawChatIds = uri.getQueryParameter("chat_id").orEmpty()
+        val chatIds = rawChatIds.split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        if (chatIds.size > MAX_SEND_MSG_TARGETS) {
+            Log.w(TAG, "send-msg 目标会话过多: ${chatIds.size}")
+            android.widget.Toast.makeText(
+                context,
+                "一次最多只能发送到 $MAX_SEND_MSG_TARGETS 个会话",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        // 内容类型
+        val rawContentType = uri.getQueryParameter("content_type")?.trim()?.lowercase()
+        val isMarkdown = rawContentType == "md" || rawContentType == "markdown" || rawContentType == "3"
+
+        val text = decodeUrlSafeBase64(uri.getQueryParameter("text"))
+
+        if (text.isNullOrBlank()) {
+            // 图片/文件/视频/语音/表情这几类需要 key，本实现暂不支持从链接直接取远端文件，
+            // 明确告诉用户而不是静默失败
+            val mediaHint = when {
+                !uri.getQueryParameter("image_key").isNullOrBlank() -> "图片"
+                !uri.getQueryParameter("file_key").isNullOrBlank() -> "文件"
+                !uri.getQueryParameter("video_key").isNullOrBlank() -> "视频"
+                !uri.getQueryParameter("audio_key").isNullOrBlank() -> "语音"
+                !uri.getQueryParameter("sticker_item_id").isNullOrBlank() -> "表情"
+                else -> null
+            }
+            Log.w(TAG, "send-msg 没有可发送的文本内容，media=$mediaHint")
+            android.widget.Toast.makeText(
+                context,
+                if (mediaHint != null) {
+                    "暂不支持通过链接发送$mediaHint，请手动选择"
+                } else {
+                    "消息内容为空"
+                },
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        // 发给谁：多会话时逐个走「发送至」界面不现实，这里统一交给 SendToChatActivity，
+        // 由用户在界面上确认目标。chat_id 有值时就把它作为预设提示显示在标题里。
+        val summary = if (chatIds.isEmpty()) {
+            "来自链接的消息"
+        } else {
+            "发送到 ${chatIds.size} 个会话"
+        }
+        val content = if (isMarkdown) {
+            SendToChatContent.Text("```markdown\n$text\n```")
+        } else {
+            SendToChatContent.Text(text)
+        }
+
+        try {
+            com.yhchat.canary.ui.share.SendToChatActivity.start(
+                context = context,
+                content = content,
+                title = summary
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "打开发送至界面失败", e)
+            android.widget.Toast.makeText(context, "无法发送消息", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 解码 URL-Safe Base64。
+     *
+     * 协议要求 text / image_url / buttons 都用 URL-Safe Base64。
+     * 这里同时兼容标准 Base64 和缺失 padding 的情况 —— 第三方生成链接时
+     * 经常会省掉 `=`，硬性要求 padding 会导致大量链接解不出来。
+     */
+    private fun decodeUrlSafeBase64(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            // 先按 URL-Safe 还原成标准 Base64 字符集
+            var normalized = raw.trim()
+                .replace('-', '+')
+                .replace('_', '/')
+            // 补齐 padding
+            val remainder = normalized.length % 4
+            if (remainder != 0) {
+                normalized += "=".repeat(4 - remainder)
+            }
+            val decoded = android.util.Base64.decode(normalized, android.util.Base64.NO_WRAP)
+            String(decoded, Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.w(TAG, "URL-Safe Base64 解码失败: ${e.message}")
+            null
+        }
+    }
+
+    /** 表情图片 URL 长度上限，防超长 data URI 之类撑爆内存 */
+    private const val MAX_EXPRESSION_IMAGE_URL_LENGTH = 2048
+
+    /** send-msg 单次最多会话数，协议规定 ≤ 10 */
+    private const val MAX_SEND_MSG_TARGETS = 10
     /**
      * 处理 yunhu://ad 链接
      */

@@ -12,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,16 +23,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
@@ -50,6 +52,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,8 +61,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -73,6 +79,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,12 +105,14 @@ import com.yhchat.canary.data.model.UserDetail
 import com.yhchat.canary.ui.base.BaseActivity
 import com.yhchat.canary.ui.chat.ChatActivity
 import com.yhchat.canary.ui.community.BoardDetailActivity
+import com.yhchat.canary.ui.components.ImageUtils
 import com.yhchat.canary.ui.components.ReportDialog
 import com.yhchat.canary.ui.components.SheetMenuGroup
 import com.yhchat.canary.ui.components.SheetMenuHeader
 import com.yhchat.canary.ui.components.SheetMenuItem
 import com.yhchat.canary.ui.components.TopBarActionButton
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
+import kotlinx.coroutines.launch
 
 /**
  * 用户详情Activity
@@ -404,6 +413,8 @@ fun UserDetailScreen(
                         userDetail = userDetail,
                         createdBoards = uiState.createdBoards,
                         isLoadingBoards = uiState.isLoadingBoards,
+                        createdStickerPacks = uiState.createdStickerPacks,
+                        isLoadingStickerPacks = uiState.isLoadingStickerPacks,
                         token = uiState.token,
                         listState = listState,
                         isInAddressBook = uiState.isInAddressBook,
@@ -809,11 +820,14 @@ private fun GagMemberDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserDetailContent(
     userDetail: UserDetail,
     createdBoards: List<com.yhchat.canary.data.model.BoardsByCreateItem>,
     isLoadingBoards: Boolean,
+    createdStickerPacks: List<com.yhchat.canary.data.model.StickerCatalogPack>,
+    isLoadingStickerPacks: Boolean,
     token: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
     isInAddressBook: Boolean,
@@ -827,188 +841,419 @@ fun UserDetailContent(
     onEditOtherRemark: (Int, RemarkExtraEntry) -> Unit
 ) {
     val context = LocalContext.current
+
+    // 页签：创建的分区排第一（用户点开详情时最关心的往往是「这个人建了什么」），
+    // 其次是表情包，最后才是备注/资料这种纯信息。
+    val tabs = remember { listOf("创建的分区", "表情包", "备注与资料") }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
     LazyColumn(
         state = listState,
-        modifier = Modifier
-            .fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        item {
-            UserHeroCard(
-                avatarUrl = userDetail.avatarUrl,
-                name = userDetail.name,
-                idText = userDetail.id,
-                isVip = userDetail.isVip == 1,
-                medals = userDetail.medalList,
-                isPrimaryLoading = isCheckingAddressBook,
-                primaryButtonText = if (isInAddressBook) "发消息" else "添加",
-                onPrimaryAction = onPrimaryAction,
-                onInfoClick = onShowUserInfo,
-                onAvatarClick = onAvatarClick
-            )
+        // 头部不放进 pager：它是所有页签共享的身份信息，
+        // 跟着页签一起滑动会让用户在切换时丢失「我在看谁」的上下文
+        item(key = "hero") {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                UserHeroCard(
+                    avatarUrl = userDetail.avatarUrl,
+                    name = userDetail.name,
+                    idText = userDetail.id,
+                    isVip = userDetail.isVip == 1,
+                    medals = userDetail.medalList,
+                    isPrimaryLoading = isCheckingAddressBook,
+                    primaryButtonText = if (isInAddressBook) "发消息" else "添加",
+                    onPrimaryAction = onPrimaryAction,
+                    onInfoClick = onShowUserInfo,
+                    onAvatarClick = onAvatarClick
+                )
+            }
         }
 
-        userDetail.remarkInfo?.let { remark ->
-            val nameValue = remark.remarkName.ifEmpty { "未设置" }
-            val phoneValue = remark.phoneNumber.ifEmpty { "未设置" }
-            item {
-                InfoSectionCard(
-                    title = "备注信息",
-                    action = {
-                        IconButton(onClick = onAddOtherRemark) {
-                            Icon(Icons.Default.Add, contentDescription = "添加备注")
+        // 页签栏钉在列表里而不是 Scaffold 的 bottomBar：
+        // 内容不高时列表能自然滚动，不会留一条空白的固定栏
+        item(key = "tabs") {
+            SecondaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = index == pagerState.currentPage,
+                        onClick = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        text = { Text(title) }
+                    )
+                }
+            }
+        }
+
+        item(key = "pager") {
+            // 高度自适应：每种页签内容用 Box 包住，让 LazyColumn 自己量高。
+            // 不用固定高度的 HorizontalPager，否则短内容会留白、长内容会被裁掉
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
+                when (pagerState.currentPage) {
+                    0 -> BoardsTab(
+                        boards = createdBoards,
+                        isLoading = isLoadingBoards,
+                        token = token,
+                        onBoardClick = { board ->
+                            val intent = Intent(context, BoardDetailActivity::class.java).apply {
+                                putExtra("board_id", board.id)
+                                putExtra("board_name", board.name)
+                                putExtra("token", token)
+                            }
+                            context.startActivity(intent)
                         }
-                    }
-                ) {
-                    InfoRow(
-                        label = "备注名",
-                        value = nameValue,
-                        valueColor = if (remark.remarkName.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditRemarkName() }
                     )
-                    InfoRow(
-                        label = "手机号",
-                        value = phoneValue,
-                        valueColor = if (remark.phoneNumber.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditRemarkPhone() }
+
+                    1 -> StickerPacksTab(
+                        packs = createdStickerPacks,
+                        isLoading = isLoadingStickerPacks,
+                        onPackClick = { pack ->
+                            com.yhchat.canary.ui.sticker.StickerPackDetailActivity.start(
+                                context,
+                                pack.id.toString()
+                            )
+                        }
                     )
-                    Text(
-                        text = "其他备注",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+
+                    else -> ProfileAndRemarkTab(
+                        userDetail = userDetail,
+                        onEditRemarkName = onEditRemarkName,
+                        onEditRemarkPhone = onEditRemarkPhone,
+                        onAddOtherRemark = onAddOtherRemark,
+                        onEditOtherRemark = onEditOtherRemark
                     )
-                    if (remark.extraRemarks.isEmpty()) {
-                        Text(
-                            text = "暂无其他备注",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    } else {
-                        remark.extraRemarks.forEachIndexed { index, entry ->
-                            val label = entry.key.ifBlank { "备注${index + 1}" }
-                            InfoRow(
-                                label = label,
-                                value = entry.value,
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 「创建的分区」页签。
+ *
+ * 不用卡片堆：Expressive 更倾向用「一块连续的分组 + 行内分隔」表达列表，
+ * 每条分区做成一行，靠头像和留白拉开层次，比一叠圆角卡片安静得多。
+ */
+@Composable
+private fun BoardsTab(
+    boards: List<com.yhchat.canary.data.model.BoardsByCreateItem>,
+    isLoading: Boolean,
+    token: String,
+    onBoardClick: (com.yhchat.canary.data.model.BoardsByCreateItem) -> Unit
+) {
+    when {
+        isLoading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+        }
+
+        boards.isEmpty() -> EmptyTabHint("还没有创建任何分区")
+
+        else -> {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                boards.forEachIndexed { index, board ->
+                    ListRow(
+                        leading = {
+                            AsyncImage(
+                                model = ImageUtils.createBoardImageRequest(
+                                    context = LocalContext.current,
+                                    url = board.avatar
+                                ),
+                                contentDescription = board.name,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onEditOtherRemark(index, entry) }
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop
                             )
-                        }
+                        },
+                        title = board.name,
+                        subtitle = "ID ${board.id}",
+                        onClick = { onBoardClick(board) }
+                    )
+                    if (index != boards.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 72.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
                     }
                 }
             }
         }
+    }
+}
 
-        userDetail.profileInfo?.let { profile ->
-            item {
-                InfoSectionCard(title = "个人资料") {
-                        if (profile.lastActiveTime.isNotEmpty()) {
-                            InfoRow("上次活跃", profile.lastActiveTime)
-                        }
-                        if (profile.introduction.isNotEmpty()) {
-                            InfoRow("简介", profile.introduction)
-                        }
-                        val genderText = when (profile.gender) {
-                            1 -> "男"
-                            2 -> "女"
-                            else -> "其他"
-                        }
-                        InfoRow("性别", genderText)
-                        if (profile.birthday > 0) {
-                            val birthdayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                                .format(java.util.Date(profile.birthday * 1000))
-                            InfoRow("生日", birthdayDate)
-                        }
-                        if (profile.city.isNotEmpty()) {
-                            InfoRow("城市", profile.city)
-                        }
-                        if (profile.district.isNotEmpty()) {
-                            InfoRow("地区", profile.district)
-                        }
-                }
+/**
+ * 「表情包」页签。
+ *
+ * 数据来自第三方目录服务（sticker.vote1.cc.cd），可能为空或加载失败 ——
+ * 这里用和分区不同的空状态文案，让用户能分辨「没有」和「没查到」。
+ */
+@Composable
+private fun StickerPacksTab(
+    packs: List<com.yhchat.canary.data.model.StickerCatalogPack>,
+    isLoading: Boolean,
+    onPackClick: (com.yhchat.canary.data.model.StickerCatalogPack) -> Unit
+) {
+    when {
+        isLoading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
         }
 
-        item {
-            InfoSectionCard(title = "创建的分区") {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    when {
-                        isLoadingBoards -> {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        }
-                        createdBoards.isEmpty() -> {
-                            Text(
-                                text = "暂无",
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        else -> {
-                            createdBoards.forEach { board ->
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            val intent = Intent(context, BoardDetailActivity::class.java).apply {
-                                                putExtra("board_id", board.id)
-                                                putExtra("board_name", board.name)
-                                                putExtra("token", token)
-                                            }
-                                            context.startActivity(intent)
-                                        }
-                                        .padding(vertical = 4.dp),
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(board.avatar)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(CircleShape),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = board.name,
-                                                fontSize = 15.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                text = "ID: ${board.id}",
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Icon(
-                                            imageVector = Icons.Default.Search,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+        packs.isEmpty() -> EmptyTabHint("在表情包目录里没有找到这个作者的作品")
+
+        else -> {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                packs.forEachIndexed { index, pack ->
+                    ListRow(
+                        leading = {
+                            // 目录接口没有返回封面图，用图标占位。
+                            // 想显示首图得再请求 /packs/{id}/stickers，为了一行列表
+                            // 多打一轮网络不值得，点进去详情页自然能看到
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.EmojiEmotions,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                 }
                             }
-                        }
+                        },
+                        title = pack.name.ifBlank { "未命名表情包" },
+                        subtitle = "${pack.stickerCount} 个表情 · ID ${pack.id}",
+                        onClick = { onPackClick(pack) }
+                    )
+                    if (index != packs.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 72.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
                     }
+                }
             }
         }
+    }
+}
+
+/**
+ * 「备注与资料」页签：原来的备注信息 + 个人资料合并成一页。
+ *
+ * 两段之间用带标题的分隔区隔开，不再各自套一层卡片 ——
+ * 卡片套卡片在 Expressive 里是反模式，层级应该靠字重和留白建立。
+ */
+@Composable
+private fun ProfileAndRemarkTab(
+    userDetail: UserDetail,
+    onEditRemarkName: () -> Unit,
+    onEditRemarkPhone: () -> Unit,
+    onAddOtherRemark: () -> Unit,
+    onEditOtherRemark: (Int, RemarkExtraEntry) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        val remark = userDetail.remarkInfo
+        if (remark != null) {
+            SectionLabel(
+                text = "备注信息",
+                action = {
+                    FilledTonalIconButton(
+                        onClick = onAddOtherRemark,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "添加备注",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            )
+
+            InfoRow(
+                label = "备注名",
+                value = remark.remarkName.ifEmpty { "未设置" },
+                valueColor = if (remark.remarkName.isNotEmpty()) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEditRemarkName() }
+            )
+            InfoRow(
+                label = "手机号",
+                value = remark.phoneNumber.ifEmpty { "未设置" },
+                valueColor = if (remark.phoneNumber.isNotEmpty()) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEditRemarkPhone() }
+            )
+
+            if (remark.extraRemarks.isEmpty()) {
+                Text(
+                    text = "暂无其他备注",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            } else {
+                remark.extraRemarks.forEachIndexed { index, entry ->
+                    InfoRow(
+                        label = entry.key.ifBlank { "备注${index + 1}" },
+                        value = entry.value,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onEditOtherRemark(index, entry) }
+                    )
+                }
+            }
+        }
+
+        val profile = userDetail.profileInfo
+        if (profile != null) {
+            SectionLabel(text = "个人资料")
+
+            if (profile.lastActiveTime.isNotEmpty()) {
+                InfoRow("上次活跃", profile.lastActiveTime)
+            }
+            if (profile.introduction.isNotEmpty()) {
+                InfoRow("简介", profile.introduction)
+            }
+            InfoRow(
+                "性别",
+                when (profile.gender) {
+                    1 -> "男"
+                    2 -> "女"
+                    else -> "其他"
+                }
+            )
+            if (profile.birthday > 0) {
+                val birthdayDate = java.text.SimpleDateFormat(
+                    "yyyy-MM-dd",
+                    java.util.Locale.getDefault()
+                ).format(java.util.Date(profile.birthday * 1000))
+                InfoRow("生日", birthdayDate)
+            }
+            if (profile.city.isNotEmpty()) {
+                InfoRow("城市", profile.city)
+            }
+            if (profile.district.isNotEmpty()) {
+                InfoRow("地区", profile.district)
+            }
+        }
+    }
+}
+
+/** 页签内的小节标题，可带右侧操作 */
+@Composable
+private fun SectionLabel(
+    text: String,
+    action: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f)
+        )
+        action?.invoke()
+    }
+}
+
+/** 通用的「图标 + 两行文字 + 箭头」列表行，行高和留白按 Expressive 的手感给 */
+@Composable
+private fun ListRow(
+    leading: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        leading()
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+    }
+}
+
+/** 空页签的统一提示 */
+@Composable
+private fun EmptyTabHint(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 48.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 
@@ -1153,43 +1398,6 @@ private fun VipBadge() {
                 fontWeight = FontWeight.Bold
             )
         }
-    }
-}
-
-@Composable
-private fun InfoSectionCard(
-    title: String,
-    action: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            content = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    action?.invoke()
-                }
-                content()
-            }
-        )
     }
 }
 

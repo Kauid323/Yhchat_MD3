@@ -1050,6 +1050,90 @@ class GroupRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    /**
+     * 获取机器人设置表单。
+     *
+     * 注意参数名：读取接口用 chatId（虽然语义上是群 ID），提交接口用 groupId。
+     * 这是服务端定的，不要"顺手统一"。
+     */
+    suspend fun getBotUserSettings(
+        botId: String,
+        chatId: String
+    ): Result<List<com.yhchat.canary.data.model.BotSettingItem>> {
+        return try {
+            val token = tokenRepository?.getTokenSync()
+            if (token.isNullOrEmpty()) {
+                return Result.failure(Exception("未登录"))
+            }
+
+            val response = apiService.getBotUserSettings(
+                token = token,
+                request = com.yhchat.canary.data.api.BotUserSettingsGetRequest(
+                    botId = botId,
+                    chatId = chatId
+                )
+            )
+
+            if (response.isSuccessful) {
+                val body = response.body()
+                val items = body?.data?.settingsJson
+                when {
+                    body == null -> Result.failure(Exception("获取机器人设置失败"))
+                    body.code != 1 -> Result.failure(Exception(body.msg.ifBlank { "获取机器人设置失败" }))
+                    // 空列表是合法结果：机器人自称有设置功能但一项都没配
+                    else -> Result.success(items.orEmpty())
+                }
+            } else {
+                Result.failure(Exception("网络请求失败: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "获取机器人设置失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 提交机器人设置。
+     *
+     * [items] 是「已改好值的全部项」—— 服务端按整体覆盖处理，所以必须把没改的项
+     * 也原样带上，否则那些项会被当成空。
+     */
+    suspend fun saveBotSettings(
+        botId: String,
+        groupId: String,
+        items: List<com.yhchat.canary.data.model.BotSettingSubmit>
+    ): Result<Boolean> {
+        return try {
+            val token = tokenRepository?.getTokenSync()
+            if (token.isNullOrEmpty()) {
+                return Result.failure(Exception("未登录"))
+            }
+
+            val response = apiService.sendBotSettings(
+                token = token,
+                request = com.yhchat.canary.data.model.BotSettingSubmitter.buildRequest(
+                    botId = botId,
+                    groupId = groupId,
+                    items = items
+                )
+            )
+
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null && body.code == 1) {
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(body?.message ?: "保存机器人设置失败"))
+                }
+            } else {
+                Result.failure(Exception("网络请求失败: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "保存机器人设置失败", e)
+            Result.failure(e)
+        }
+    }
     
     /**
      * 获取群指令列表（JSON API）

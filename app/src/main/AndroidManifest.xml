@@ -113,6 +113,14 @@
             android:exported="false"
             android:label="机器人管理"
             android:theme="@style/Theme.YhchatCanary" />
+
+        <!-- 机器人自定义设置表单：结构由机器人 setting 定义决定，一个通用页渲染所有机器人 -->
+        <activity
+            android:name=".ui.group.BotSettingFormActivity"
+            android:exported="false"
+            android:label="机器人设置"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.YhchatCanary" />
         
         <activity
             android:name=".ui.group.ChatSearchActivity"
@@ -147,6 +155,22 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- 云湖第三方扩展协议（第 0 号草案）里新增的三种 scheme。
+                 统一挂在 MainActivity 上，由 UnifiedLinkHandler 分派到各自页面：
+                   sticker-detail    -> 表情包详情
+                   expression-detail -> 收藏个人表情
+                   send-msg          -> 发送至（会先让用户确认会话）
+                 放在这里而不是各自 Activity 上，是因为 send-msg 需要先落回主界面，
+                 且这三种都需要登录态（主界面会处理未登录的情况）。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="yunhu" android:host="sticker-detail" />
+                <data android:scheme="yunhu" android:host="expression-detail" />
+                <data android:scheme="yunhu" android:host="send-msg" />
             </intent-filter>
         </activity>
 

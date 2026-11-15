@@ -1,4 +1,4 @@
-﻿package com.yhchat.canary.ui.components.htmltext
+package com.yhchat.canary.ui.components.htmltext
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,8 +20,8 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -124,6 +123,17 @@ fun AdvancedHtmlRenderer(
     }
 }
 
+/**
+ * 把写死的深色文字在深色主题下换成可读的颜色。
+ *
+ * 机器人发的 HTML 几乎都是按白色背景设计的（`color:#333`、`#111`、`#888`）。
+ * 直接照搬的话，深色主题下就是黑底黑字、完全看不见。这里按亮度判断：
+ *   - 深色主题：太暗的颜色替换成默认前景色
+ *   - 浅色主题：太亮的颜色（`#fff` 这类）替换成默认前景色
+ *
+ * 保留中间地带的颜色（比如 `#2563eb` 蓝、`#e74c3c` 红），它们两种主题下都够醒目，
+ * 一并替换反而会丢掉作者想表达的强调。
+ */
 private fun normalizeTextColorForTheme(
     color: Color?,
     defaultColor: Color,
@@ -134,10 +144,32 @@ private fun normalizeTextColorForTheme(
 
     val luminance = color.luminance()
     return if (isDarkTheme) {
-        if (luminance < 0.18f) defaultColor else color
+        // 深色主题下，亮度低于 0.28 的文字基本看不清；抬到默认前景色
+        if (luminance < 0.28f) defaultColor else color
     } else {
+        // 浅色主题下，亮度高于 0.90 的文字（近白）看不见
         if (luminance > 0.90f) defaultColor else color
     }
+}
+
+/**
+ * 把写死的浅色背景在深色主题下压暗。
+ *
+ * 同上：`background:#f8f9fa` 是按白色页面设计的，深色主题下它是一块发光的白板，
+ * 上面的浅灰文字（已被 [normalizeTextColorForTheme] 改成白字）反而糊在白底上。
+ * 这里按亮度把它映射成深色主题里对应的容器色，保留「这是一个独立块」的视觉语义。
+ */
+private fun normalizeBackgroundColorForTheme(
+    color: Color?,
+    isDarkTheme: Boolean,
+    surfaceContainer: Color
+): Color? {
+    if (color == null) return null
+    if (!isDarkTheme) return color
+
+    val luminance = color.luminance()
+    // 深色主题下亮度 > 0.6 的背景（近白、浅灰）直接换成主题的容器色
+    return if (luminance > 0.6f) surfaceContainer else color
 }
 
 @Composable
@@ -196,36 +228,75 @@ private fun HtmlFlexNode(
             horizontalArrangement = horizontalArrangement,
             verticalAlignment = verticalAlignment
         ) {
-            val elements = node.children.filterIsInstance<HtmlNode.Element>()
-            val textNodes = node.children.filterIsInstance<HtmlNode.Text>()
+            // 关键：按文档顺序渲染。
+            //
+            // 旧实现先把所有 Text 节点合成一个块、再把所有 Element 节点排在后面，
+            // 于是 `<span>名字</span><span>(ID)</span>` 这类结构顺序还行，
+            // 但 `<img/><span>名字</span>` 里两者会被拆散重排；更糟的是
+            // `<div>` 子节点之间的纯空白文本也会被渲染成独立的 Text，
+            // 在 Row 里占掉一整份间距，表现为头像和文字之间出现莫名其妙的空隙。
+            //
+            // 这里改成一次遍历：连续的文本节点攒成一段 AnnotatedString 一次性输出，
+            // 遇到元素节点就单独渲染，顺序与 HTML 完全一致。
+            val inlineBuffer = mutableListOf<HtmlNode>()
 
-            if (textNodes.isNotEmpty()) {
-                val (annotated, style) = buildInlineAnnotated(textNodes, inheritedText)
-                if (annotated.text.hasRenderableHtmlText()) {
-                    @Suppress("DEPRECATION")
-                    ClickableText(
-                        text = annotated,
-                        style = style,
-                        onClick = {}
-                    )
-                }
+            @Composable
+            fun flushInlineBuffer() {
+                if (inlineBuffer.isEmpty()) return
+                val (annotated, style) = buildInlineAnnotated(inlineBuffer.toList(), inheritedText)
+                inlineBuffer.clear()
+                if (!annotated.text.hasRenderableHtmlText()) return
+                @Suppress("DEPRECATION")
+                ClickableText(
+                    text = annotated,
+                    style = style,
+                    onClick = { offset ->
+                        annotated.getStringAnnotations("URL", offset, offset + 1)
+                            .firstOrNull()
+                            ?.let { onLinkClick?.invoke(it.item) }
+                    }
+                )
             }
 
-            elements.forEachIndexed { index, child ->
-                val childFlexGrow = child.style.flexGrow ?: child.style.flex ?: 0f
-                val childModifier = Modifier
-                    .then(if (index > 0 && horizontalArrangement == Arrangement.Start) Modifier.padding(start = gap) else Modifier)
-                    .then(if (childFlexGrow > 0f) Modifier.fillMaxWidth() else Modifier)
-                Box(modifier = childModifier) {
-                    RenderHtmlNode(
-                        node = child,
-                        inheritedText = child.style.mergeText(inheritedText),
-                        onImageClick = onImageClick,
-                        onLinkClick = onLinkClick,
-                        avoidFillMaxWidth = true
-                    )
+            var isFirstChild = true
+            node.children.forEach { child ->
+                when (child) {
+                    is HtmlNode.Text -> inlineBuffer += child
+                    is HtmlNode.Element -> {
+                        flushInlineBuffer()
+                        val childFlexGrow = child.style.flexGrow ?: child.style.flex ?: 0f
+                        // gap 用「非首个子项加前导间距」实现；以前的写法漏掉了
+                        // 文本节点，导致带文字和图片混排时间距错位
+                        val gapModifier =
+                            if (!isFirstChild && gap > 0.dp && horizontalArrangement == Arrangement.Start) {
+                                Modifier.padding(start = gap)
+                            } else {
+                                Modifier
+                            }
+
+                        // weight 只能用于 Row/Column 的直接子项，所以这里把它直接串在
+                        // Box 的 modifier 上 —— 这段代码本来就在 Row 的 content lambda
+                        // （RowScope）里，可以直接调用 weight。
+                        // 以前用的是 fillMaxWidth：两个 flex:1 的子项各自撑满整行，
+                        // 把后面的兄弟节点挤到屏幕外。
+                        Box(
+                            modifier = gapModifier.then(
+                                if (childFlexGrow > 0f) Modifier.weight(childFlexGrow) else Modifier
+                            )
+                        ) {
+                            RenderHtmlNode(
+                                node = child,
+                                inheritedText = child.style.mergeText(inheritedText),
+                                onImageClick = onImageClick,
+                                onLinkClick = onLinkClick,
+                                avoidFillMaxWidth = true
+                            )
+                        }
+                        isFirstChild = false
+                    }
                 }
             }
+            flushInlineBuffer()
         }
     } else {
         Column(
@@ -272,13 +343,30 @@ private fun RenderHtmlNode(
             )
         }
         is HtmlNode.Element -> {
-            when (node.tag) {
-                "img" -> HtmlImageNode(node, onImageClick)
-                "details" -> HtmlDetailsNode(node, normalizedInheritedText, onImageClick, onLinkClick)
-                "blockquote" -> HtmlBlockquoteNode(node, normalizedInheritedText, onImageClick, onLinkClick)
-                "ul", "ol" -> HtmlListNode(node, normalizedInheritedText, onImageClick, onLinkClick)
-                "table" -> HtmlTableNode(node, normalizedInheritedText, onImageClick, onLinkClick)
-                else -> HtmlGenericNode(node, normalizedInheritedText, onImageClick, onLinkClick, avoidFillMaxWidth)
+            // 背景色也做主题归一化，再交给各个子渲染器。
+            // 统一在这里改而不是每个子渲染器各改一遍：子渲染器有七八个，
+            // 漏掉任何一个都会在深色主题下露出一块白底。
+            val themeAdjustedNode = if (node.style.backgroundColor != null) {
+                node.copy(
+                    style = node.style.copy(
+                        backgroundColor = normalizeBackgroundColorForTheme(
+                            color = node.style.backgroundColor,
+                            isDarkTheme = isDarkTheme,
+                            surfaceContainer = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    )
+                )
+            } else {
+                node
+            }
+
+            when (themeAdjustedNode.tag) {
+                "img" -> HtmlImageNode(themeAdjustedNode, onImageClick)
+                "details" -> HtmlDetailsNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
+                "blockquote" -> HtmlBlockquoteNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
+                "ul", "ol" -> HtmlListNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
+                "table" -> HtmlTableNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
+                else -> HtmlGenericNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick, avoidFillMaxWidth)
             }
         }
     }
@@ -634,8 +722,6 @@ private fun HtmlImageNode(
         src
     }
 
-    val width = node.style.width
-    val height = node.style.height
     val imageScale = when (node.style.objectFit?.lowercase()) {
         "cover" -> ContentScale.Crop
         "contain" -> ContentScale.Fit
@@ -645,26 +731,28 @@ private fun HtmlImageNode(
         else -> ContentScale.Fit
     }
 
-    val imageSizeModifier = when {
-        width != null && height != null -> Modifier.size(width = width, height = height)
-        width != null -> Modifier.width(width)
-        height != null -> Modifier.heightIn(min = height, max = height)
-        else -> Modifier
-    }
+    val hasExplicitSize = node.style.width != null || node.style.height != null ||
+        node.style.widthPercent != null || node.style.heightPercent != null
 
-    AsyncImage(
-        model = model,
-        contentDescription = node.attrs["alt"] ?: "图片",
-        modifier = (if (onImageClick != null) {
-            Modifier.clickable { onImageClick(src) }
-        } else {
-            Modifier
-        })
-            .then(imageSizeModifier)
-            .defaultMinSize(minWidth = 120.dp, minHeight = 80.dp)
-            .heightIn(max = 240.dp),
-        contentScale = imageScale
-    )
+    // 用 BoxWithConstraints 拿到可用宽度：百分比尺寸（width:100%）要算成实际 Dp。
+    BoxWithConstraints {
+        val modifier = Modifier
+            .then(if (onImageClick != null) Modifier.clickable { onImageClick(src) } else Modifier)
+            .htmlMediaBoxModel(node.style, maxWidth.takeIf { it > 0.dp && it < Dp.Infinity })
+            // 没有显式尺寸的图片才给兜底最小尺寸；
+            // 有尺寸（比如 24px 头像）时再套 minWidth=120dp 会把头像撑成一块大方图
+            .then(
+                if (hasExplicitSize) Modifier
+                else Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 80.dp)
+            )
+
+        AsyncImage(
+            model = model,
+            contentDescription = node.attrs["alt"] ?: "图片",
+            modifier = modifier,
+            contentScale = imageScale
+        )
+    }
 }
 
 @Composable
@@ -688,6 +776,12 @@ private fun HtmlDetailsNode(
         node.style
     }
 
+    // 三角箭头跟随 summary 自身的 CSS color。
+    // 以前写死 MaterialTheme.colorScheme.primary，于是
+    // `<summary style="color:#2563eb">` 的蓝色文字旁边配了个紫色箭头，很突兀。
+    val summaryColor = (summary as? HtmlNode.Element)?.style?.color
+        ?: MaterialTheme.colorScheme.primary
+
     Column(modifier = Modifier.fillMaxWidth().htmlBoxModel(detailsStyle)) {
         Row(
             modifier = Modifier
@@ -697,15 +791,15 @@ private fun HtmlDetailsNode(
         ) {
             Icon(
                 imageVector = if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
-                contentDescription = if (expanded) "鏀惰捣" else "灞曞紑",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(end = 6.dp)
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = summaryColor,
+                modifier = Modifier.padding(end = 4.dp).size(18.dp)
             )
-            Box(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.weight(1f)) {
                 if (summary != null) {
                     RenderHtmlNode(summary, inheritedText, onImageClick, onLinkClick)
                 } else {
-                    Text("Details", style = inheritedText.toComposeTextStyle())
+                    Text("详情", style = inheritedText.toComposeTextStyle())
                 }
             }
         }
@@ -713,7 +807,8 @@ private fun HtmlDetailsNode(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, top = 4.dp)
+                    // 缩进跟箭头宽度对齐，看起来才是「展开的内容」而不是并列
+                    .padding(start = 22.dp, top = 2.dp)
             ) {
                 content.forEach { RenderHtmlNode(it, inheritedText, onImageClick, onLinkClick) }
             }

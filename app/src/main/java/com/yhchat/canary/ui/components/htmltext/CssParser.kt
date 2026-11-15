@@ -27,17 +27,30 @@ data class CssStyle(
     val minWidth: Dp? = null,
     val height: Dp? = null,
     val minHeight: Dp? = null,
+    /**
+     * 百分比宽高。
+     *
+     * 这段 HTML 里 `width:24px` 是绝对的，但真实世界的富文本经常写 `width:100%`、
+     * `border-radius:50%`。百分比没法在解析期换算成 Dp（要知道父容器宽度），
+     * 所以单独存一份，由渲染层用 BoxWithConstraints 的可用宽度去解析。
+     */
+    val widthPercent: Float? = null,
+    val heightPercent: Float? = null,
     val margin: Dp? = null,
     val marginTop: Dp? = null,
     val marginRight: Dp? = null,
     val marginBottom: Dp? = null,
     val marginLeft: Dp? = null,
+    /** margin: auto —— 用于水平居中 */
+    val marginAuto: Boolean = false,
     val padding: Dp? = null,
     val paddingTop: Dp? = null,
     val paddingRight: Dp? = null,
     val paddingBottom: Dp? = null,
     val paddingLeft: Dp? = null,
     val borderRadius: Dp? = null,
+    /** border-radius: 50% —— 圆形头像就靠它 */
+    val borderRadiusIsCircle: Boolean = false,
     val border: String? = null,
     val borderTop: String? = null,
     val borderRight: String? = null,
@@ -104,6 +117,8 @@ object CssParser {
         val backgroundShorthand = properties["background"]
         val resolvedBackgroundColor = properties["background-color"]?.let { parseColor(it) }
             ?: backgroundShorthand?.let { parseBackgroundColor(it) }
+        val radiusRaw = properties["border-radius"]
+        val marginRaw = properties["margin"]
 
         return CssStyle(
             color = properties["color"]?.let { parseColor(it) },
@@ -118,17 +133,24 @@ object CssParser {
             minWidth = properties["min-width"]?.let { parseDimension(it) },
             height = properties["height"]?.let { parseDimension(it) },
             minHeight = properties["min-height"]?.let { parseDimension(it) },
+            widthPercent = properties["width"]?.let { parsePercent(it) },
+            heightPercent = properties["height"]?.let { parsePercent(it) },
             margin = properties["margin"]?.let { parseSingleDimension(it) },
             marginTop = properties["margin-top"]?.let { parseDimension(it) } ?: marginBox.top,
             marginRight = properties["margin-right"]?.let { parseDimension(it) } ?: marginBox.right,
             marginBottom = properties["margin-bottom"]?.let { parseDimension(it) } ?: marginBox.bottom,
             marginLeft = properties["margin-left"]?.let { parseDimension(it) } ?: marginBox.left,
+            // margin:0 auto 是块级居中的写法，Android 上没有 auto 的概念，
+            // 记一个标记让渲染层用 CenterHorizontally 代替
+            marginAuto = marginRaw?.let { isAutoHorizontalMargin(it) } == true,
             padding = properties["padding"]?.let { parseSingleDimension(it) },
             paddingTop = properties["padding-top"]?.let { parseDimension(it) } ?: paddingBox.top,
             paddingRight = properties["padding-right"]?.let { parseDimension(it) } ?: paddingBox.right,
             paddingBottom = properties["padding-bottom"]?.let { parseDimension(it) } ?: paddingBox.bottom,
             paddingLeft = properties["padding-left"]?.let { parseDimension(it) } ?: paddingBox.left,
-            borderRadius = properties["border-radius"]?.let { parseDimension(it) },
+            borderRadius = radiusRaw?.let { parseDimension(it) },
+            // border-radius:50% 换算不出 Dp（要看元素尺寸），单独标记成圆形
+            borderRadiusIsCircle = radiusRaw?.let { it.contains("%") && (parsePercent(it) ?: 0f) >= 50f } == true,
             border = properties["border"],
             borderTop = properties["border-top"],
             borderRight = properties["border-right"],
@@ -439,6 +461,24 @@ object CssParser {
     private fun parseSingleDimension(dimensionString: String): Dp? {
         if (dimensionString.trim().contains(" ")) return null
         return parseDimension(dimensionString)
+    }
+
+    /**
+     * 解析百分比，返回 0..1 的小数。
+     *
+     * 和 [parseDimension] 分开：百分比在解析期无法换算成 Dp，必须交给渲染层
+     * 结合父容器宽度处理。以前这里直接返回 null，导致 `width:100%`、
+     * `border-radius:50%` 这些写法全部静默失效。
+     */
+    private fun parsePercent(dimensionString: String): Float? {
+        val trimmed = dimensionString.trim()
+        if (!trimmed.endsWith("%")) return null
+        return trimmed.removeSuffix("%").toFloatOrNull()?.div(100f)?.coerceIn(0f, 1f)
+    }
+
+    /** margin 里出现 auto 就认为是「水平居中」 */
+    private fun isAutoHorizontalMargin(value: String): Boolean {
+        return value.split(Regex("\\s+")).any { it.equals("auto", ignoreCase = true) }
     }
 
     private fun parseDimension(dimensionString: String): Dp? {
