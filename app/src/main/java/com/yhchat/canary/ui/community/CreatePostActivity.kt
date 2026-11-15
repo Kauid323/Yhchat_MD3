@@ -25,8 +25,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -56,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +72,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import com.yhchat.canary.R
 import com.yhchat.canary.data.di.RepositoryFactory
 import com.yhchat.canary.ui.theme.YhchatCanaryTheme
@@ -225,6 +229,11 @@ fun CreatePostScreen(
     // 插图相关：点图片按钮时的光标位置、上传进度
     var pendingInsertPosition by remember { mutableStateOf<Int?>(null) }
     val insertState by viewModel.insertImagesState.collectAsState()
+
+    // 滚动状态：输入时把内容滚到底，否则写满一屏之后新输入的文字在屏幕外，
+    // 得手动划一下才看得到
+    val scrollState = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
 
     // 系统图片选择器（支持多选）。
     // 用 PickMultipleVisualMedia 而不是老的 GetContent：前者是系统照片选择器，
@@ -450,27 +459,26 @@ fun CreatePostScreen(
             }
         }
         
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .verticalScroll(scrollState)
+                // 左右各 16dp 保持版式；上下收窄，避免和工具栏之间空一段
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("文章标题") },
-                    placeholder = { Text("请输入文章标题...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("文章标题") },
+                placeholder = { Text("请输入文章标题...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
 
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                     // 插图时的进度条：图片上传可能要几秒，没有任何反馈会让人以为没点上
                     if (insertState.isUploading) {
                         Surface(
@@ -504,7 +512,23 @@ fun CreatePostScreen(
                     //     而写文章时"一眼看到全文"比"固定高度省地方"重要得多。
                     BasicTextField(
                         value = content,
-                        onValueChange = { content = it },
+                        onValueChange = { new ->
+                            content = new
+                            // 每次输入后滚到底部，让刚写的那行保持可见。
+                            //
+                            // 为什么用 scrollState 而不是 LazyColumn：
+                            // 这里其实只有一个会无限长高的输入框，不是一堆独立条目。
+                            // LazyColumn 只能"把某个 item 顶部对齐视口顶部"，
+                            // 没有"滚到底"这个概念；而 ScrollState 的 maxValue
+                            // 就是内容底边，scrollTo 到它才是真正的"跟着输入走"。
+                            scrollScope.launch {
+                                // 先让出一帧：输入框高度变化要到下一次布局才反映到
+                                // maxValue 上，不 yield 的话这里读到的是改之前的旧高度，
+                                // 结果就是"永远差一截"，写长文时还是看不到最后一行。
+                                yield()
+                                scrollState.animateScrollTo(scrollState.maxValue)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .onFocusChanged { contentFocused = it.isFocused },
@@ -515,7 +539,7 @@ fun CreatePostScreen(
                             MaterialTheme.colorScheme.primary
                         ),
                         // 不设 maxLines / 不套固定高度：内容多高它就多高，
-                        // 外层 LazyColumn 负责滚动，全文始终能看全
+                        // 外层 Column + verticalScroll 负责滚动，全文始终能看全
                         minLines = 8,
                         decorationBox = { innerTextField ->
                             Box(
@@ -537,35 +561,6 @@ fun CreatePostScreen(
                             }
                         }
                     )
-                }
-            }
-
-            if (isMarkdownMode) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = "Markdown语法提示：",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "# 一级标题  ## 二级标题\n• **粗体文本**  *斜体文本*\n• - 无序列表  1. 有序列表\n• `代码`  ```代码块```\n• [链接](URL)  ![图片](URL)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -665,5 +660,4 @@ fun CreatePostScreen(
             }
         )
     }
-}
 }
