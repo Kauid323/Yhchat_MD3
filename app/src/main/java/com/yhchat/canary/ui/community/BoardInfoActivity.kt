@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -229,6 +230,10 @@ private fun BoardInfoContent(
     state: BoardInfoState,
     onManageClick: () -> Unit
 ) {
+    // 点击分区头像看大图。跟 BoardDetailActivity / PostDetailActivity 一致：
+    // 预览器是 Dialog，状态就放在用到它的这个 Composable 里，不往 ViewModel 塞。
+    var showAvatarViewer by remember(board.avatar) { mutableStateOf(false) }
+
     // 显式标出 @Composable 类型：SettingsGroup 的 items 是
     // List<@Composable () -> Unit>，靠 map 的返回值推断拿不到这个注解，
     // 里面的 MemberRow(...) 会被当成非 Composable 上下文而报错
@@ -299,7 +304,12 @@ private fun BoardInfoContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
-        item { BoardHero(board) }
+        item {
+            BoardHero(
+                board = board,
+                onAvatarClick = { showAvatarViewer = true }
+            )
+        }
 
         item {
             SettingsGroup(title = "创建者", items = creatorItems)
@@ -339,6 +349,13 @@ private fun BoardInfoContent(
             }
         }
     }
+
+    if (showAvatarViewer && board.avatar.isNotBlank()) {
+        com.yhchat.canary.ui.components.ImageViewer(
+            imageUrl = board.avatar,
+            onDismiss = { showAvatarViewer = false }
+        )
+    }
 }
 
 /**
@@ -348,7 +365,10 @@ private fun BoardInfoContent(
  * Expressive 的层级是靠大色块和圆角表达的，散着放会显得像调试界面。
  */
 @Composable
-private fun BoardHero(board: CommunityBoard) {
+private fun BoardHero(
+    board: CommunityBoard,
+    onAvatarClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -366,7 +386,10 @@ private fun BoardHero(board: CommunityBoard) {
                     contentDescription = board.name,
                     modifier = Modifier
                         .size(72.dp)
-                        .clip(RoundedCornerShape(24.dp)),
+                        .clip(RoundedCornerShape(24.dp))
+                        // 没头像时不给点，否则预览器会在空 url 上自己 return，
+                        // 用户点一下没反应，反而像坏了
+                        .clickable(enabled = board.avatar.isNotBlank()) { onAvatarClick() },
                     contentScale = ContentScale.Crop
                 )
 

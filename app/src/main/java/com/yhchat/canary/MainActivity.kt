@@ -245,6 +245,19 @@ class MainActivity : BaseActivity() {
             }
         }
 
+        // 已登录就挂上消息推送的常驻服务。
+        //
+        // 以前 WS 只由 ConversationScreen 的 LaunchedEffect 拉起，用户停在别的页面
+        // 或者干脆没打开过会话页时根本没有连接，息屏后进程被回收，推送就断了。
+        // 这里在登录态确认之后把前台服务拉起来，退出登录时再停掉。
+        LaunchedEffect(isLoggedIn) {
+            if (isLoggedIn) {
+                com.yhchat.canary.service.NotificationPushService.start(context)
+            } else {
+                com.yhchat.canary.service.NotificationPushService.stop(context)
+            }
+        }
+
         when {
             !isLoggedIn -> {
                 // 未登录，显示登录界面

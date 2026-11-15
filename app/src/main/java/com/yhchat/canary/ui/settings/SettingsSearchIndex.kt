@@ -68,6 +68,7 @@ internal object SettingsSection {
     const val Share = "分享"
     const val YhTools = "云湖工具"
     const val Notification = "通知"
+    const val Ntfy = "外部推送 (ntfy)"
     const val Display = "显示设置"
     const val Theme = "主题设置"
     const val Personalization = "个性化"
@@ -78,13 +79,13 @@ internal object SettingsSection {
     /**
      * 各分组在首页 LazyColumn 里的 item 下标。
      *
-     * 首页是 13 个 `item { }` 平铺出来的，没有 key。搜索命中首页条目时用它
+     * 首页是若干 `item { }` 平铺出来的，没有 key。搜索命中首页条目时用它
      * 滚到对应位置。**首页加了新分组就要更新这里**，否则会滚偏。
      *
      * 顺序对照 SettingsScreen 里的 `item { ... }`：
      *   0 界面 / 1 账户 / 2 内容 / 3 分享 / 4 云湖工具 / 5 云湖工具箱面板 /
-     *   6 通知 / 7 显示设置 / 8 文字转语音 / 9 主题设置 / 10 个性化 /
-     *   11 关于 / 12 账户管理 / 13 底部 Spacer
+     *   6 通知 / 7 外部推送(ntfy) / 8 显示设置 / 9 文字转语音 / 10 主题设置 /
+     *   11 个性化 / 12 关于 / 13 账户管理 / 14 底部 Spacer
      */
     private val itemIndexOf: Map<String, Int> = mapOf(
         Interface to 0,
@@ -93,12 +94,13 @@ internal object SettingsSection {
         Share to 3,
         YhTools to 4,
         Notification to 6,
-        Display to 7,
-        Tts to 8,
-        Theme to 9,
-        Personalization to 10,
-        About to 11,
-        AccountManage to 12
+        Ntfy to 7,
+        Display to 8,
+        Tts to 9,
+        Theme to 10,
+        Personalization to 11,
+        About to 12,
+        AccountManage to 13
     )
 
     /** 分组对应的 item 下标；未知分组返回 null，调用方就不滚动。 */
@@ -263,11 +265,76 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
     // ==================== 一级页：通知 ====================
     add(
         SettingsEntry(
+            title = "耗电设置设为无限制",
+            section = SettingsSection.Notification,
+            page = null,
+            keywords = listOf("耗电", "电池", "省电", "后台", "无限制", "battery", "doze", "推送"),
+            scrollKey = SettingsSection.Notification
+        )
+    )
+    add(
+        SettingsEntry(
+            title = "消息推送常驻服务",
+            section = SettingsSection.Notification,
+            page = null,
+            keywords = listOf("推送", "常驻", "前台服务", "后台", "自启", "notification", "push"),
+            scrollKey = SettingsSection.Notification
+        )
+    )
+    add(
+        SettingsEntry(
+            title = "通知权限设置",
+            section = SettingsSection.Notification,
+            page = null,
+            keywords = listOf("通知", "权限", "通知栏", "渠道", "notification permission"),
+            scrollKey = SettingsSection.Notification
+        )
+    )
+    add(
+        SettingsEntry(
             title = "强制关闭音乐通知",
             section = SettingsSection.Notification,
             page = null,
             keywords = listOf("通知", "音乐", "关闭通知", "notification"),
             scrollKey = SettingsSection.Notification
+        )
+    )
+
+    // ==================== 一级页：外部推送 (ntfy) ====================
+    add(
+        SettingsEntry(
+            title = "ntfy 通知",
+            section = SettingsSection.Ntfy,
+            page = null,
+            keywords = listOf("ntfy", "推送", "外部推送", "通知转发", "push", "topic"),
+            scrollKey = SettingsSection.Ntfy
+        )
+    )
+    add(
+        SettingsEntry(
+            title = "获取 ntfy 密钥",
+            section = SettingsSection.Ntfy,
+            page = null,
+            keywords = listOf("ntfy", "密钥", "key", "topic", "订阅", "生成"),
+            scrollKey = SettingsSection.Ntfy
+        )
+    )
+    add(
+        SettingsEntry(
+            title = "自定义 ntfy 服务器",
+            section = SettingsSection.Ntfy,
+            page = null,
+            keywords = listOf("ntfy", "服务器", "server", "自建", "ntfy.sh"),
+            scrollKey = SettingsSection.Ntfy
+        )
+    )
+    add(
+        SettingsEntry(
+            title = "发送测试通知",
+            section = SettingsSection.Ntfy,
+            page = null,
+            keywords = listOf("ntfy", "测试", "test", "推送测试"),
+            scrollKey = SettingsSection.Ntfy
         )
     )
 

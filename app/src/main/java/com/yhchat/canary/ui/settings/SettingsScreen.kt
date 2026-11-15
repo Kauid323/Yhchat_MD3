@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yhchat.canary.MainActivity
@@ -82,6 +83,7 @@ import com.yhchat.canary.ui.components.AvatarFramePrefsKey
 import com.yhchat.canary.ui.login.LoginActivity
 import com.yhchat.canary.ui.sticker.StickerPackDetailActivity
 import com.yhchat.canary.ui.share.ExternalShareManagerActivity
+import com.yhchat.canary.utils.BatteryOptimizationUtils
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -458,6 +460,96 @@ fun SettingsScreen(
                     title = "通知",
                     items = listOf(
                         {
+                            // 跳到系统的耗电设置，把本应用设成「无限制」。
+                            // 不这样做的话，息屏进 Doze 之后系统会掐掉 WS 长连接，
+                            // 推送就是断的 —— 这里只负责把用户送到那个开关前面，
+                            // 改不改由系统弹窗决定，应用没法自己授予。
+                            val ignoring = remember { mutableStateOf(BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context)) }
+                            // 从系统设置页返回时重新读一次，不然副标题永远停在旧状态
+                            val lifecycleOwner = LocalLifecycleOwner.current
+                            DisposableEffect(lifecycleOwner) {
+                                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                                        ignoring.value = BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context)
+                                    }
+                                }
+                                lifecycleOwner.lifecycle.addObserver(observer)
+                                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                            }
+
+                            SettingsItemCell(
+                                icon = Icons.Default.BatterySaver,
+                                title = "耗电设置设为无限制",
+                                subtitle = if (ignoring.value) {
+                                    "已设为无限制，后台不会被系统限制连接"
+                                } else {
+                                    "点此前往系统设置，选择「无限制」以保证通知推送"
+                                },
+                                onClick = {
+                                    val opened = BatteryOptimizationUtils.requestIgnoreBatteryOptimizations(context)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        if (opened) {
+                                            "请在系统弹窗中选择「允许」或「无限制」"
+                                        } else {
+                                            "未能打开耗电设置，请手动在系统设置中允许后台运行"
+                                        },
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            )
+                        },
+                        {
+                            // 常驻通知服务开关。关掉之后 WS 只在会话页存活，
+                            // 退出前台就收不到推送了 —— 副标题里写清楚这个代价
+                            val autoStart by rememberBooleanPreference(
+                                preferencesName = com.yhchat.canary.service.NotificationPushService.PREFS_NAME,
+                                key = com.yhchat.canary.service.NotificationPushService.KEY_AUTO_START,
+                                defaultValue = true
+                            )
+                            SettingsSwitchItem(
+                                icon = Icons.Default.NotificationsActive,
+                                title = "消息推送常驻服务",
+                                subtitle = if (autoStart) {
+                                    "已开启，开机后自动恢复推送连接"
+                                } else {
+                                    "已关闭，息屏或退出后台后可能收不到通知"
+                                },
+                                checked = autoStart,
+                                onCheckedChange = { enabled ->
+                                    context.getSharedPreferences(
+                                        com.yhchat.canary.service.NotificationPushService.PREFS_NAME,
+                                        Context.MODE_PRIVATE
+                                    ).edit()
+                                        .putBoolean(
+                                            com.yhchat.canary.service.NotificationPushService.KEY_AUTO_START,
+                                            enabled
+                                        )
+                                        .apply()
+
+                                    if (enabled) {
+                                        com.yhchat.canary.service.NotificationPushService.start(context)
+                                    } else {
+                                        com.yhchat.canary.service.NotificationPushService.stop(context)
+                                    }
+                                }
+                            )
+                        },
+                        {
+                            SettingsItemCell(
+                                icon = Icons.Default.Notifications,
+                                title = "通知权限设置",
+                                subtitle = if (BatteryOptimizationUtils.areNotificationsEnabled(context)) {
+                                    "通知已开启，点击管理通知渠道"
+                                } else {
+                                    "通知被关闭，点击前往开启"
+                                },
+                                onClick = {
+                                    BatteryOptimizationUtils.openAppNotificationSettings(context)
+                                }
+                            )
+                        },
+                        {
                             SettingsItemCell(
                                 icon = Icons.Default.Close,
                                 title = "强制关闭音乐通知",
@@ -475,6 +567,12 @@ fun SettingsScreen(
                         }
                     )
                 )
+            }
+
+            // ntfy 外部推送。单独一组，因为它是一整条外部链路（服务器 + 密钥 + 订阅），
+            // 混在"通知"里会让人以为只是个本机开关
+            item {
+                NtfySettingsGroup(context = context)
             }
             
             // 显示设置

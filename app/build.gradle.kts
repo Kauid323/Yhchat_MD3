@@ -40,6 +40,21 @@ android {
         versionCode = 1
         versionName = resolvedVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 只保留中文的语言资源。
+        //
+        // 依赖库夹带的翻译（androidx / media3 / coil / zxing / sardine …）每种语言
+        // 都是几十上百条 strings，合起来是实打实的体积。本项目的界面文案全是写死的
+        // 中文字面量，自己也没有 values-en 之类的目录，所以砍掉 zh 以外的语言资源
+        // 之后行为不变：系统语言不是中文时回落到默认资源，也就是中文。
+        //
+        // 用 resConfigs 而不是新的 androidResources.localeFilters：
+        // 后者在当前 AGP 上接口只暴露了 getter（Set），没有配套的 setter，
+        // `localeFilters +=` 能不能写通取决于 AGP 版本，而这里没法编译验证。
+        // resConfigs 虽然标了 deprecated，但 AGP 10 之前都还能用，且行为确定。
+        // 它只产生一条 deprecation 警告，不影响构建。
+        // 等确认升级到哪一版 AGP 后再换成 localeFilters。
+        resConfigs("zh", "zh-rCN", "zh-rTW", "zh-rHK")
     }
 
     if (hasReleaseSigning) {

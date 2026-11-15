@@ -164,13 +164,36 @@ jobs:
             exit 1
           fi
           cp "$APK_PATH" "dist/${{ matrix.asset_name }}"
+
+          # 顺手把 R8 的 mapping.txt 一起收进产物目录，供崩溃栈反混淆用。
+          #
+          # mapping 的目录名是变体名：assembleStandardRelease -> standardRelease。
+          # 先用变体名精确找，找不到再退回全盘搜索（多 flavor 混在一个 job 里时
+          # 全盘 find 有可能拿错文件）。
+          VARIANT_DIR=$(printf '%s' "${{ matrix.gradle_task }}" | sed -E 's/^assemble//' | sed -E 's/^(.)/\L\1/')
+          MAPPING_PATH="app/build/outputs/mapping/${VARIANT_DIR}/mapping.txt"
+          if [ ! -f "$MAPPING_PATH" ]; then
+            echo "WARN: ${MAPPING_PATH} not found, falling back to search"
+            MAPPING_PATH=$(find app/build/outputs/mapping -type f -name mapping.txt 2>/dev/null | head -n 1)
+          fi
+          if [ -n "${MAPPING_PATH}" ] && [ -f "${MAPPING_PATH}" ]; then
+            cp "$MAPPING_PATH" "dist/mapping-${{ matrix.flavor }}.txt"
+            echo "Collected mapping: ${MAPPING_PATH}"
+          else
+            echo "WARN: no mapping.txt produced for ${{ matrix.flavor }} (minify disabled?)"
+          fi
+
           ls -lh dist
 
       - name: Upload ${{ matrix.flavor }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist/${{ matrix.asset_name }}
+          # mapping 跟 APK 放同一个 artifact，抓崩溃日志时不用再翻别的产物
+          path: |
+            dist/${{ matrix.asset_name }}
+            dist/mapping-${{ matrix.flavor }}.txt
+          if-no-files-found: warn
           retention-days: 30
 
   release:
@@ -196,6 +219,8 @@ jobs:
         run: |
           echo "=== APK files ==="
           find release-assets -name "*.apk" -type f -exec ls -lh {} \;
+          echo "=== mapping files ==="
+          find release-assets -name "mapping-*.txt" -type f -exec ls -lh {} \;
 
       - name: Get commit hash
         id: commit
@@ -348,7 +373,10 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/*.apk
+          # mapping-<flavor>.txt 一起发出去：release 开了 R8，没有它崩溃栈没法反混淆
+          files: |
+            release-assets/*.apk
+            release-assets/mapping-*.txt
           name: Canary ${{ steps.version.outputs.release_name }}
           tag_name: ${{ steps.release_meta.outputs.tag_name }}
           body_path: release-body.md

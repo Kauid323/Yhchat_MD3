@@ -1082,6 +1082,17 @@ class WebSocketService @Inject constructor(
             
             // 显示通知，使用正确的chatId的哈希作为通知ID
             notificationManager.notify(notificationId, notification)
+
+            // 同时转一份给 ntfy。
+            //
+            // 放在系统通知之后：本机通知是主路径，ntfy 是"进程被杀掉之后还能收到"的备胎。
+            // 开关和 topic 都在设置里，这里只做一次读取，没开就立刻返回。
+            // 走的是异步 HTTP，不会拖住 WS 的收包协程。
+            com.yhchat.canary.utils.NtfyNotifier.notify(
+                context = context,
+                title = conversationTitle,
+                message = "$senderName：$messageContent"
+            )
             
             Log.d(tag, "✅ 显示带快捷回复的通知: $conversationTitle (ID: $notificationId)")
             

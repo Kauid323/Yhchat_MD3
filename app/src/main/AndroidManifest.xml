@@ -8,9 +8,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
         android:maxSdkVersion="28" />
@@ -534,6 +537,33 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- 消息推送常驻服务：把 WebSocket 挂在前台服务上，息屏/后台时不被回收。
+             specialUse 而不是 dataSync —— targetSdk 35+ 不允许从开机广播启动 dataSync
+             类型的前台服务，用 dataSync 的话开机自启会直接失败 -->
+        <service
+            android:name=".service.NotificationPushService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_REASON"
+                android:value="保持消息推送的长连接，确保息屏和后台时也能收到通知" />
+        </service>
+
+        <!-- 开机自启：重新拉起消息推送服务。
+             这两个都是系统发的受保护广播，不需要（也不应该）额外挂 permission ——
+             挂上 android:permission="...RECEIVE_BOOT_COMPLETED" 要求发送方持权，
+             个别 ROM 上会直接把广播拦掉，开机自启就静默失效了 -->
+        <receiver
+            android:name=".receiver.BootCompletedReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name="androidx.media.session.MediaButtonReceiver"
