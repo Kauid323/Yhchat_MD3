@@ -39,9 +39,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -210,6 +212,11 @@ fun CreatePostScreen(
     // 纯 String 拿不到 selection，只能追加到末尾，那样工具栏基本没法用。
     var content by remember { mutableStateOf(TextFieldValue(draftContent)) }
     var isMarkdownMode by remember { mutableStateOf(draftMarkdownMode) }
+
+    // 插图上传要 context。Compose 里必须从 LocalContext 取，
+    // 之前直接写了 `context = context`，但这个作用域里根本没有这个变量，
+    // Kotlin 就把它当成了对某个叫 context() 的函数的调用。
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // 输入框是否已获得焦点。Markdown 工具栏只在编辑正文时贴在框上面，
     // 没聚焦时它不该占着屏幕。
@@ -480,7 +487,7 @@ fun CreatePostScreen(
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                androidx.compose.material3.LinearProgressIndicator(
+                                LinearProgressIndicator(
                                     progress = { insertState.fraction },
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -562,15 +569,17 @@ fun CreatePostScreen(
                 }
             }
         }
+        }
 
         // 底部悬浮 Markdown 工具栏。
+        //
+        // 必须是 Box 的直接子项才能用 Modifier.align —— 上一版把它写在 Column 里面，
+        // ColumnScope 里没有 align(BottomCenter)，编译报 "cannot be called in this
+        // context with an implicit receiver"。所以 Column 要在这里先闭合。
         //
         // 它盖在内容之上（Box 的后一个子项），所以是"最上层"；
         // 外层 Box 上的 imePadding 让它在键盘弹出时自动上提，
         // 停靠在键盘上沿，手感跟输入框附属面板一致。
-        //
-        // 不再额外包 Surface：MarkdownToolbar 内部已经有一层 Surface
-        // （自带背景色、高度、顶部圆角），外面再套会变成双层阴影+双背景。
         if (isMarkdownMode && contentFocused) {
             Box(
                 modifier = Modifier
@@ -594,7 +603,6 @@ fun CreatePostScreen(
                     }
                 )
             }
-        }
         }
     }
     
