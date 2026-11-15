@@ -72,6 +72,117 @@ class CreatePostViewModel @Inject constructor(
     fun clearError() {
         _createPostState.value = _createPostState.value.copy(error = null)
     }
+
+    // ------------------------------------------------------------------
+    // 正文插图
+    // ------------------------------------------------------------------
+
+    private val _insertImagesState = MutableStateFlow(InsertImagesState())
+    val insertImagesState: StateFlow<InsertImagesState> = _insertImagesState.asStateFlow()
+
+    /**
+     * 上传选中的图片并返回它们的 Markdown 语法。
+     *
+     * 为什么是一次性传多个、一次性回调：多选场景下如果逐张回调，
+     * 用户会看到正文里图片一个个冒出来、顺序还可能乱。
+     * 全部传完再按选择顺序一次性插入，正文更整洁。
+     *
+     * @param onAllUploaded 全部成功后回调 Markdown 片段列表（顺序与入参一致）
+     */
+    fun uploadImages(
+        context: android.content.Context,
+        uriList: List<android.net.Uri>,
+        onAllUploaded: (List<String>) -> Unit
+    ) {
+        if (uriList.isEmpty()) return
+
+        viewModelScope.launch {
+            _insertImagesState.value = InsertImagesState(
+                isUploading = true,
+                total = uriList.size,
+                uploaded = 0
+            )
+
+            val snippets = mutableListOf<String>()
+            val failed = mutableListOf<String>()
+
+            for ((index, uri) in uriList.withIndex()) {
+                val result = uploadSingleImage(context, uri)
+                result.fold(
+                    onSuccess = { key ->
+                        // 和 Disk 那边的拼法保持一致：图床前缀 + key
+                        snippets += "![图片](${IMAGE_BASE_URL}$key)"
+                        _insertImagesState.value = _insertImagesState.value.copy(
+                            uploaded = index + 1
+                        )
+                    },
+                    onFailure = { e ->
+                        failed += e.message ?: "未知错误"
+                        _insertImagesState.value = _insertImagesState.value.copy(
+                            uploaded = index + 1
+                        )
+                    }
+                )
+            }
+
+            _insertImagesState.value = InsertImagesState(
+                isUploading = false,
+                total = uriList.size,
+                uploaded = uriList.size,
+                failedCount = failed.size
+            )
+
+            if (snippets.isNotEmpty()) {
+                onAllUploaded(snippets)
+            }
+            if (failed.isNotEmpty()) {
+                _createPostState.value = _createPostState.value.copy(
+                    error = if (snippets.isEmpty()) {
+                        "图片上传失败：${failed.first()}"
+                    } else {
+                        "${failed.size} 张图片上传失败，其余 ${snippets.size} 张已插入"
+                    }
+                )
+            }
+        }
+    }
+
+    /** 上传单张图片，返回七牛 key */
+    private suspend fun uploadSingleImage(
+        context: android.content.Context,
+        uri: android.net.Uri
+    ): Result<String> {
+        // token 可能已过期，每张都重新取一次太浪费，用当前登录态取一次即可
+        val token = tokenRepository.getTokenSync()
+            ?: return Result.failure(Exception("未登录"))
+
+        val uploadToken = communityRepository.getQiniuImageToken(token)
+            .getOrElse { return Result.failure(Exception("获取上传凭证失败: ${it.message}")) }
+
+        return com.yhchat.canary.utils.ImageUploadUtil.uploadImage(
+            context = context,
+            imageUri = uri,
+            uploadToken = uploadToken
+        ).map { it.key }
+    }
+
+    companion object {
+        /** 图床访问前缀 */
+        private const val IMAGE_BASE_URL = "https://chat-img.jwznb.com/"
+    }
+}
+
+/**
+ * 插图上传状态
+ */
+data class InsertImagesState(
+    val isUploading: Boolean = false,
+    val total: Int = 0,
+    val uploaded: Int = 0,
+    val failedCount: Int = 0
+) {
+    val fraction: Float
+        get() = if (total <= 0) 0f else (uploaded.toFloat() / total).coerceIn(0f, 1f)
 }
 
 /**

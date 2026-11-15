@@ -9,17 +9,23 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,7 +55,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -206,6 +214,35 @@ fun CreatePostScreen(
     // 输入框是否已获得焦点。Markdown 工具栏只在编辑正文时贴在框上面，
     // 没聚焦时它不该占着屏幕。
     var contentFocused by remember { mutableStateOf(false) }
+
+    // 插图相关：点图片按钮时的光标位置、上传进度
+    var pendingInsertPosition by remember { mutableStateOf<Int?>(null) }
+    val insertState by viewModel.insertImagesState.collectAsState()
+
+    // 系统图片选择器（支持多选）。
+    // 用 PickMultipleVisualMedia 而不是老的 GetContent：前者是系统照片选择器，
+    // 不需要任何读取权限，低版本也能用（走兼容实现）。
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 9),
+        onResult = { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            val anchor = pendingInsertPosition
+            viewModel.uploadImages(
+                context = context,
+                uriList = uris
+            ) { snippets ->
+                // 全部传完后一次性插入，避免正文里图片一个个冒出来打乱顺序
+                var updated = content
+                snippets.forEach { snippet ->
+                    updated = insertAtCursor(updated, snippet, anchor)
+                }
+                content = updated
+                pendingInsertPosition = null
+                // 插完把焦点还给输入框，方便继续写
+                contentFocused = true
+            }
+        }
+    )
     
     val createPostState by viewModel.createPostState.collectAsState()
     val draftSaveState by draftViewModel.draftSaveState.collectAsState()
@@ -214,11 +251,20 @@ fun CreatePostScreen(
     var showExitDialog by remember { mutableStateOf(false) }
     var pendingExitAfterDraftSave by remember { mutableStateOf(false) }
     val displayBoardName = boardName.ifBlank { "发布文章" }
+
+    // 本页有两种进入方式，靠 draftId 区分：
+    //   - 有 draftId：从「我的文章」点草稿进来，是在接着写草稿
+    //   - 无 draftId：从分区点「发布」进来，是全新发布
+    // 两个地方的区别只有三处：标题文案、发布后是否删原草稿、返回时草稿按钮的措辞。
+    // 集中成一个变量，避免这三处各判一次、以后改漏。
+    val isEditingDraft = !draftId.isNullOrBlank()
     
     // 监听创建结果
     LaunchedEffect(createPostState.isSuccess) {
         if (createPostState.isSuccess) {
-            if (!draftId.isNullOrBlank()) {
+            // 草稿发布成功后就删掉，否则「我的文章」里会同时出现
+            // 一条草稿和一条新发布的文章，看起来像发重了
+            if (isEditingDraft && draftId != null) {
                 draftViewModel.deleteDraft(token, draftId)
             }
             onPostCreated()
@@ -255,7 +301,13 @@ fun CreatePostScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = "发布到 $displayBoardName",
+                    // 有 draftId 说明是接着写草稿，标题要说清楚，否则用户会以为
+                    // 自己点进了一个新的发布页、担心把草稿弄丢
+                    text = if (isEditingDraft) {
+                        "编辑草稿"
+                    } else {
+                        "发布到 $displayBoardName"
+                    },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -332,10 +384,24 @@ fun CreatePostScreen(
         )
         }
     ) { innerPadding ->
-        Column(
+        // 用 Box 承载「内容 + 底部悬浮工具栏」两层。
+        //
+        // 关键在 imePadding：键盘弹出时它会把整个 Box 的可用高度压缩，
+        // 底部对齐的工具栏就自然"浮"到键盘上方 —— 这正是用户要的跟随效果。
+        // 项目里 CommentInputBar 用的也是 WindowInsets.ime 这一套。
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .imePadding()
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // 给底部工具栏留出高度，否则正文最后几行会被工具栏盖住
+                .padding(
+                    bottom = if (isMarkdownMode && contentFocused) MarkdownToolbarHeight else 0.dp
+                )
         ) {
         
         // 错误提示
@@ -398,35 +464,71 @@ fun CreatePostScreen(
 
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Markdown 工具条贴在输入框正上方，只在 Markdown 模式且正在编辑时出现。
-                    // 放在输入框之前而不是之后：键盘顶起来时它正好在框的上沿，
-                    // 手指够得到，也不会挡住正文。
-                    MarkdownToolbar(
-                        value = content,
-                        onValueChange = { content = it },
-                        visible = isMarkdownMode && contentFocused
-                    )
+                    // 插图时的进度条：图片上传可能要几秒，没有任何反馈会让人以为没点上
+                    if (insertState.isUploading) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "正在上传图片 ${insertState.uploaded}/${insertState.total}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { insertState.fraction },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
 
-                    OutlinedTextField(
+                    // 正文输入：无边框、默认高度，内容变多自动长高，且不滚动截断。
+                    //
+                    // 用 BasicTextField + 自己的装饰，而不是 OutlinedTextField：
+                    //   - OutlinedTextField 自带描边和 label，想要"无边框"必须把
+                    //     colors 里的 border/label 全设成透明，既别扭又容易漏；
+                    //   - 它内部是裁切滚动的，长文本来回滚动，作者看不到全文，
+                    //     而写文章时"一眼看到全文"比"固定高度省地方"重要得多。
+                    BasicTextField(
                         value = content,
                         onValueChange = { content = it },
-                        label = {
-                            Text(if (isMarkdownMode) "文章内容 (Markdown)" else "文章内容")
-                        },
-                        placeholder = {
-                            Text(
-                                if (isMarkdownMode)
-                                    "支持Markdown语法，如：\n# 标题\n**粗体**\n*斜体*\n- 列表"
-                                else
-                                    "请输入文章内容.."
-                            )
-                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillParentMaxHeight()
-                            .heightIn(min = 320.dp)
                             .onFocusChanged { contentFocused = it.isFocused },
-                        minLines = 12
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(
+                            MaterialTheme.colorScheme.primary
+                        ),
+                        // 不设 maxLines / 不套固定高度：内容多高它就多高，
+                        // 外层 LazyColumn 负责滚动，全文始终能看全
+                        minLines = 8,
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                if (content.text.isEmpty()) {
+                                    Text(
+                                        text = if (isMarkdownMode)
+                                            "支持 Markdown 语法，如：\n# 标题\n**粗体**  *斜体*\n- 列表\n`代码`"
+                                        else
+                                            "请输入文章内容…",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
                 }
             }
@@ -460,6 +562,40 @@ fun CreatePostScreen(
                 }
             }
         }
+
+        // 底部悬浮 Markdown 工具栏。
+        //
+        // 它盖在内容之上（Box 的后一个子项），所以是"最上层"；
+        // 外层 Box 上的 imePadding 让它在键盘弹出时自动上提，
+        // 停靠在键盘上沿，手感跟输入框附属面板一致。
+        //
+        // 不再额外包 Surface：MarkdownToolbar 内部已经有一层 Surface
+        // （自带背景色、高度、顶部圆角），外面再套会变成双层阴影+双背景。
+        if (isMarkdownMode && contentFocused) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            ) {
+                MarkdownToolbar(
+                    value = content,
+                    onValueChange = { content = it },
+                    visible = true,
+                    onPickImagesClick = {
+                        // 记下点按钮这一刻的光标位置。
+                        // 图片是异步上传的，等传完光标可能已经变了（甚至失焦重置），
+                        // 所以必须现在就把位置存下来，插入时按它来。
+                        pendingInsertPosition = content.selection.min
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
+                    }
+                )
+            }
+        }
+        }
     }
     
     // 退出确认对话框
@@ -467,10 +603,16 @@ fun CreatePostScreen(
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
             title = {
-                Text("保存草稿")
+                Text(if (isEditingDraft) "保存草稿修改" else "保存草稿")
             },
             text = {
-                Text("您有未保存的内容，是否保存为草稿")
+                Text(
+                    if (isEditingDraft) {
+                        "您对这份草稿的修改还没保存，是否保存后退出"
+                    } else {
+                        "您有未保存的内容，是否保存为草稿"
+                    }
+                )
             },
             confirmButton = {
                 TextButton(

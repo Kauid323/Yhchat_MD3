@@ -1,11 +1,13 @@
 package com.yhchat.canary.ui.community
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Icon
@@ -58,28 +61,31 @@ private val MarkdownActions = listOf(
 )
 
 /**
- * 正文输入框上方的 Markdown 工具条。
+ * 正文输入框的底部 Markdown 工具条。
  *
- * 高度压到 [MarkdownToolbarHeight]，只在编辑正文（[visible]）时出现。
- * 图标用 Material3 自带的，不引额外资源 —— 这些符号没有官方专门的 markdown 图标，
- * 但 FormatBold / FormatItalic / Title 这类本来就是干这个的，认起来没障碍。
+ * 只在编辑正文（[visible]）时出现，浮在内容最上层，键盘弹出时靠外层
+ * `imePadding()` 自动上提到键盘上沿。
+ *
+ * 按钮不可聚焦：点了之后正文输入框仍保持焦点，工具栏不会因为失焦而消失，
+ * 光标位置也保留着 —— 这是"在光标处插入"能成立的前提。
  *
  * @param value 当前正文，用来决定替换范围
  * @param onValueChange 回写新的正文和光标位置
- * @param visible 是否显示。键盘没弹、输入框没聚焦时收起来，不占屏幕
+ * @param visible 是否显示
+ * @param onPickImagesClick 点图片按钮时触发；由调用方拉起系统图片选择器
  */
 @Composable
 internal fun MarkdownToolbar(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
-    visible: Boolean
+    visible: Boolean,
+    onPickImagesClick: (() -> Unit)? = null
 ) {
     if (!visible) return
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            // 贴在输入框上方，所以上边给圆角、下边贴平
             .height(MarkdownToolbarHeight),
         shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -88,36 +94,72 @@ internal fun MarkdownToolbar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                // 按钮多了可能超出一行，允许横向滚动而不是挤在一起
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             MarkdownActions.forEach { action ->
-                IconButton(
-                    onClick = { onValueChange(applyMarkdown(value, action)) },
-                    modifier = Modifier.size(MarkdownToolbarHeight),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Icon(
-                        imageVector = action.icon,
-                        contentDescription = action.label,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                ToolbarButton(
+                    icon = action.icon,
+                    label = action.label,
+                    onClick = { onValueChange(applyMarkdown(value, action)) }
+                )
+            }
+
+            // 图片放在最后，和格式化按钮之间留一点视觉区隔
+            if (onPickImagesClick != null) {
+                ToolbarButton(
+                    icon = Icons.Default.Image,
+                    label = "插入图片",
+                    onClick = onPickImagesClick
+                )
             }
         }
     }
 }
 
 /**
+ * 工具条上的单个按钮。
+ *
+ * 关键：`Modifier.clickable` 而不是 IconButton —— IconButton 默认可聚焦，
+ * 点它会把焦点从 TextField 抢走，工具栏随即因为 `contentFocused == false` 隐藏，
+ * 用户就再也点不到下一个按钮了。
+ */
+@Composable
+private fun ToolbarButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(MarkdownToolbarHeight),
+        colors = IconButtonDefaults.iconButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(ToolbarIconSize)
+        )
+    }
+}
+
+/**
  * 工具条高度。
  *
- * 40dp 是 Material 的最小可点尺寸，再小按钮就不好按了；比正常 48dp 矮一档，
- * 让它明显是「附属工具」而不是主操作区。
+ * 比 Material 最小可点尺寸（48dp）矮，比正常工具条（56dp）更矮，
+ * 让它明显是「附属工具」。32dp 是在"不误触"和"省屏幕"之间的折中。
+ *
+ * 对外可见：发布页要按这个高度给正文留出底部间距，否则最后几行会被盖住。
  */
-private val MarkdownToolbarHeight = 40.dp
+internal val MarkdownToolbarHeight = 32.dp
+
+/** 图标尺寸：跟着工具条一起缩小，但保持可辨识 */
+private val ToolbarIconSize = 16.dp
 
 /**
  * 把 [action] 应用到 [value] 上，返回新的值和光标位置。
@@ -153,4 +195,37 @@ private fun applyMarkdown(value: TextFieldValue, action: MarkdownAction): TextFi
             selection = TextRange(start + action.prefix.length)
         )
     }
+}
+
+/**
+ * 在当前光标位置插入一段任意文本（用于插入图片语法），
+ * 插完把光标放到插入内容之后。
+ *
+ * 单独抽出来是因为图片插入是异步的：用户选完图、上传完成时，
+ * 光标早就不是点按钮那一刻的位置了。调用方可以在上传前记下 selection，
+ * 上传完成后用这个函数插到原位置。
+ */
+internal fun insertAtCursor(
+    value: TextFieldValue,
+    content: String,
+    cursorOverride: Int? = null
+): TextFieldValue {
+    val insertPos = (cursorOverride ?: value.selection.min)
+        .coerceIn(0, value.text.length)
+
+    // 前后各补一个换行，避免图片语法和相邻文字粘在一起导致不渲染
+    val needsLeadingBreak = insertPos > 0 && value.text[insertPos - 1] != '\n'
+    val needsTrailingBreak = insertPos < value.text.length && value.text[insertPos] != '\n'
+
+    val payload = buildString {
+        if (needsLeadingBreak) append('\n')
+        append(content)
+        if (needsTrailingBreak) append('\n')
+    }
+
+    val newText = value.text.replaceRange(insertPos, insertPos, payload)
+    return TextFieldValue(
+        text = newText,
+        selection = TextRange(insertPos + payload.length)
+    )
 }

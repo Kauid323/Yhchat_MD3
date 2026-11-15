@@ -74,6 +74,18 @@ fun MyPostsScreen(
 ) {
     val context = LocalContext.current
     val myPostListState by viewModel.myPostListState.collectAsState()
+
+    // 草稿 ViewModel 由这里自己取，而不是让调用方传。
+    //
+    // 原来想过写成 `draftViewModel?.draftBoxState?.collectAsState() ?: remember {...}`，
+    // 但那样 remember 处于条件分支里 —— 参数为 null 时每次重组都会新建状态对象，
+    // 且 Compose 不允许在条件里调用 remember。改成无条件取，调用方零负担。
+    val draftViewModel: CommunityDraftViewModel = viewModel {
+        CommunityDraftViewModel(
+            communityRepository = RepositoryFactory.getCommunityRepository(context)
+        )
+    }
+    val draftBoxState by draftViewModel.draftBoxState.collectAsState()
     
     // 搜索状态
     var isSearching by remember { mutableStateOf(false) }
@@ -90,11 +102,35 @@ fun MyPostsScreen(
             }
         }
     }
+
+    // 草稿同样支持搜索，规则和文章保持一致
+    val filteredDrafts = remember(draftBoxState.drafts, searchQuery) {
+        if (searchQuery.isBlank()) {
+            draftBoxState.drafts
+        } else {
+            draftBoxState.drafts.filter { draft ->
+                draft.title.contains(searchQuery, ignoreCase = true) ||
+                draft.content.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
     
+    // 草稿编辑回来后要刷新：用户可能在编辑页把草稿发布了（草稿消失）、
+    // 或者又存了一次（排序/时间变了）。不刷新的话列表停在旧状态。
+    val draftEditorLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (token.isNotEmpty()) {
+            draftViewModel.loadDrafts(token)
+            viewModel.refreshMyPostList(token)
+        }
+    }
+
     // 加载数据
     LaunchedEffect(token) {
         if (token.isNotEmpty()) {
             viewModel.loadMyPostList(token)
+            draftViewModel.loadDrafts(token)
         }
     }
     
@@ -171,16 +207,24 @@ fun MyPostsScreen(
         // 内容区域
         PullToRefreshBox(
             isRefreshing = myPostListState.isRefreshing,
-            onRefresh = { viewModel.refreshMyPostList(token) },
+            onRefresh = {
+                viewModel.refreshMyPostList(token)
+                draftViewModel.loadDrafts(token)
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            MyPostListContent(
+            MyPostsContentWithDrafts(
+                drafts = filteredDrafts,
+                draftsLoading = draftBoxState.isLoading,
                 posts = filteredPosts,
-                isLoading = myPostListState.isLoading,
-                error = myPostListState.error,
+                postsLoading = myPostListState.isLoading,
+                error = myPostListState.error ?: draftBoxState.error,
                 searchQuery = searchQuery,
+                onDraftClick = { draft -> openDraftEditor(context, token, draft, draftEditorLauncher) },
+                onDraftDelete = { draft -> draftViewModel.deleteDraft(token, draft.id) },
+                deletingDraftId = draftBoxState.deletingDraftId,
                 onPostClick = { post ->
                     if (onPostNavigate != null) {
                         onPostNavigate(post.id, post.title)
@@ -192,12 +236,53 @@ fun MyPostsScreen(
                         context.startActivity(intent)
                     }
                 },
+                onPostEdit = { post ->
+                    val intent = android.content.Intent(context, EditPostActivity::class.java).apply {
+                        putExtra("post_id", post.id)
+                        putExtra("token", token)
+                        putExtra("original_title", post.title)
+                        putExtra("original_content", post.content)
+                        putExtra("content_type", post.contentType)
+                        putExtra("board_id", post.baId)
+                    }
+                    context.startActivity(intent)
+                },
                 onDeletePost = { postId ->
                     viewModel.deletePost(token, postId)
-                },
-                context = context,
-                token = token
+                }
             )
         }
+    }
+}
+
+/**
+ * 把草稿点开进入发布页继续编辑。
+ *
+ * 复用 CreatePostActivity 而不是单独做一个「草稿编辑页」：草稿和发布用的是同一套
+ * 标题/正文/Markdown 工具栏，分成两个界面等于把同一份代码维护两遍。
+ * 带上 draft_id 后，发布页保存时会走 update 而不是 insert。
+ *
+ * 传 launcher 而不是直接 startActivity：用户在里面可能把草稿发布了（草稿被删）
+ * 或又存了一次（时间变了），回到列表必须重新拉一遍，否则看到的还是旧的。
+ */
+private fun openDraftEditor(
+    context: android.content.Context,
+    token: String,
+    draft: com.yhchat.canary.data.model.Draft,
+    launcher: androidx.activity.result.ActivityResultLauncher<android.content.Intent>? = null
+) {
+    val intent = android.content.Intent(context, CreatePostActivity::class.java).apply {
+        putExtra("board_id", draft.boardId)
+        putExtra("board_name", draft.boardName)
+        putExtra("token", token)
+        putExtra("draft_id", draft.id)
+        putExtra("draft_title", draft.title)
+        putExtra("draft_content", draft.content)
+        putExtra("draft_markdown_mode", draft.isMarkdownMode)
+    }
+    if (launcher != null) {
+        launcher.launch(intent)
+    } else {
+        context.startActivity(intent)
     }
 }
