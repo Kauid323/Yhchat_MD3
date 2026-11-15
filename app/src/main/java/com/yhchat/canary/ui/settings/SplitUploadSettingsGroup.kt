@@ -124,9 +124,17 @@ internal fun SplitUploadSettingsGroup(context: Context) {
                                     }
                                 }
                             },
-                            modifier = Modifier.width(88.dp),
+                            modifier = Modifier.width(96.dp),
                             singleLine = true,
-                            suffix = { Text("MB") },
+                            // 用 trailingIcon 而不是 suffix：suffix 是较新的 M3 API，
+                            // 当前依赖版本不一定有，用 trailingIcon 更稳
+                            trailingIcon = {
+                                Text(
+                                    text = "MB",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                             textStyle = MaterialTheme.typography.bodyMedium
