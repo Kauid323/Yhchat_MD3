@@ -564,7 +564,6 @@ fun CreatePostScreen(
                 }
             }
         }
-        }
 
         // 底部悬浮 Markdown 工具栏。
         //
@@ -598,6 +597,7 @@ fun CreatePostScreen(
                     }
                 )
             }
+        }
         }
     }
     
