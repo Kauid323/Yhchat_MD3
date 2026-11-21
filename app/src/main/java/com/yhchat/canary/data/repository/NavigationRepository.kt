@@ -36,15 +36,43 @@ class NavigationRepository @Inject constructor(
      */
     private fun loadNavigationConfig(): NavigationConfig {
         val configJson = sharedPreferences.getString(KEY_NAVIGATION_CONFIG, null)
-        return if (configJson != null) {
+        val config = if (configJson != null) {
             try {
                 gson.fromJson(configJson, NavigationConfig::class.java)
+                    ?: NavigationConfig.getDefault()
             } catch (e: Exception) {
                 NavigationConfig.getDefault()
             }
         } else {
             NavigationConfig.getDefault()
         }
+
+        // 本地已经落过配置的设备不会走 getDefault()，旧文案会一直留在本地，
+        // 所以加载时纠正一次并回写，避免每次启动重复迁移。
+        val migrated = migrateLegacyTitles(config)
+        if (migrated != config) {
+            sharedPreferences.edit()
+                .putString(KEY_NAVIGATION_CONFIG, gson.toJson(migrated))
+                .apply()
+        }
+        return migrated
+    }
+
+    /**
+     * 修正历史配置里的旧文案。
+     *
+     * 早期版本把底部导航的「社区」写成了「社群」。导航项名称不支持用户自定义，
+     * 因此这里按 id 直接纠正名称，顺序、可见性等其余字段保持用户原有配置不变。
+     */
+    private fun migrateLegacyTitles(config: NavigationConfig): NavigationConfig {
+        val migratedItems = config.items.map { item ->
+            if (item.id == "community" && (item.name == "社群" || item.title == "社群")) {
+                item.copy(name = "社区", title = "社区")
+            } else {
+                item
+            }
+        }
+        return if (migratedItems == config.items) config else config.copy(items = migratedItems)
     }
     
     /**

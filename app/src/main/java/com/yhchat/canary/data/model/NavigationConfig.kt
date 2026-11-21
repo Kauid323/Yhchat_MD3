@@ -92,8 +92,8 @@ data class NavigationConfig(
                 ),
                 NavigationItem(
                     id = "community",
-                    name = "社群",
-                    title = "社群",
+                    name = "社区",
+                    title = "社区",
                     iconName = "People",
                     route = "community",
                     order = 1,
