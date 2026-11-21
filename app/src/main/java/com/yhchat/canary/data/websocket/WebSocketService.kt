@@ -13,6 +13,7 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -43,6 +44,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.*
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -60,12 +63,15 @@ class WebSocketService @Inject constructor(
     private val tag = "WebSocketService"
     private val gson = Gson()
     
-    private var webSocket: WebSocket? = null
+    @Volatile private var webSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
     private var reconnectJob: Job? = null
-    private var isConnected = false
-    private var isConnecting = false
-    private var shouldReconnect = true
+    @Volatile private var isConnected = false
+    @Volatile private var isConnecting = false
+    @Volatile private var shouldReconnect = true
+    private val connectionMutex = Mutex()
+    @Volatile private var lastReceivedAt = 0L
+    @Volatile private var connectionStartedAt = 0L
     private var reconnectAttempts = 0
     private var currentUserId: String? = null
     private var currentPlatform: String = "windows"
@@ -153,38 +159,30 @@ class WebSocketService @Inject constructor(
      * 连接WebSocket
      */
     suspend fun connect(userId: String, platform: String = "windows") {
-        shouldReconnect = true
-        currentUserId = userId
-        currentPlatform = platform
+        connectionMutex.withLock { connectLocked(userId, platform) }
+    }
 
-        if (isConnected && webSocket != null) {
-            Log.d(tag, "Already connected")
-            return
-        }
-        if (isConnecting) {
-            Log.d(tag, "Connect already in progress, skip duplicate request")
-            return
-        }
+    /** 前台服务和页面会同时请求连接，必须串行判断，避免互相替换 socket。 */
+    private suspend fun connectLocked(userId: String, platform: String) {
+        if (userId.isBlank()) return
+        val sameAccount = currentUserId == userId && currentPlatform == platform
+        shouldReconnect = true
+        if (sameAccount && webSocket != null && (isConnected || isConnecting)) return
 
         reconnectJob?.cancel()
         reconnectJob = null
+        val oldSocket = webSocket
+        webSocket = null // 先失效，旧 socket 的回调不能清理新连接。
+        cleanup()
+        oldSocket?.cancel()
+        currentUserId = userId
+        currentPlatform = platform
         isConnecting = true
-        
-        // 确保完全清理旧连接
-        webSocket?.let { oldSocket ->
-            Log.d(tag, "Cleaning up old WebSocket connection")
-            cleanup()
-            oldSocket.close(1000, "Reconnecting")
-            webSocket = null
-            // 等待旧连接完全关闭
-            delay(300)
-        }
+        connectionStartedAt = SystemClock.elapsedRealtime()
 
         val token = tokenRepository.getTokenSync()
-        if (token == null) {
-            Log.e(tag, "No token available")
+        if (token.isNullOrBlank()) {
             isConnecting = false
-            scheduleReconnect("missing_token")
             _connectionState.emit(ConnectionState.Error("未登录"))
             return
         }
@@ -203,6 +201,7 @@ class WebSocketService @Inject constructor(
                         Log.w(tag, "Ignore onOpen from stale socket")
                         return
                     }
+                    lastReceivedAt = SystemClock.elapsedRealtime()
                     Log.d(tag, "WebSocket opened")
                     isConnected = true
                     isConnecting = false
@@ -223,7 +222,7 @@ class WebSocketService @Inject constructor(
                     }
                     
                     val loginJson = gson.toJson(loginData)
-                    Log.d(tag, "Sending login: $loginJson")
+                    Log.d(tag, "Sending WebSocket login")
                     webSocket.send(loginJson)
                     
                     scope.launch {
@@ -241,6 +240,7 @@ class WebSocketService @Inject constructor(
                     }
                     try {
                         Log.d(tag, "📩 Received binary message (${bytes.size} bytes)")
+                        lastReceivedAt = SystemClock.elapsedRealtime()
                         handleBinaryMessage(bytes.toByteArray())
                     } catch (e: Exception) {
                         Log.e(tag, "❌ Error handling binary message", e)
@@ -254,6 +254,7 @@ class WebSocketService @Inject constructor(
                         return
                     }
                     try {
+                        lastReceivedAt = SystemClock.elapsedRealtime()
                         Log.d(tag, "Received text message (unexpected): $text")
                         // WebSocket 应该只返回二进制 protobuf 消息，不应该有文本消息
                         // 如果收到文本消息，可能是服务器错误或连接问题
@@ -268,6 +269,7 @@ class WebSocketService @Inject constructor(
                         return
                     }
                     Log.d(tag, "WebSocket closing: $code $reason")
+                    webSocket.close(code, reason)
                 }
                 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -306,6 +308,9 @@ class WebSocketService @Inject constructor(
                 }
             })
             
+        } catch (e: CancellationException) {
+            isConnecting = false
+            throw e
         } catch (e: Exception) {
             isConnecting = false
             Log.e(tag, "Error connecting to WebSocket", e)
@@ -314,8 +319,34 @@ class WebSocketService @Inject constructor(
         }
     }
     
+    /** 网络切换、任务移除和前台服务巡检使用同一入口，恢复半开连接。 */
+    suspend fun ensureConnected(userId: String, platform: String = "android", networkChanged: Boolean = false) {
+        connectionMutex.withLock {
+            val now = SystemClock.elapsedRealtime()
+            val stale = isConnected && now - lastReceivedAt > 120_000L
+            val stuck = isConnecting && now - connectionStartedAt > 30_000L
+            if (networkChanged || stale || stuck) {
+                val previous = webSocket
+                webSocket = null
+                cleanup()
+                previous?.cancel()
+                _connectionState.tryEmit(ConnectionState.Disconnected)
+            }
+            connectLocked(userId, platform)
+        }
+    }
+
     private fun isCurrentSocket(socket: WebSocket): Boolean {
         return socket === webSocket
+    }
+
+    private fun failSocket(socket: WebSocket, reason: String) {
+        if (!isCurrentSocket(socket)) return
+        webSocket = null
+        cleanup()
+        socket.cancel()
+        _connectionState.tryEmit(ConnectionState.Error(reason))
+        scheduleReconnect(reason)
     }
 
     private fun scheduleReconnect(reason: String) {
@@ -356,6 +387,8 @@ class WebSocketService @Inject constructor(
             }
 
             reconnectAttempts = attempt
+            // connect 会取消排队重连；先移除自身引用，避免重连协程把自己取消。
+            reconnectJob = null
             runCatching {
                 connect(userId, currentPlatform)
             }.onFailure { e ->
@@ -414,23 +447,30 @@ class WebSocketService @Inject constructor(
      * 启动心跳 - 参考yh_user_sdk/core/ws.py
      */
     private fun startHeartbeat(webSocket: WebSocket) {
+        heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
-            while (isConnected && currentCoroutineContext().isActive) {
+            while (isActive && isCurrentSocket(webSocket)) {
+                delay(30_000L)
+                if (!isCurrentSocket(webSocket)) break
+                // 息屏后 TCP 可能仍显示连接中，但网络实际已断；不能只发心跳不检查响应。
+                if (SystemClock.elapsedRealtime() - lastReceivedAt > 120_000L) {
+                    failSocket(webSocket, "心跳响应超时")
+                    break
+                }
                 try {
-                    delay(30000) // 30秒心跳间隔
-                    
                     val heartbeatData = JsonObject().apply {
                         addProperty("seq", UUID.randomUUID().toString().replace("-", ""))
                         addProperty("cmd", "heartbeat")
                         add("data", JsonObject())
                     }
-                    
-                    val heartbeatJson = gson.toJson(heartbeatData)
-                    Log.d(tag, "Sending heartbeat")
-                    webSocket.send(heartbeatJson)
-                    
+                    if (!webSocket.send(gson.toJson(heartbeatData))) {
+                        failSocket(webSocket, "心跳发送失败")
+                        break
+                    }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    Log.e(tag, "Error sending heartbeat", e)
+                    failSocket(webSocket, "心跳异常：${e.message}")
                     break
                 }
             }

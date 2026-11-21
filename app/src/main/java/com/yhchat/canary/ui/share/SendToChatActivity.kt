@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -156,6 +157,7 @@ private fun SendToChatScreen(
     }
 
     var searchQuery by remember { mutableStateOf("") }
+    var remark by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<Set<SendToChatTarget>>(emptySet()) }
     var selectedTab by remember {
         mutableIntStateOf(prefs.getInt("selected_tab", 0).coerceIn(0, SEND_TAB_COUNT - 1))
@@ -189,7 +191,7 @@ private fun SendToChatScreen(
     }
 
     val onSend: () -> Unit = {
-        sendViewModel.send(content, selected.toList()) { result ->
+        sendViewModel.send(content, selected.toList(), remark = remark) { result ->
             result.fold(
                 onSuccess = {
                     Toast.makeText(context, "发送成功", Toast.LENGTH_SHORT).show()
@@ -284,6 +286,18 @@ private fun SendToChatScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            OutlinedTextField(
+                value = remark,
+                onValueChange = { remark = it },
+                label = { Text("备注（可选）") },
+                supportingText = { Text("内容发送完成后，备注将作为普通文本消息发送") },
+                enabled = !sending.isSending,
+                maxLines = 3,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
             SecondaryTabRow(

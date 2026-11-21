@@ -314,7 +314,7 @@ fun ChatScreen(
     LaunchedEffect(imageUriToSend) {
         imageUriToSend?.let { uri ->
             android.util.Log.d("ChatScreen", "收到待发送的图片URI: $uri")
-            viewModel.uploadAndSendImage(
+            val imageSendJob = viewModel.uploadAndSendImage(
                 context = context,
                 imageUri = uri,
                 quoteMsgId = quotedMessageId,
@@ -331,7 +331,10 @@ fun ChatScreen(
             quotedImageName = null
             quotedVideoUrl = null
             quotedVideoTime = null
-            // 通知已发送
+            // uploadAndSendImage 在 ViewModel 中异步执行；必须等待上传和发送
+            // 都结束，才能让 Activity 推进下一张，否则会取消上一张上传。
+            // 单张失败已有错误提示，仍继续处理其余已选图片。
+            imageSendJob.join()
             onImageSent()
         }
     }

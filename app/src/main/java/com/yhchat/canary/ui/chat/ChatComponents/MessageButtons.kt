@@ -26,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yhchat.canary.data.model.ChatMessage
 import com.yhchat.canary.ui.chat.ChatViewModel
 import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 消息按钮组件
@@ -39,41 +40,16 @@ fun MessageButtons(
 ) {
     val context = LocalContext.current
     val viewModel: ChatViewModel = viewModel()
-    
-    // 在Composable外部解析JSON
+
+    // 支持旧格式二维数组，以及新格式扁平按钮数组；JSON解析结果与输入同生命周期缓存。
     val buttonData = remember(buttonsJson) {
-        try {
-            val buttonRows = JSONArray(buttonsJson)
-            val rows = mutableListOf<List<ButtonData>>()
-            
-            for (i in 0 until buttonRows.length()) {
-                val buttonRow = buttonRows.getJSONArray(i)
-                val buttons = mutableListOf<ButtonData>()
-                
-                for (j in 0 until buttonRow.length()) {
-                    val button = buttonRow.getJSONObject(j)
-                    buttons.add(
-                        ButtonData(
-                            text = button.optString("text", "按钮"),
-                            actionType = button.optInt("actionType", 0),
-                            url = button.optString("url", ""),
-                            value = button.optString("value", "")
-                        )
-                    )
-                }
-                rows.add(buttons)
-            }
-            rows
-        } catch (e: Exception) {
-            android.util.Log.e("MessageButtons", "Failed to parse buttons JSON", e)
-            emptyList()
-        }
+        parseButtonRows(buttonsJson)
     }
-    
+
     if (buttonData.isNotEmpty()) {
         Column(modifier = modifier) {
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             // 遍历每一行按钮
             buttonData.forEach { buttonRow ->
                 Row(
@@ -114,6 +90,65 @@ fun MessageButtons(
                 }
             }
         }
+    }
+}
+
+/**
+ * 兼容扁平按钮数组（视为单行）和既有二维数组（每个子数组作为一行）。
+ * 无效元素单独跳过，避免一个坏元素导致同组其他按钮丢失。
+ */
+private fun parseButtonRows(buttonsJson: String): List<List<ButtonData>> {
+    return try {
+        val root = JSONArray(buttonsJson)
+        val rows = mutableListOf<List<ButtonData>>()
+        val flatRow = mutableListOf<ButtonData>()
+
+        fun parseButtonOrNull(item: Any?): ButtonData? {
+            if (item !is JSONObject) return null
+            return try {
+                val text = item.opt("text") as? String ?: return null
+                val actionType = item.optInt("actionType", 0)
+                // 不为缺失的按钮内容生成默认按钮。
+                if (text.isBlank() || actionType !in 1..3) return null
+                ButtonData(
+                    text = text,
+                    actionType = actionType,
+                    url = item.optString("url", ""),
+                    value = item.optString("value", "")
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("MessageButtons", "Skipping invalid button entry", e)
+                null
+            }
+        }
+
+        fun appendNestedRow(row: JSONArray) {
+            val buttons = mutableListOf<ButtonData>()
+            for (index in 0 until row.length()) {
+                parseButtonOrNull(row.opt(index))?.let(buttons::add)
+            }
+            if (buttons.isNotEmpty()) rows.add(buttons)
+        }
+
+        for (index in 0 until root.length()) {
+            when (val item = root.opt(index)) {
+                is JSONObject -> parseButtonOrNull(item)?.let(flatRow::add)
+                is JSONArray -> {
+                    if (flatRow.isNotEmpty()) {
+                        rows.add(flatRow.toList())
+                        flatRow.clear()
+                    }
+                    appendNestedRow(item)
+                }
+                // 忽略 null、字符串、数字等无效条目，但继续解析其他按钮。
+            }
+        }
+
+        if (flatRow.isNotEmpty()) rows.add(flatRow.toList())
+        rows
+    } catch (e: Exception) {
+        android.util.Log.e("MessageButtons", "Failed to parse buttons JSON", e)
+        emptyList()
     }
 }
 
@@ -161,17 +196,17 @@ fun handleButtonClick(
             }
         }
         3 -> {
-            // 按钮事件上报（button_report）
+            // 将按钮的value作为button_report回调上报；不在客户端推断并执行撤回等操作。
             val chatId = message.chatId ?: ""
             val chatType = message.chatType ?: 1
-            
+
             viewModel.reportButtonClick(
                 chatId = chatId,
                 chatType = chatType,
                 msgId = message.msgId,
                 buttonValue = value
             )
-            
+
             val chatTypeText = when (chatType) {
                 1 -> "私聊"
                 2 -> "群聊"

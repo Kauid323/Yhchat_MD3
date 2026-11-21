@@ -756,9 +756,9 @@ class ChatViewModel @Inject constructor(
         quoteImageName: String? = null,
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null
-    ) {
+    ): Job {
         uploadJob?.cancel()
-        uploadJob = viewModelScope.launch {
+        return viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
                 Log.d(tag, "开始上传并发送图片: $imageUri")
                 _uiState.value = _uiState.value.copy(uploadProgress = 0f)
@@ -842,9 +842,15 @@ class ChatViewModel @Inject constructor(
                 Log.e(tag, "上传并发送图片异常", e)
                 _uiState.value = _uiState.value.copy(error = "发送图片失败: ${e.message}")
             } finally {
-                _uiState.value = _uiState.value.copy(uploadProgress = null)
-                uploadJob = null
+                // 旧任务取消后的清理不能覆盖随后启动的附件任务。
+                if (uploadJob == coroutineContext[Job]) {
+                    _uiState.value = _uiState.value.copy(uploadProgress = null)
+                    uploadJob = null
+                }
             }
+        }.also {
+            uploadJob = it
+            it.start()
         }
     }
 

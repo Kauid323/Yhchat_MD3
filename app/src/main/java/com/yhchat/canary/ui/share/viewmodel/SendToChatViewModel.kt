@@ -65,17 +65,36 @@ class SendToChatViewModel @Inject constructor(
     fun send(
         content: SendToChatContent,
         targets: List<SendToChatTarget>,
+        remark: String = "",
         onFinished: (Result<Unit>) -> Unit
     ) {
+        if (_progress.value.isSending) return
         if (targets.isEmpty()) {
             onFinished(Result.failure(IllegalStateException("请先选择会话")))
             return
         }
 
+        _progress.value = SendToChatProgress(isSending = true, status = "正在发送…")
         viewModelScope.launch {
-            _progress.value = SendToChatProgress(isSending = true, status = "正在发送…")
             val result = try {
                 performSend(content, targets)
+                // 保留用户输入的换行与空格；空白备注不产生额外消息。
+                if (remark.isNotBlank()) {
+                    setStatus("正在发送备注…")
+                    try {
+                        sendToAll("备注", targets) { target ->
+                            messageRepository.sendMessage(
+                                chatId = target.chatId,
+                                chatType = target.chatType,
+                                text = remark
+                            )
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        throw IllegalStateException("原内容已发送，备注发送失败：${e.message ?: "请稍后重试"}", e)
+                    }
+                }
                 Result.success(Unit)
             } catch (e: CancellationException) {
                 throw e

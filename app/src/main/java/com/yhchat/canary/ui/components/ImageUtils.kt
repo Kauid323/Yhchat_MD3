@@ -12,7 +12,13 @@ import coil.request.ImageRequest
  * 支持多种图片格式包括 GIF、AVIF、WEBP、SVG 等
  */
 object ImageUtils {
+    /** 独立长图导出时等待所有图片请求结束，并关闭淡入和硬件位图。 */
+    interface ImageExportContext {
+        val imageExportListener: ImageRequest.Listener
+    }
+
     private fun isDataSaverEnabled(context: Context): Boolean {
+        if (context is ImageExportContext) return false
         val prefs = context.getSharedPreferences("display_settings", Context.MODE_PRIVATE)
         return prefs.getBoolean("data_saver", false)
     }
@@ -66,8 +72,9 @@ object ImageUtils {
         }
         val builder = ImageRequest.Builder(context)
             .data(url)
-            .allowHardware(enableHardware)
-            .crossfade(true)
+            .allowHardware(enableHardware && context !is ImageExportContext)
+            .crossfade(context !is ImageExportContext)
+            .listener((context as? ImageExportContext)?.imageExportListener)
             
         // 为相关域名添加Referer头
         if (needsReferer(url)) {
@@ -94,8 +101,9 @@ object ImageUtils {
         }
         val builder = ImageRequest.Builder(context)
             .data(url)
-            .allowHardware(enableHardware)
-            .crossfade(true)
+            .allowHardware(enableHardware && context !is ImageExportContext)
+            .crossfade(context !is ImageExportContext)
+            .listener((context as? ImageExportContext)?.imageExportListener)
             
         // 为相关域名添加Referer头
         if (needsReferer(url)) {
@@ -122,8 +130,9 @@ object ImageUtils {
         }
         val builder = ImageRequest.Builder(context)
             .data(url)
-            .allowHardware(enableHardware)
-            .crossfade(true)
+            .allowHardware(enableHardware && context !is ImageExportContext)
+            .crossfade(context !is ImageExportContext)
+            .listener((context as? ImageExportContext)?.imageExportListener)
             
         // 为相关域名添加Referer头
         if (needsReferer(url)) {
@@ -152,8 +161,9 @@ object ImageUtils {
             .data(url)
             .setHeader("Referer", "https://myapp.jwznb.com")
             .setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
-            .allowHardware(enableHardware)
-            .crossfade(true)
+            .allowHardware(enableHardware && context !is ImageExportContext)
+            .crossfade(context !is ImageExportContext)
+            .listener((context as? ImageExportContext)?.imageExportListener)
             .build()
     }
     
@@ -175,8 +185,9 @@ object ImageUtils {
             .data(url)
             .setHeader("Referer", "https://myapp.jwznb.com")
             .setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
-            .allowHardware(enableHardware)
-            .crossfade(true)
+            .allowHardware(enableHardware && context !is ImageExportContext)
+            .crossfade(context !is ImageExportContext)
+            .listener((context as? ImageExportContext)?.imageExportListener)
             .build()
     }
 }

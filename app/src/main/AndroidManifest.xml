@@ -576,9 +576,10 @@
             android:name=".service.NotificationPushService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_REASON"
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="保持消息推送的长连接，确保息屏和后台时也能收到通知" />
         </service>
 
