@@ -970,6 +970,23 @@ private fun DisplaySettingsGroup(
                     }
                 )
             },
+            {
+                val previewLines by com.yhchat.canary.ui.components.rememberIntPreference(
+                    "display_settings", "conversation_preview_lines", 1
+                )
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("会话消息预览行数", style = MaterialTheme.typography.titleMedium)
+                    Text("最多 ${previewLines.coerceIn(1, 10)} 行", style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                        value = previewLines.coerceIn(1, 10).toFloat(),
+                        onValueChange = { value ->
+                            prefs.edit().putInt("conversation_preview_lines", (value + 0.5f).toInt().coerceIn(1, 10)).apply()
+                        },
+                        valueRange = 1f..10f,
+                        steps = 8
+                    )
+                }
+            },
             { LongPressSendMarkdownSettingItem(context = context) },
             { FontSizeSettingItem(context = context) },
             { GlobalScaleSettingItem(context = context) },
@@ -1867,13 +1884,11 @@ private fun ThemeColorSettingItem(
     onColorPickerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val prefs = remember { 
-        context.getSharedPreferences("theme_settings", Context.MODE_PRIVATE) 
-    }
-    
-    val currentColorInt = prefs.getInt("custom_primary_color", 0xFF6200EE.toInt())
-    val currentColor = Color(currentColorInt)
-    val isCustomColor = currentColorInt != 0xFF6200EE.toInt()
+    val currentColorInt by com.yhchat.canary.ui.components.rememberIntPreference(
+        "theme_settings", "custom_primary_color", -1
+    )
+    val isCustomColor = currentColorInt != -1 && currentColorInt != 0xFF6200EE.toInt()
+    val currentColor = if (isCustomColor) Color(currentColorInt) else MaterialTheme.colorScheme.primary
     
     SettingsCustomItem(onClick = onColorPickerClick) {
         Row(
@@ -1901,7 +1916,7 @@ private fun ThemeColorSettingItem(
                 )
                 Text(
                     text = if (isCustomColor) {
-                        "已自定义（会覆盖莫奈取色，需重启生效）"
+                        "已自定义（覆盖莫奈取色，立即生效）"
                     } else {
                         "使用默认配色或莫奈取色（Android 12+）"
                     },
@@ -2137,7 +2152,7 @@ private fun ColorPickerDialog(
                         prefs.edit().putInt("custom_primary_color", colorInt).apply()
                         android.widget.Toast.makeText(
                             context,
-                            "主题颜色已保存，重启应用后生效",
+                            "主题颜色已应用",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                         onDismiss()

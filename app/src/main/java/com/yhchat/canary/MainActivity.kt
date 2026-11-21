@@ -357,6 +357,10 @@ class MainActivity : BaseActivity() {
                     currentScreen = screen
                 }
 
+                var searchOverlayVisible by remember { mutableStateOf(false) }
+                var searchButtonBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+                val searchConversations by conversationViewModel.conversations.collectAsStateWithLifecycle()
+                Box(Modifier.fillMaxSize()) {
                 if (isLargeScreen) {
                     // 大屏设备：使用Row布局，侧边栏在左边
                     Row(modifier = Modifier.fillMaxSize()) {
@@ -401,11 +405,8 @@ class MainActivity : BaseActivity() {
                                                             splitChatName = chatName
                                                             splitChatAvatarUrl = avatarUrl
                                                         },
-                                                        onSearchClick = {
-                                                            if (isInitialized) {
-                                                                currentScreen = "search"
-                                                            }
-                                                        },
+                                                        onSearchClick = { searchOverlayVisible = true },
+                                                    onSearchBoundsChanged = { searchButtonBounds = it },
                                                         onMenuClick = { },
                                                         onProfileClick = {
                                                             currentScreen = "profile"
@@ -843,11 +844,8 @@ class MainActivity : BaseActivity() {
                                                             userId = userId
                                                         )
                                                     },
-                                                    onSearchClick = {
-                                                        if (isInitialized) {
-                                                            currentScreen = "search"
-                                                        }
-                                                    },
+                                                    onSearchClick = { searchOverlayVisible = true },
+                                                    onSearchBoundsChanged = { searchButtonBounds = it },
                                                     onMenuClick = { },
                                                     onProfileClick = {
                                                         currentScreen = "profile"
@@ -934,6 +932,17 @@ class MainActivity : BaseActivity() {
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }
+                }
+                if (searchOverlayVisible) {
+                    com.yhchat.canary.ui.search.ConversationSearchOverlay(
+                        origin = searchButtonBounds,
+                        conversations = searchConversations,
+                        onDismiss = { searchOverlayVisible = false },
+                        onConversationClick = { conversation ->
+                            launchChatActivity(conversation.chatId, conversation.chatType, conversation.name, conversation.avatarUrl, userId)
+                        }
+                    )
+                }
                 }
             }
         }

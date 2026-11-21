@@ -100,13 +100,7 @@ fun YhchatCanaryTheme(
         LocalDensity provides scaledDensity
     ) {
         val standardColorScheme = when {
-            monetEnabled && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                if (effectiveDarkTheme) {
-                    dynamicDarkColorScheme(context)
-                } else {
-                    dynamicLightColorScheme(context)
-                }
-            }
+            // 用户手动选色优先；重置后才回退到系统动态取色。
             customPrimaryColor != null -> {
                 val base = if (effectiveDarkTheme) DarkColorScheme else LightColorScheme
                 base.copy(
@@ -114,6 +108,13 @@ fun YhchatCanaryTheme(
                     primaryContainer = customPrimaryColor.copy(alpha = 0.3f),
                     onPrimaryContainer = if (effectiveDarkTheme) customPrimaryColor.copy(alpha = 0.9f) else customPrimaryColor
                 )
+            }
+            monetEnabled && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (effectiveDarkTheme) {
+                    dynamicDarkColorScheme(context)
+                } else {
+                    dynamicLightColorScheme(context)
+                }
             }
             effectiveDarkTheme -> DarkColorScheme
             else -> LightColorScheme

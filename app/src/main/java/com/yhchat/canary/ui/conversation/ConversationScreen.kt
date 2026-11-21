@@ -105,6 +105,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -154,6 +156,7 @@ fun ConversationScreen(
     userId: String,
     onConversationClick: (String, Int, String, String?) -> Unit, // chatId, chatType, chatName, avatarUrl
     onSearchClick: () -> Unit,
+    onSearchBoundsChanged: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     onMenuClick: () -> Unit,
     onProfileClick: () -> Unit = {},
     tokenRepository: TokenRepository? = null,
@@ -420,8 +423,8 @@ fun ConversationScreen(
                     ) {
                         if (layoutShowSearch) {
                             IconButton(
-                                onClick = { isSearchActive = true },
-                                enabled = !isSearchActive
+                                onClick = onSearchClick,
+                                modifier = Modifier.onGloballyPositioned { onSearchBoundsChanged(it.boundsInWindow()) }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Search,
@@ -1387,6 +1390,9 @@ fun ConversationItem(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val previewLines by com.yhchat.canary.ui.components.rememberIntPreference(
+        "display_settings", "conversation_preview_lines", 1
+    )
     val avatarUrl72 = remember(conversation.avatarUrl) {
         val url = conversation.avatarUrl
         if (url.isNullOrBlank()) {
@@ -1556,7 +1562,7 @@ fun ConversationItem(
                             text = displayContent,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (conversation.at > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = previewLines.coerceIn(1, 10),
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )

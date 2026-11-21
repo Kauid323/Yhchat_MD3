@@ -457,6 +457,16 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
         )
     )
 
+    add(
+        SettingsEntry(
+            title = "会话消息预览行数",
+            section = SettingsSection.Display,
+            page = null,
+            keywords = listOf("会话", "预览", "消息行数", "10行", "列表"),
+            scrollKey = SettingsSection.Display
+        )
+    )
+
     // ==================== 一级页：主题设置 ====================
     add(
         SettingsEntry(
