@@ -67,7 +67,8 @@ fun ConversationPicker(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     maxSelection: Int? = null,
-    viewModel: ContactsViewModel = hiltViewModel()
+    viewModel: ContactsViewModel = hiltViewModel(),
+    showSelectionSummary: Boolean = true
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
@@ -98,7 +99,10 @@ fun ConversationPicker(
     }
 
     Column(modifier = modifier) {
-        SecondaryTabRow(selectedTabIndex = pagerState.currentPage) {
+        SecondaryTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = pagerState.currentPage == index,
@@ -117,7 +121,7 @@ fun ConversationPicker(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
         )
-        Row(
+        if (showSelectionSummary) Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

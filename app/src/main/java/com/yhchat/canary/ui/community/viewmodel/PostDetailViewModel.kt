@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -55,6 +56,36 @@ class PostDetailViewModel @Inject constructor(
     private val _commentSending = MutableStateFlow(false)
     val commentSending: StateFlow<Boolean> = _commentSending.asStateFlow()
     
+    private var postDetailJob: kotlinx.coroutines.Job? = null
+
+    /** 编辑保存后只刷新正文详情，不重置评论、滚动位置或显示加载占位。 */
+    fun refreshPostAfterEdit(postId: Int) {
+        postDetailJob?.cancel()
+        postDetailJob = viewModelScope.launch {
+            try {
+                val token = tokenRepository.getTokenSync()
+                check(!token.isNullOrBlank() && postId > 0) { "无法刷新文章，请重新登录后重试" }
+                _postDetailState.update { it.copy(isLoading = false, isRefreshing = false, error = null) }
+                val response = communityRepository.getPostDetail(token, postId).getOrThrow()
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                _postDetailState.update {
+                    it.copy(
+                        post = response.data.post,
+                        board = response.data.board,
+                        isAdmin = response.data.isAdmin,
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = null
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _postDetailState.update { it.copy(error = "文章已保存，刷新失败：${error.message ?: "请下拉重试"}") }
+            }
+        }
+    }
+
     /**
      * 使用TokenRepository获取token并加载文章详情
      */
@@ -85,7 +116,8 @@ class PostDetailViewModel @Inject constructor(
      * 加载文章详情
      */
     fun loadPostDetail(token: String, postId: Int, isRefresh: Boolean = false) {
-        viewModelScope.launch {
+        postDetailJob?.cancel()
+        postDetailJob = viewModelScope.launch {
             if (isRefresh) {
                 _postDetailState.value = _postDetailState.value.copy(isRefreshing = true, error = null)
             } else {
@@ -94,9 +126,11 @@ class PostDetailViewModel @Inject constructor(
             
             communityRepository.getPostDetail(token, postId)
                 .onSuccess { response ->
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     // 获取用户信息以确认当前用户ID
                     userRepository.getUserProfile().fold(
                         onSuccess = { userProfile ->
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
                             _postDetailState.value = PostDetailState(
                                 post = response.data.post,
                                 board = response.data.board,
@@ -108,6 +142,7 @@ class PostDetailViewModel @Inject constructor(
                             )
                         },
                         onFailure = {
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
                             // 如果获取用户信息失败，回退到本地存储的ID
                             _postDetailState.value = PostDetailState(
                                 post = response.data.post,
@@ -127,6 +162,7 @@ class PostDetailViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     _postDetailState.value = _postDetailState.value.copy(
                         isLoading = false,
                         isRefreshing = false,
@@ -182,33 +218,8 @@ class PostDetailViewModel @Inject constructor(
                             response.data.comments.filter { it.id !in knownIds }
                     }
 
-                    // 后端按时间倒序返回（最新在前），这里统一排成正序：1L 在最上面。
-                    //
-                    // 必须「拼完再排」而不是「每页反转」：
-                    // 分页时第 1 页是 [旧…新]，第 2 页又是 [旧…新]（更旧的一批），
-                    // 逐页反转拼起来会变成 [旧…新][更旧…] 的错序。
-                    // 在合并后的全集上按时间排，才与页码无关。
-                    //
-                    // 用 createTime 升序，同一秒的用 id 兜底 —— 楼中楼回复常常
-                    // 落在同一秒，只按时间排会不稳定。
-                    //
-                    // 万一某条 createTime 是 0（后端漏给），它会被排到最前面，
-                    // 反而比原来的倒序更乱。所以只要有一条时间无效就整批不排，
-                    // 保持后端给的顺序 —— 那是已知可用的顺序。
-                    // 这里不能写 reversed()：分页下「每批反转再拼」会错序。
-                    val timeValid = merged.all { it.createTime > 0L }
-                    val sorted = if (timeValid) {
-                        merged.sortedWith(
-                            compareBy<CommunityComment> { it.createTime }.thenBy { it.id }
-                        )
-                    } else {
-                        merged
-                    }
-
-                    // 最后再兜一道：保证交给 UI 的列表里 id 一定唯一。
-                    // 第 1 页本身也可能是脏的（后端返回重复行），那种情况上面的
-                    // 分页去重管不到。UI 的 key 就是 comment.id，这里漏一条就崩一次。
-                    val newComments = sorted.distinctBy { it.id }
+                    // 保留接口的最新在前顺序；后续页直接追加更早评论，按 id 去重。
+                    val newComments = merged.distinctBy { it.id }
 
                     _commentListState.value = CommentListState(
                         comments = newComments,

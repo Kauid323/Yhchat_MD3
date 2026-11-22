@@ -1126,7 +1126,7 @@ fun MyPostListContent(
                     onEdit = { 
                         // 跳转到编辑文章Activity
                         val intent = Intent(
-                            context, EditPostActivity::class.java).apply {
+                            context, CreatePostActivity::class.java).apply {
                             putExtra("post_id", post.id)
                             putExtra("token", token)
                             putExtra("original_title", post.title)

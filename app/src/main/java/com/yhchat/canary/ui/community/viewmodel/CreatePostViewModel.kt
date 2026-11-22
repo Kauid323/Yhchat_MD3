@@ -66,6 +66,25 @@ class CreatePostViewModel @Inject constructor(
         }
     }
     
+    fun editPost(token: String, postId: Int, title: String, content: String, contentType: Int) {
+        if (_createPostState.value.isLoading) return
+        _createPostState.value = CreatePostState(isLoading = true)
+        viewModelScope.launch {
+            try {
+                val response = communityRepository.editPost(token, postId, title, content, contentType)
+                _createPostState.value = if (response.code == 1) {
+                    CreatePostState(isSuccess = true, postId = postId)
+                } else {
+                    CreatePostState(error = response.msg ?: "编辑文章失败")
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _createPostState.value = CreatePostState(error = error.message ?: "编辑文章失败")
+            }
+        }
+    }
+
     /**
      * 清除错误信息
      */

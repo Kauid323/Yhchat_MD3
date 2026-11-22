@@ -126,9 +126,6 @@ fun ConversationSearchOverlay(
                     if (filtered.isEmpty()) item { Text("没有匹配的会话", Modifier.padding(24.dp)) }
                 }
             } else {
-                TextButton(onClick = { sheet = 1 }) {
-                    Text("${targets.size} 个会话 · ${if (types.isEmpty()) "全部类型" else "${types.size} 种类型"} · 修改筛选")
-                }
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (targets.isEmpty() || query.isBlank()) item {
                         Text(if (targets.isEmpty()) "请选择要搜索的会话" else "输入关键词搜索聊天记录")
@@ -164,14 +161,26 @@ fun ConversationSearchOverlay(
         }
     }
     if (sheet != 0) {
-        ModalBottomSheet(onDismissRequest = { sheet = 0 }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        ModalBottomSheet(
+            onDismissRequest = { sheet = 0 },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            sheetMaxWidth = if (sheet == 2) androidx.compose.ui.unit.Dp.Unspecified else BottomSheetDefaults.SheetMaxWidth,
+            shape = if (sheet == 2) androidx.compose.ui.graphics.RectangleShape else BottomSheetDefaults.ExpandedShape,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = { if (sheet != 2) BottomSheetDefaults.DragHandle() },
+            contentWindowInsets = { if (sheet == 2) WindowInsets(0, 0, 0, 0) else BottomSheetDefaults.windowInsets }
+        ) {
             if (sheet == 2) {
-                Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f)) {
+                Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = { sheet = 1 }) { Text("返回筛选") }
+                        TextButton(onClick = { pickerDraft = emptySet() }, enabled = pickerDraft.isNotEmpty()) { Text("清空") }
                         TextButton(onClick = { targets = pickerDraft; sheet = 1 }) { Text("确定 (${pickerDraft.size})") }
                     }
-                    ConversationPicker(pickerDraft, { pickerDraft = it }, Modifier.weight(1f), viewModel = contactsViewModel)
+                    ConversationPicker(
+                        pickerDraft, { pickerDraft = it }, Modifier.weight(1f),
+                        viewModel = contactsViewModel,
+                        showSelectionSummary = false
+                    )
                 }
             } else {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

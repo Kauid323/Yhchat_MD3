@@ -2174,6 +2174,12 @@ fun PostDetailScreen(
         }
     }
     
+    val postEditorLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.refreshPostAfterEdit(postId)
+    }
+
     // 加载数据
     LaunchedEffect(postId) {
         if (postId > 0) {
@@ -2245,9 +2251,10 @@ fun PostDetailScreen(
         keys
     }
 
-    // 每条例子的原始楼层（在全部评论里的下标 + 1），过滤后仍用这个号
-    val floorIndexOf = remember(commentListState.comments) {
-        commentListState.comments.mapIndexed { index, c -> c.id to index + 1 }.toMap()
+    // 接口最新在前：总数为 N 时依次显示 NL、(N-1)L；过滤后不重新编号。
+    val floorIndexOf = remember(commentListState.comments, commentListState.total) {
+        val total = commentListState.total.coerceAtLeast(commentListState.comments.size)
+        commentListState.comments.mapIndexed { index, comment -> comment.id to (total - index) }.toMap()
     }
 
     // LocalPageScroll 必须 provide 出去，否则 Modifier.pageScroll /
@@ -2412,8 +2419,7 @@ fun PostDetailScreen(
 
                             // ===== 评论区：直接接在文章下方 =====
                             // 「只看楼主」时只留楼主本人的评论。楼主就是这篇的作者，
-                            // 楼层号在所有评论里的原始位置不变（第几条就是几楼），
-                            // 所以过滤后不会重新编号，看起来仍是 1L、5L、17L 这样跳着走。
+                            // 楼层按总评论数减去原始下标计算，过滤后保留原楼层。
                             item(key = "comment_header") {
                                 CommentSectionHeader(
                                     total = if (commentListState.total > 0) {
@@ -2455,8 +2461,8 @@ fun PostDetailScreen(
                             ) { index, comment ->
                                 CommentItem(
                                     comment = comment,
-                                    // 楼层 = 它在全部评论里的原始位置 + 1，过滤时也保持原楼号
-                                    floor = floorIndexOf[comment.id] ?: (index + 1),
+                                    // 使用全部评论中的楼层，不能按过滤后的下标编号。
+                                    floor = floorIndexOf.getValue(comment.id),
                                     // 第一层的竖线从头像中心开始，后面的层从顶部接上
                                     startsRule = index == 0,
                                     isLz = comment.senderId == post.senderId,
@@ -2802,7 +2808,7 @@ fun PostDetailScreen(
                         onClick = {
                             topMenuExpanded = false
                             postDetailState.post?.let { post ->
-                                val intent = Intent(context, EditPostActivity::class.java).apply {
+                                val intent = Intent(context, CreatePostActivity::class.java).apply {
                                     putExtra("post_id", post.id)
                                     putExtra("token", if (isTokenLoaded) currentToken else "")
                                     putExtra("original_title", post.title)
@@ -2811,7 +2817,7 @@ fun PostDetailScreen(
                                     putExtra("board_id", post.baId)
                                     putExtra("board_name", postDetailState.board?.name ?: "")
                                 }
-                                context.startActivity(intent)
+                                postEditorLauncher.launch(intent)
                             }
                         }
                     )

@@ -237,7 +237,7 @@ fun MyPostsScreen(
                     }
                 },
                 onPostEdit = { post ->
-                    val intent = android.content.Intent(context, EditPostActivity::class.java).apply {
+                    val intent = android.content.Intent(context, CreatePostActivity::class.java).apply {
                         putExtra("post_id", post.id)
                         putExtra("token", token)
                         putExtra("original_title", post.title)
@@ -245,7 +245,7 @@ fun MyPostsScreen(
                         putExtra("content_type", post.contentType)
                         putExtra("board_id", post.baId)
                     }
-                    context.startActivity(intent)
+                    draftEditorLauncher.launch(intent)
                 },
                 onDeletePost = { postId ->
                     viewModel.deletePost(token, postId)

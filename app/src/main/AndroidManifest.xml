@@ -482,11 +482,6 @@
             android:label="综合搜索"
             android:theme="@style/Theme.YhchatCanary" />
 
-        <activity
-            android:name=".ui.community.EditPostActivity"
-            android:exported="false"
-            android:label="编辑文章"
-            android:theme="@style/Theme.YhchatCanary" />
 
         <activity
             android:name=".ui.bot.BotSettingsActivity"

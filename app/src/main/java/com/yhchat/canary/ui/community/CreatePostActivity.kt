@@ -87,15 +87,16 @@ class CreatePostActivity : ComponentActivity() {
         enableEdgeToEdge()
         com.yhchat.canary.ui.base.SystemBarUtils.setupTransparentSystemBars(this)
         
+        val postId = intent.getIntExtra("post_id", 0)
         val boardId = intent.getIntExtra("board_id", 0)
         val boardName = intent.getStringExtra("board_name").orEmpty()
         val token = intent.getStringExtra("token") ?: ""
         
         // 草稿相关参数
         val draftId = intent.getStringExtra("draft_id")
-        val draftTitle = intent.getStringExtra("draft_title") ?: ""
-        val draftContent = intent.getStringExtra("draft_content") ?: ""
-        val draftMarkdownMode = intent.getBooleanExtra("draft_markdown_mode", false)
+        val draftTitle = if (postId > 0) intent.getStringExtra("original_title").orEmpty() else intent.getStringExtra("draft_title").orEmpty()
+        val draftContent = if (postId > 0) intent.getStringExtra("original_content").orEmpty() else intent.getStringExtra("draft_content").orEmpty()
+        val draftMarkdownMode = if (postId > 0) intent.getIntExtra("content_type", 1) == 2 else intent.getBooleanExtra("draft_markdown_mode", false)
         
         setContent {
             YhchatCanaryTheme {
@@ -113,6 +114,7 @@ class CreatePostActivity : ComponentActivity() {
                 }
                 
                 CreatePostScreen(
+                    postId = postId,
                     boardId = boardId,
                     boardName = boardName,
                     token = token,
@@ -120,7 +122,7 @@ class CreatePostActivity : ComponentActivity() {
                     viewModel = viewModel,
                     draftViewModel = draftViewModel,
                     onBackClick = { finish() },
-                    onPostCreated = { finish() },
+                    onPostCreated = { setResult(RESULT_OK); finish() },
                     onDraftBoxClick = {
                         // 跳转到草稿箱Activity
                         val intent = Intent(this@CreatePostActivity, DraftBoxActivity::class.java).apply {
@@ -209,7 +211,8 @@ fun CreatePostScreen(
     draftTitle: String = "",
     draftContent: String = "",
     draftMarkdownMode: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    postId: Int = 0
 ) {
     var title by remember { mutableStateOf(draftTitle) }
     // 正文用 TextFieldValue 而不是 String：Markdown 工具栏要往光标位置插符号，
@@ -273,7 +276,9 @@ fun CreatePostScreen(
     //   - 无 draftId：从分区点「发布」进来，是全新发布
     // 两个地方的区别只有三处：标题文案、发布后是否删原草稿、返回时草稿按钮的措辞。
     // 集中成一个变量，避免这三处各判一次、以后改漏。
-    val isEditingDraft = !draftId.isNullOrBlank()
+    val isEditingPost = postId > 0
+    val isEditingDraft = !isEditingPost && !draftId.isNullOrBlank()
+    val hasChanges = if (isEditingPost) title != draftTitle || content.text != draftContent || isMarkdownMode != draftMarkdownMode else title.isNotBlank() || content.text.isNotBlank()
     
     // 监听创建结果
     LaunchedEffect(createPostState.isSuccess) {
@@ -301,7 +306,7 @@ fun CreatePostScreen(
     
     // 处理返回按键
     BackHandler {
-        if (title.isNotBlank() || content.text.isNotBlank()) {
+        if (hasChanges) {
             showExitDialog = true
         } else {
             onBackClick()
@@ -319,7 +324,9 @@ fun CreatePostScreen(
                 Text(
                     // 有 draftId 说明是接着写草稿，标题要说清楚，否则用户会以为
                     // 自己点进了一个新的发布页、担心把草稿弄丢
-                    text = if (isEditingDraft) {
+                    text = if (isEditingPost) {
+                        "编辑文章"
+                    } else if (isEditingDraft) {
                         "编辑草稿"
                     } else {
                         "发布到 $displayBoardName"
@@ -330,7 +337,7 @@ fun CreatePostScreen(
             },
             navigationIcon = {
                 IconButton(onClick = {
-                    if (title.isNotBlank() || content.text.isNotBlank()) {
+                    if (hasChanges) {
                         showExitDialog = true
                     } else {
                         onBackClick()
@@ -368,7 +375,8 @@ fun CreatePostScreen(
                 IconButton(
                     onClick = {
                         if (title.isNotBlank() && content.text.isNotBlank()) {
-                            viewModel.createPost(
+                            if (isEditingPost) viewModel.editPost(token, postId, title.trim(), content.text.trim(), if (isMarkdownMode) 2 else 1)
+                            else viewModel.createPost(
                                 token = token,
                                 boardId = boardId,
                                 title = title.trim(),
@@ -387,7 +395,7 @@ fun CreatePostScreen(
                     } else {
                         Icon(
                             imageVector = Icons.Default.Check,
-                            contentDescription = "发布"
+                            contentDescription = if (isEditingPost) "保存修改" else "发布"
                         )
                     }
                 }
