@@ -47,7 +47,9 @@ fun HtmlTextMessage(
             html = html,
             modifier = modifier,
             onImageClick = onImageClick,
-            onLinkClick = onUriClick
+            onLinkClick = onUriClick,
+            color = color,
+            style = style
         )
     } else {
         // 使用传统的 AnnotatedString 渲染器

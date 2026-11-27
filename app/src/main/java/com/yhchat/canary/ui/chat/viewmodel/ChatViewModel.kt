@@ -2553,7 +2553,8 @@ class ChatViewModel @Inject constructor(
         quoteImageName: String? = null,
         quoteVideoUrl: String? = null,
         quoteVideoTime: Long? = null,
-        buttons: String? = null
+        buttons: String? = null,
+        onFinished: (Boolean) -> Unit = {}
     ) {
         viewModelScope.launch {
             try {
@@ -2561,6 +2562,8 @@ class ChatViewModel @Inject constructor(
                 val message = _messages.find { it.msgId == msgId }
                 if (message == null) {
                     Log.e(tag, "未找到要编辑的消息: $msgId")
+                    _uiState.value = _uiState.value.copy(error = "未找到要编辑的消息")
+                    onFinished(false)
                     return@launch
                 }
                 
@@ -2580,7 +2583,8 @@ class ChatViewModel @Inject constructor(
                 )
                 
                 result.fold(
-                    onSuccess = {
+                    onSuccess = { success ->
+                        check(success) { "编辑消息失败" }
                         Log.d(tag, "消息编辑成功: $msgId")
                         // 找到并更新消息内容
                         val index = _messages.indexOfFirst { it.msgId == msgId }
@@ -2598,15 +2602,20 @@ class ChatViewModel @Inject constructor(
                             )
                             Log.d(tag, "更新消息内容")
                         }
+                        onFinished(true)
                     },
                     onFailure = { error ->
                         Log.e(tag, "消息编辑失败: ${error.message}", error)
-                        _uiState.value = _uiState.value.copy(error = error.message)
+                        _uiState.value = _uiState.value.copy(error = error.message?.takeIf { it.isNotBlank() } ?: "编辑消息失败")
+                        onFinished(false)
                     }
                 )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Log.e(tag, "编辑消息异常", e)
-                _uiState.value = _uiState.value.copy(error = e.message)
+                _uiState.value = _uiState.value.copy(error = e.message?.takeIf { it.isNotBlank() } ?: "编辑消息失败")
+                onFinished(false)
             }
         }
     }

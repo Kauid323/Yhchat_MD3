@@ -107,12 +107,18 @@ object CssParser {
         val properties = mutableMapOf<String, String>()
         
         // 分割 CSS 属性
+        val importantProperties = mutableSetOf<String>()
         styleString.split(";").forEach { declaration ->
             val parts = declaration.split(":", limit = 2)
             if (parts.size == 2) {
                 val property = parts[0].trim().lowercase()
-                val value = parts[1].trim()
-                properties[property] = value
+                val rawValue = parts[1].trim()
+                val important = Regex("(?i)\\s*!important\\s*$").containsMatchIn(rawValue)
+                val value = rawValue.replace(Regex("(?i)\\s*!important\\s*$"), "").trim()
+                if (important || property !in importantProperties) {
+                    properties[property] = value
+                    if (important) importantProperties.add(property)
+                }
             }
         }
 

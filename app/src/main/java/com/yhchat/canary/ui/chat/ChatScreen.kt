@@ -194,9 +194,27 @@ fun ChatScreen(
     var quotedVideoTime by remember { mutableStateOf<Long?>(null) }
     
     // 编辑消息状态
-    var showEditDialog by remember { mutableStateOf(false) }
-    var messageToEdit by remember { mutableStateOf<ChatMessage?>(null) }
+    var editSubmitting by remember(chatId, chatType) { mutableStateOf(false) }
+    var draftBeforeEdit by rememberSaveable(chatId, chatType) { mutableStateOf("") }
+    var typeBeforeEdit by rememberSaveable(chatId, chatType) { mutableStateOf(1) }
+    val editMessageSaver = remember {
+        androidx.compose.runtime.saveable.Saver<ChatMessage?, String>(
+            save = { message -> message?.let { com.google.gson.Gson().toJson(it) }.orEmpty() },
+            restore = { json -> if (json.isBlank()) null else com.google.gson.Gson().fromJson(json, ChatMessage::class.java) }
+        )
+    }
+    var messageToEdit by rememberSaveable(chatId, chatType, stateSaver = editMessageSaver) { mutableStateOf<ChatMessage?>(null) }
     
+    fun finishEditing() {
+        inputText = draftBeforeEdit
+        selectedMessageType = typeBeforeEdit
+        messageToEdit = null
+        editSubmitting = false
+    }
+    androidx.activity.compose.BackHandler(enabled = messageToEdit != null) {
+        if (!editSubmitting) finishEditing()
+    }
+
     // 语音转文字状态
     var showSttDialog by remember { mutableStateOf(false) }
     var sttAudioUrl by remember { mutableStateOf<String?>(null) }
@@ -396,8 +414,9 @@ fun ChatScreen(
         onDispose {
             viewModel.saveCurrentReadPosition()
             // 保存草稿
-            if (inputText.isNotEmpty()) {
-                viewModel.saveDraft(inputText)
+            val savedText = if (messageToEdit != null) draftBeforeEdit else inputText
+            if (savedText.isNotEmpty()) {
+                viewModel.saveDraft(savedText)
             } else {
                 viewModel.clearDraft()
             }
@@ -407,7 +426,7 @@ fun ChatScreen(
     // 进入时恢复草稿
     LaunchedEffect(chatId, chatType) {
         val draft = viewModel.getDraft(chatId, chatType)
-        if (!draft.isNullOrEmpty()) {
+        if (!draft.isNullOrEmpty() && messageToEdit == null) {
             inputText = draft
         }
     }
@@ -423,7 +442,7 @@ fun ChatScreen(
             
             // 防止重复应用相同的草稿
             // 如果用户最近500ms内有输入操作，则忽略远程草稿（避免覆盖用户正在输入的内容）
-            if (draft != lastAppliedDraft && 
+            if (messageToEdit == null && draft != lastAppliedDraft && 
                 draft != inputText && 
                 (currentTime - lastInputTime > 100)) {
                 
@@ -797,7 +816,9 @@ fun ChatScreen(
                                 }
                             },
                             onAddExpression = viewModel::addExpressionToFavorites,
-                            onQuote = { msgId, msgText ->
+                            onQuote = quote@ { msgId, msgText ->
+                                if (editSubmitting) return@quote
+                                if (messageToEdit != null) finishEditing()
                                 // 设置引用消息，格式：发送者名称 : 内容
                                 val senderName = message.sender.name
                                 val content = message.content.text ?: ""
@@ -849,9 +870,21 @@ fun ChatScreen(
                                 // 动画会在消息状态更新时自动触发
                             },
                             onEdit = { message ->
-                                // 编辑消息
-                                messageToEdit = message
-                                showEditDialog = true
+                                if (!editSubmitting) {
+                                    if (messageToEdit == null) {
+                                        draftBeforeEdit = inputText
+                                        typeBeforeEdit = selectedMessageType
+                                    }
+                                    messageToEdit = message
+                                    inputText = message.content.text.orEmpty()
+                                    selectedMessageType = message.contentType
+                                    coroutineScope.launch {
+                                        inputFocusRequester.requestFocus()
+                                        shouldShowKeyboard = true
+                                        delay(100)
+                                        shouldShowKeyboard = false
+                                    }
+                                }
                             },
                             onBlockUser = { userId, userName, avatarUrl ->
                                 // 屏蔽用户
@@ -1273,9 +1306,30 @@ fun ChatScreen(
         // 底部输入栏
             ChatInputBar(
                 text = inputText,
-                onTextChange = { inputText = it },
+                onTextChange = { if (!editSubmitting) inputText = it },
+                isEditing = messageToEdit != null,
+                editingOriginalText = messageToEdit?.content?.text.orEmpty(),
+                editSubmitting = editSubmitting,
+                onCancelEdit = { if (!editSubmitting) finishEditing() },
                 onSendMessage = {
-                    if (inputText.isNotEmpty()||isSendTextAllowEmptySetting) {
+                    val editing = messageToEdit
+                    if (editing != null) {
+                        if (!editSubmitting && inputText.isNotBlank()) {
+                            editSubmitting = true
+                            viewModel.editMessage(
+                                chatId = chatId, chatType = chatType, msgId = editing.msgId,
+                                content = inputText, contentType = selectedMessageType,
+                                quoteMsgId = editing.quoteMsgId, quoteMsgText = editing.content.quoteMsgText,
+                                quoteImageUrl = editing.content.quoteImageUrl, quoteImageName = editing.content.quoteImageName,
+                                quoteVideoUrl = editing.content.quoteVideoUrl, quoteVideoTime = editing.content.quoteVideoTime,
+                                buttons = editing.content.buttons,
+                                onFinished = { success ->
+                                    editSubmitting = false
+                                    if (success && messageToEdit?.msgId == editing.msgId) finishEditing()
+                                }
+                            )
+                        }
+                    } else if (inputText.isNotEmpty()||isSendTextAllowEmptySetting) {
                         val messageText = inputText
                         
                         // 解析@用户，提取用户ID列表
@@ -1362,7 +1416,7 @@ fun ChatScreen(
                     )
                 },
                 onDraftChange = { draftText ->
-                    viewModel.sendDraftInput(draftText)
+                    if (messageToEdit == null) viewModel.sendDraftInput(draftText)
                 },
                 onCameraClick = {
                     // 使用从ChatActivity传递的回调
@@ -1371,9 +1425,9 @@ fun ChatScreen(
                 selectedMessageType = selectedMessageType,
                 onMessageTypeChange = { newType ->
                     // 只能选择一个类型，点击已选中的类型则取消（回到文本）
-                    selectedMessageType = if (selectedMessageType == newType) 1 else newType
+                    if (!editSubmitting) selectedMessageType = if (messageToEdit != null) newType else if (selectedMessageType == newType) 1 else newType
                 },
-                quotedMessageText = quotedMessageText,
+                quotedMessageText = if (messageToEdit == null) quotedMessageText else null,
                 onClearQuote = {
                     quotedMessageId = null
                     quotedMessageText = null
@@ -1525,35 +1579,6 @@ fun ChatScreen(
             context = context,
             manifest = manifest,
             onDismiss = { pendingSplitManifest = null }
-        )
-    }
-
-    // 消息编辑对话框
-    if (showEditDialog && messageToEdit != null) {
-        MessageEditDialog(
-            message = messageToEdit!!,
-            onDismiss = {
-                showEditDialog = false
-                messageToEdit = null
-            },
-            onConfirm = { content, contentType ->
-                viewModel.editMessage(
-                    chatId = chatId,
-                    chatType = chatType,
-                    msgId = messageToEdit!!.msgId,
-                    content = content,
-                    contentType = contentType,
-                    quoteMsgId = messageToEdit!!.quoteMsgId,
-                    quoteMsgText = messageToEdit!!.content.quoteMsgText,
-                    quoteImageUrl = messageToEdit!!.content.quoteImageUrl,
-                    quoteImageName = messageToEdit!!.content.quoteImageName,
-                    quoteVideoUrl = messageToEdit!!.content.quoteVideoUrl,
-                    quoteVideoTime = messageToEdit!!.content.quoteVideoTime,
-                    buttons = messageToEdit!!.content.buttons
-                )
-                showEditDialog = false
-                messageToEdit = null
-            }
         )
     }
 

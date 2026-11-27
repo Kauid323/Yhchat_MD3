@@ -297,6 +297,16 @@ fun BoardDetailScreen(
                     )
                 }
 
+                item(key = "board_post_tabs") {
+                    BoardPostTabs(
+                        typ = postListState.typ,
+                        onSelect = { typ ->
+                            if (token.isNotBlank() && boardId > 0) viewModel.selectPostType(token, boardId, typ)
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+
                 postListState.error?.let { error ->
                     item(key = "board_error") {
                         Surface(
@@ -371,8 +381,8 @@ fun BoardDetailScreen(
                 // ===== 加载更多 / 空态 / 首屏加载 =====
                 if (postListState.posts.isNotEmpty() && postListState.hasMore) {
                     item(key = "board_load_more") {
-                        LaunchedEffect(Unit) {
-                            if (!postListState.isLoading) {
+                        LaunchedEffect(postListState.typ, postListState.currentPage, postListState.isLoading) {
+                            if (!postListState.isLoading && postListState.error == null) {
                                 viewModel.loadMorePosts(token, boardId)
                             }
                         }

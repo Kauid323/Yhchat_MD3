@@ -138,6 +138,7 @@ fun CommunityTabScreen(
     val allBoardListState by viewModel.allBoardListState.collectAsState()
     val hotPostListState by viewModel.recommendPostListState.collectAsState()
     val latestPostListState by viewModel.latestPostListState.collectAsState()
+    val oldestPostListState by viewModel.oldestPostListState.collectAsState()
 
     var selectedFeed by rememberSaveable { mutableStateOf("热门") }
     
@@ -372,12 +373,18 @@ fun CommunityTabScreen(
                 token = token,
                 feedType = selectedFeed,
                 hotState = hotPostListState,
-                latestState = latestPostListState,
+                latestState = if (selectedFeed == "最旧") oldestPostListState else latestPostListState,
                 navigationState = navigationState,
                 onRefreshHot = { viewModel.loadRecommendPostList(token, page = 1, isRefresh = true) },
-                onRefreshLatest = { viewModel.refreshLatestPostList(token) },
+                onRefreshLatest = {
+                    if (selectedFeed == "最旧") viewModel.loadOldestPostList(token, isRefresh = true)
+                    else viewModel.refreshLatestPostList(token)
+                },
                 onLoadMoreHot = { viewModel.loadMoreRecommendPosts(token) },
-                onLoadMoreLatest = { viewModel.loadMoreLatestPosts(token) },
+                onLoadMoreLatest = {
+                    if (selectedFeed == "最旧") viewModel.loadMoreOldestPosts(token)
+                    else viewModel.loadMoreLatestPosts(token)
+                },
                 onPostClick = { post ->
                     val intent = Intent(context, PostDetailActivity::class.java).apply {
                         putExtra("post_id", post.id)
@@ -455,6 +462,12 @@ private fun FeedToggleRow(
             selected = selected == "最新",
             onClick = { onSelectedChange("最新") }
         )
+        Spacer(modifier = Modifier.width(6.dp))
+        FeedToggleChip(
+            text = "最旧",
+            selected = selected == "最旧",
+            onClick = { onSelectedChange("最旧") }
+        )
     }
 }
 
@@ -501,7 +514,7 @@ private fun CommunityFeedScreen(
 
     LaunchedEffect(token, feedType) {
         if (token.isNotEmpty()) {
-            if (feedType == "最新") {
+            if (feedType != "热门") {
                 if (latestState.posts.isEmpty() && !latestState.isLoading) {
                     onRefreshLatest()
                 }
@@ -513,14 +526,14 @@ private fun CommunityFeedScreen(
         }
     }
 
-    if (feedType == "最新") {
-        LaunchedEffect(latestState.posts.size, latestState.hasMore, latestState.isLoading) {
+    if (feedType != "热门") {
+        LaunchedEffect(feedType, latestState.posts.size, latestState.hasMore, latestState.isLoading, latestState.isRefreshing, latestState.error) {
             snapshotFlow {
                 val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                 val total = listState.layoutInfo.totalItemsCount
                 Triple(lastVisible, total, latestState.hasMore)
             }.collect { (lastVisible, total, hasMore) ->
-                if (hasMore && !latestState.isLoading && total > 0 && lastVisible >= total - 3) {
+                if (hasMore && !latestState.isLoading && !latestState.isRefreshing && latestState.error == null && total > 0 && lastVisible >= total - 3) {
                     onLoadMoreLatest()
                 }
             }
@@ -595,7 +608,7 @@ private fun CommunityFeedScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "暂无最新文章",
+                                        text = if (feedType == "最旧") "暂无最旧文章" else "暂无最新文章",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

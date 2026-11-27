@@ -19,6 +19,7 @@ internal fun isInlineTag(tag: String): Boolean = when (tag) {
 }
 
 internal fun isBlockTag(tag: String): Boolean = when (tag) {
+    "html", "body", "main", "section", "article", "header", "footer", "nav", "aside", "figure", "figcaption", "hr",
     "blockquote", "caption", "details", "div", "h1", "h2", "h3", "h4", "h5", "h6",
     "li", "ol", "p", "pre", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul" -> true
     else -> false

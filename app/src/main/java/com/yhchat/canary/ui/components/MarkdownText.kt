@@ -525,6 +525,29 @@ private fun MikepenzMarkdownText(
     val annotator = com.mikepenz.markdown.model.markdownAnnotator(
         config = com.mikepenz.markdown.model.markdownAnnotatorConfig(eolAsNewLine = true)
     )
+    val components = markdownComponents(
+        table = { model ->
+            com.mikepenz.markdown.compose.elements.MarkdownTable(
+                content = model.content,
+                node = model.node,
+                style = model.typography.table,
+                headerBlock = { content, header, width, style ->
+                    com.mikepenz.markdown.compose.elements.MarkdownTableHeader(
+                        content = content, header = header, tableWidth = width, style = style,
+                        maxLines = Int.MAX_VALUE,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Clip
+                    )
+                },
+                rowBlock = { content, row, width, style ->
+                    com.mikepenz.markdown.compose.elements.MarkdownTableRow(
+                        content = content, header = row, tableWidth = width, style = style,
+                        maxLines = Int.MAX_VALUE,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Clip
+                    )
+                }
+            )
+        }
+    )
     val flavour = remember { GFMFlavourDescriptor() }
     val parser = remember(flavour) { MarkdownParser(flavour) }
     val referenceLinkHandler = remember { PersistentReferenceLinkHandler() }
@@ -543,6 +566,7 @@ private fun MikepenzMarkdownText(
                 modifier = modifier,
                 colors = colors,
                 typography = typography,
+                components = components,
                 annotator = annotator
             )
         } else {
@@ -560,6 +584,7 @@ private fun MikepenzMarkdownText(
                 modifier = modifier,
                 colors = colors,
                 typography = typography,
+                components = components,
                 annotator = annotator
             )
         }

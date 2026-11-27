@@ -133,3 +133,7 @@ message bot_stop_send {
     string bot_id = 2;              // 机器人ID
     int64 operation = 3;            // 操作类型：0-启用机器人，1-停用机器人
 }
+
+message bot_stop {
+    Status status = 1;
+}

@@ -10,6 +10,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -61,39 +62,43 @@ class BoardDetailViewModel @Inject constructor(
     /**
      * 加载文章列表
      */
-    fun loadPostList(token: String, boardId: Int, page: Int = 1) {
-        viewModelScope.launch {
-            if (page == 1) {
-                _postListState.value = _postListState.value.copy(isLoading = true, error = null)
+    private var postListJob: kotlinx.coroutines.Job? = null
+
+    fun selectPostType(token: String, boardId: Int, typ: Int) {
+        if (typ == _postListState.value.typ && boardId == _postListState.value.boardId) return
+        loadPostList(token, boardId, typ = typ)
+    }
+
+    fun loadPostList(token: String, boardId: Int, page: Int = 1, typ: Int = _postListState.value.typ) {
+        require(typ == 1 || typ == 2)
+        if (page > 1 && (_postListState.value.isLoading || _postListState.value.typ != typ)) return
+        postListJob?.cancel()
+        val previous = _postListState.value
+        _postListState.value = if (previous.typ != typ || previous.boardId != boardId) {
+            PostListState(boardId = boardId, typ = typ, isLoading = true)
+        } else previous.copy(isLoading = true, error = null)
+        postListJob = viewModelScope.launch {
+            val result = communityRepository.getPostList(token, boardId, typ = typ, page = page)
+            // Repository wraps exceptions in Result; ignore cancelled requests after a tab switch.
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            result.onSuccess { response ->
+                val newPosts = (if (page == 1) response.data.posts
+                    else _postListState.value.posts + response.data.posts).distinctBy { it.id }
+                _postListState.value = PostListState(
+                    posts = newPosts,
+                    total = response.data.total,
+                    currentPage = page,
+                    hasMore = newPosts.size < response.data.total && response.data.posts.isNotEmpty(),
+                    boardId = boardId,
+                    typ = typ
+                )
+            }.onFailure { error ->
+                _postListState.value = _postListState.value.copy(
+                    isLoading = false, error = error.message ?: "加载文章失败"
+                )
             }
-            
-            communityRepository.getPostList(token, boardId, page = page)
-                .onSuccess { response ->
-                    val newPosts = if (page == 1) {
-                        response.data.posts
-                    } else {
-                        _postListState.value.posts + response.data.posts
-                    }
-                    
-                    _postListState.value = PostListState(
-                        posts = newPosts,
-                        total = response.data.total,
-                        currentPage = page,
-                        hasMore = newPosts.size < response.data.total,
-                        boardId = boardId,
-                        isLoading = false,
-                        error = null
-                    )
-                }
-                .onFailure { error ->
-                    _postListState.value = _postListState.value.copy(
-                        isLoading = false,
-                        error = error.message
-                    )
-                }
         }
     }
-    
     /**
      * 加载更多文章
      */
@@ -217,6 +222,7 @@ data class PostListState(
     val currentPage: Int = 1,
     val hasMore: Boolean = false,
     val boardId: Int? = null,
+    val typ: Int = 2,
     val error: String? = null
 )
 

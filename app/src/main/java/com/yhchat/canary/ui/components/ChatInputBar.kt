@@ -2,6 +2,11 @@
 
 package com.yhchat.canary.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
@@ -110,7 +115,11 @@ fun ChatInputBar(
     onVoiceMessageSend: ((String, String, Long, Long) -> Unit)? = null, // 语音消息发送回调 (fileKey, fileHash, fileSize, audioDuration)
     chatId: String? = null, // 聊天ID
     chatType: Long = 1L, // 聊天类型：1-用户，2-群聊，3-机器人
-    voiceViewModel: VoiceMessageViewModel? = null // 语音消息 ViewModel
+    voiceViewModel: VoiceMessageViewModel? = null, // 语音消息 ViewModel
+    isEditing: Boolean = false,
+    editSubmitting: Boolean = false,
+    onCancelEdit: () -> Unit = {},
+    editingOriginalText: String = ""
 ) {
     val ctx = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -148,6 +157,16 @@ fun ChatInputBar(
     var showInstructionPicker by remember { mutableStateOf(false) }
     var isVoiceMode by remember { mutableStateOf(false) }
     
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            showAttachMenu = false
+            showExpressionPicker = false
+            showInstructionPicker = false
+            isVoiceMode = false
+            showExpandedEditor = false
+        }
+    }
+
     // 语音相关状态
     val voiceState = voiceViewModel?.voiceState?.collectAsState()?.value
     val isRecording = voiceState?.isRecording ?: false
@@ -322,10 +341,47 @@ fun ChatInputBar(
     val currentOnSendMessage by rememberUpdatedState(onSendMessage)
     val currentMtc by rememberUpdatedState(onMessageTypeChange)
     val currentSelectedMessageType by rememberUpdatedState(selectedMessageType)
-    val currentLongPressSendMarkdownEnabled by rememberUpdatedState(longPressSendMarkdownEnabled)
+    val currentLongPressSendMarkdownEnabled by rememberUpdatedState(longPressSendMarkdownEnabled && !isEditing)
     val currentLongPressSendMarkdownSeconds by rememberUpdatedState(longPressSendMarkdownSeconds)
 
     Column {
+        AnimatedVisibility(
+            visible = isEditing,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(1 to "文本", 3 to "Markdown", 8 to "HTML", 14 to "A2UI").forEach { (type, label) ->
+                        androidx.compose.material3.FilterChip(
+                            selected = selectedMessageType == type,
+                            onClick = { onMessageTypeChange?.invoke(type) },
+                            enabled = !editSubmitting,
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "正在编辑：${editingOriginalText.replace('\r', ' ').replace('\n', ' ')}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onCancelEdit,
+                        enabled = !editSubmitting
+                    ) { Text("取消") }
+                }
+            }
+        }
         if (showMentionPicker) {
             val currentMentionContext = mentionContext
             val resolvedKeyword = currentMentionContext?.keyword ?: mentionPickerKeyword
@@ -397,7 +453,7 @@ fun ChatInputBar(
             }
             
             // 指令显示框
-            if (selectedInstruction != null) {
+            if (selectedInstruction != null && !isEditing) {
                 InstructionBar(
                     instruction = selectedInstruction,
                     onClearInstruction = { onClearInstruction?.invoke() }
@@ -421,7 +477,7 @@ fun ChatInputBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // 加号按钮
-                    if (showAddButton) {
+                    if (showAddButton && !isEditing) {
                         IconButton(
                             onClick = { 
                                 showAttachMenu = !showAttachMenu
@@ -447,7 +503,7 @@ fun ChatInputBar(
                     }
                     
                     // 麦克风按钮
-                    if (showMicButton) {
+                    if (showMicButton && !isEditing) {
                         IconButton(
                             onClick = { 
                                 isVoiceMode = !isVoiceMode
@@ -617,6 +673,7 @@ fun ChatInputBar(
                     } else {
                         // 文本模式：显示输入框
                         BasicTextField(
+                            readOnly = editSubmitting,
                             value = text,
                             onValueChange = { newText: String ->
                                 onTextChange(newText)
@@ -658,6 +715,7 @@ fun ChatInputBar(
                                 ) {
                                     if (text.isEmpty()) {
                                         val effectivePlaceholder = when {
+                                            isEditing -> "编辑消息…"
                                             selectedInstruction != null && selectedInstruction.hintText.isNotEmpty() -> 
                                                 selectedInstruction.hintText
                                             else -> placeholder
@@ -698,7 +756,7 @@ fun ChatInputBar(
                     }
                     
                     // 指令按钮 - 群聊 或 机器人私聊
-                    if (showInstructionButton && onInstructionClick != null && (groupId != null || botId != null)) {
+                    if (!isEditing && showInstructionButton && onInstructionClick != null && (groupId != null || botId != null)) {
                         IconButton(
                             onClick = { 
                                 showInstructionPicker = !showInstructionPicker
@@ -723,7 +781,7 @@ fun ChatInputBar(
                     }
                     
                     // 表情按钮
-                    if (showExpressionButton) {
+                    if (showExpressionButton && !isEditing) {
                         IconButton(
                             onClick = { 
                                 showExpressionPicker = !showExpressionPicker
@@ -759,10 +817,10 @@ fun ChatInputBar(
                                 CircleShape
                             )
                             .clip(CircleShape)
-                            .pointerInput(currentLongPressSendMarkdownEnabled, currentLongPressSendMarkdownSeconds) {
+                            .pointerInput(currentLongPressSendMarkdownEnabled, currentLongPressSendMarkdownSeconds, isEditing, editSubmitting) {
                                 detectTapGestures(
                                     onTap = {
-                                        if (currentText.isNotEmpty() || isSendTextAllowEmptySetting) {
+                                        if (!editSubmitting && (if (isEditing) currentText.isNotBlank() else currentText.isNotEmpty() || isSendTextAllowEmptySetting)) {
                                             Log.d("ChatInputBar", "Send button tapped")
                                             currentOnSendMessage()
                                         }
@@ -781,7 +839,7 @@ fun ChatInputBar(
                                                     mtc.invoke(previousType)
                                                 }
                                             }
-                                        } else if (currentText.isNotEmpty() || isSendTextAllowEmptySetting) {
+                                        } else if (!editSubmitting && (if (isEditing) currentText.isNotBlank() else currentText.isNotEmpty() || isSendTextAllowEmptySetting)) {
                                             // 如果没开启长按发送 Markdown，则长按也作为普通发送
                                             Log.d("ChatInputBar", "Send button long pressed (normal send)")
                                             currentOnSendMessage()
@@ -793,7 +851,7 @@ fun ChatInputBar(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "发送",
+                            contentDescription = if (isEditing) "保存修改" else "发送",
                             tint = if (text.isNotEmpty())
                                 MaterialTheme.colorScheme.onPrimary
                             else

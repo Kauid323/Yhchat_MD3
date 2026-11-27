@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -34,8 +36,8 @@ internal fun CssStyle.mergeText(parent: CssStyle): CssStyle = CssStyle(
     fontStyle = fontStyle ?: parent.fontStyle,
     textDecoration = textDecoration ?: parent.textDecoration,
     textAlign = textAlign ?: parent.textAlign,
-    lineHeight = lineHeight ?: parent.lineHeight,
-    lineHeightMultiplier = lineHeightMultiplier ?: parent.lineHeightMultiplier,
+    lineHeight = lineHeight ?: if (lineHeightMultiplier == null) parent.lineHeight else null,
+    lineHeightMultiplier = lineHeightMultiplier ?: if (lineHeight == null) parent.lineHeightMultiplier else null,
     fontFamily = fontFamily ?: parent.fontFamily,
     wordWrap = wordWrap ?: parent.wordWrap,
     whiteSpace = whiteSpace ?: parent.whiteSpace,
@@ -77,8 +79,8 @@ internal fun CssStyle.mergeWith(override: CssStyle): CssStyle = CssStyle(
     borderBottom = override.borderBottom ?: borderBottom,
     borderLeft = override.borderLeft ?: borderLeft,
     boxShadow = override.boxShadow ?: boxShadow,
-    lineHeight = override.lineHeight ?: lineHeight,
-    lineHeightMultiplier = override.lineHeightMultiplier ?: lineHeightMultiplier,
+    lineHeight = override.lineHeight ?: if (override.lineHeightMultiplier == null) lineHeight else null,
+    lineHeightMultiplier = override.lineHeightMultiplier ?: if (override.lineHeight == null) lineHeightMultiplier else null,
     fontFamily = override.fontFamily ?: fontFamily,
     backgroundGradient = override.backgroundGradient ?: backgroundGradient,
     display = override.display ?: display,
@@ -142,7 +144,26 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
         else -> null
     }
 
-    var modifier = this.padding(
+    var modifier = this
+    val widthPercent = style.widthPercent
+    if (style.width == null && widthPercent != null && widthPercent.isFinite()) {
+        modifier = modifier.layout { measurable, constraints ->
+            val fraction = widthPercent.coerceAtLeast(0f)
+            val width = if (constraints.hasBoundedWidth) {
+                val cssMin = (style.minWidth ?: 0.dp).coerceAtLeast(0.dp).roundToPx().coerceAtMost(constraints.maxWidth)
+                val cssMax = style.maxWidth?.takeIf { it < Dp.Infinity }?.coerceAtLeast(0.dp)?.roundToPx()
+                    ?.coerceIn(cssMin, constraints.maxWidth) ?: constraints.maxWidth
+                (constraints.maxWidth.toDouble() * fraction).coerceIn(cssMin.toDouble(), cssMax.toDouble()).roundToInt()
+            } else null
+            val adjusted = if (width != null) constraints.copy(
+                minWidth = width.coerceAtLeast(constraints.minWidth),
+                maxWidth = width.coerceAtLeast(constraints.minWidth)
+            ) else constraints
+            val placeable = measurable.measure(adjusted)
+            layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+        }
+    }
+    modifier = modifier.padding(
         top = marginTop,
         bottom = marginBottom,
         start = marginStart,
@@ -158,22 +179,21 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
         )
     }
 
-    style.width?.let { modifier = modifier.width(it) }
-    style.height?.let { modifier = modifier.height(it) }
-    if (style.minWidth != null || style.maxWidth != null) {
-        modifier = modifier.widthIn(
-            min = style.minWidth ?: 0.dp,
-            max = style.maxWidth ?: androidx.compose.ui.unit.Dp.Infinity
-        )
+    val minWidth = (style.minWidth ?: 0.dp).coerceAtLeast(0.dp)
+    val maxWidth = (style.maxWidth ?: Dp.Infinity).coerceAtLeast(minWidth)
+    val resolvedWidth = style.width?.coerceIn(minWidth, maxWidth)
+    if (resolvedWidth != null) modifier = modifier.width(resolvedWidth)
+    else if (style.minWidth != null || style.maxWidth != null) {
+        modifier = modifier.widthIn(min = minWidth, max = maxWidth)
     }
-    if (style.minHeight != null) {
-        modifier = modifier.heightIn(min = style.minHeight)
-    }
+    val minHeight = (style.minHeight ?: 0.dp).coerceAtLeast(0.dp)
+    if (style.height != null) modifier = modifier.height(style.height.coerceAtLeast(minHeight))
+    else if (style.minHeight != null) modifier = modifier.heightIn(min = minHeight)
 
-    if (style.backgroundColor != null && shape != null) {
-        modifier = modifier.clip(shape).background(style.backgroundColor)
-    } else if (style.backgroundColor != null) {
-        modifier = modifier.background(style.backgroundColor)
+    if (shape != null) modifier = modifier.clip(shape)
+    if (style.backgroundColor != null) modifier = modifier.background(style.backgroundColor)
+    style.backgroundGradient?.takeIf { it.size >= 2 }?.let { colors ->
+        modifier = modifier.background(androidx.compose.ui.graphics.Brush.linearGradient(colors))
     }
 
     if (style.border != null || style.borderTop != null || style.borderRight != null ||
@@ -204,13 +224,13 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
  * 群聊卡片里的圆头像一直显示成方图。这里单独抽一个函数，
  * 因为它需要父容器宽度来解百分比（[containerWidth]）。
  */
-internal fun Modifier.htmlMediaBoxModel(style: CssStyle, containerWidth: Dp?): Modifier {
+internal fun Modifier.htmlMediaBoxModel(style: CssStyle, containerWidth: Dp?, containerHeight: Dp? = null): Modifier {
     var modifier = this
     // 百分比宽高换算成实际 Dp；解析不出就退回绝对尺寸
     val resolvedWidth = style.width
         ?: style.widthPercent?.let { pct -> containerWidth?.let { it * pct } }
     val resolvedHeight = style.height
-        ?: style.heightPercent?.let { pct -> containerWidth?.let { it * pct } }
+        ?: style.heightPercent?.let { pct -> containerHeight?.let { it * pct } }
 
     val radius = style.borderRadius
     when {

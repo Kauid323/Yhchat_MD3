@@ -9,7 +9,7 @@ import com.yhchat.canary.data.model.CreatedBot
 import com.yhchat.canary.data.model.DeleteFriendRequest
 import com.yhchat.canary.data.repository.BotRepository
 import com.yhchat.canary.data.repository.TokenRepository
-import com.yhchat.canary.proto.bot.Status
+import com.yhchat.canary.proto.bot.bot_stop
 import com.yhchat.canary.proto.bot.bot_stop_send
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,60 +66,48 @@ class BotManagementViewModel : ViewModel() {
     }
 
     fun toggleBotStop(botId: String) {
+        if (_uiState.value.isStoppingBot) return
+        val operation = if (_uiState.value.botIsStop) 0 else 1
+        _uiState.update { it.copy(isStoppingBot = true, error = null, actionMessage = null) }
         viewModelScope.launch {
-            val userToken = tokenRepository.getTokenSync() ?: return@launch
-            val currentlyStopped = _uiState.value.botIsStop
-            val operation = if (currentlyStopped) 0 else 1
-
-            _uiState.update { it.copy(isStoppingBot = true, error = null) }
-
-            val request = bot_stop_send.newBuilder()
-                .setBotId(botId)
-                .setOperation(operation.toLong())
-                .build()
-
-            val requestBody = request.toByteArray()
-                .toRequestBody("application/x-protobuf".toMediaType())
-
-            runCatching {
-                ApiClient.apiService.stopBot(userToken, requestBody)
-            }.onSuccess { resp ->
-                if (resp.isSuccessful) {
-                    val responseBody = resp.body()?.bytes()
-                    if (responseBody != null) {
-                        val status = Status.parseFrom(responseBody)
-                        if (status.code == 1) {
-                            botRepository.getBotInfo(botId).fold(
-                                onSuccess = { botInfo ->
-                                    _uiState.update {
-                                        it.copy(
-                                            isStoppingBot = false,
-                                            botIsStop = botInfo.data.isStop == 1L,
-                                            actionMessage = if (operation == 1) "机器人停用成功" else "机器人启用成功"
-                                        )
-                                    }
-                                },
-                                onFailure = {
-                                    _uiState.update {
-                                        it.copy(
-                                            isStoppingBot = false,
-                                            botIsStop = !currentlyStopped,
-                                            actionMessage = if (operation == 1) "机器人停用成功" else "机器人启用成功"
-                                        )
-                                    }
-                                }
-                            )
-                        } else {
-                            _uiState.update { it.copy(isStoppingBot = false, error = status.msg) }
-                        }
-                    } else {
-                        _uiState.update { it.copy(isStoppingBot = false, error = "响应数据为空") }
-                    }
-                } else {
-                    _uiState.update { it.copy(isStoppingBot = false, error = "请求失败: ${resp.code()}") }
+            try {
+                val userToken = tokenRepository.getTokenSync()
+                check(!userToken.isNullOrBlank()) { "未登录，请重新登录后操作" }
+                val request = bot_stop_send.newBuilder()
+                    .setBotId(botId)
+                    .setOperation(operation.toLong())
+                    .build()
+                val requestBody = request.toByteArray()
+                    .toRequestBody("application/x-protobuf".toMediaType())
+                val response = ApiClient.apiService.stopBot(userToken, requestBody)
+                if (!response.isSuccessful) {
+                    response.errorBody()?.close()
+                    error("请求失败: HTTP ${response.code()}")
                 }
-            }.onFailure { error ->
-                _uiState.update { it.copy(isStoppingBot = false, error = error.message) }
+                val bytes = response.body()?.use { it.bytes() }
+                check(bytes != null && bytes.isNotEmpty()) { "服务器响应为空，无法确认操作结果" }
+                val result = bot_stop.parseFrom(bytes)
+                check(result.hasStatus()) { "服务器响应缺少操作状态，无法确认操作结果" }
+                val status = result.status
+                check(status.code == 1) {
+                    status.msg.takeIf { it.isNotBlank() } ?: "机器人操作失败（状态码 ${status.code}）"
+                }
+                // 接口已经确认成功，直接应用目标状态，避免紧接着读取到旧缓存又把开关改回去。
+                _uiState.update {
+                    it.copy(
+                        botIsStop = operation == 1,
+                        error = null,
+                        actionMessage = if (operation == 1) "机器人停用成功" else "机器人启用成功"
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(error = error.message?.takeIf(String::isNotBlank) ?: "机器人操作失败，请稍后重试")
+                }
+            } finally {
+                _uiState.update { it.copy(isStoppingBot = false) }
             }
         }
     }

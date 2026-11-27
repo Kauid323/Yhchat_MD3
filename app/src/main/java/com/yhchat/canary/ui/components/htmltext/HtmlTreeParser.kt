@@ -3,10 +3,14 @@ package com.yhchat.canary.ui.components.htmltext
 import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlHandler
 import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlParser
 
+private val HTML_VOID_TAGS = setOf("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr")
+
 internal const val DETAILS_OPEN_STYLE_ATTR = "__details_open_style__"
 
 private data class SelectorPart(
     val tag: String?,
+    val ids: Set<String>,
+    val directParent: Boolean = false,
     val classes: Set<String>,
     val attrPresence: Set<String>,
     val attrEquals: Map<String, String>
@@ -59,14 +63,14 @@ internal fun parseHtmlTree(html: String): HtmlNode.Element {
                 )
 
                 when (tag) {
-                    "br" -> stack.last().children.add(HtmlNode.Text("\n"))
+                    "br" -> stack.last().children.add(HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap()))
                     "img" -> stack.last().children.add(
                         HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap())
                     )
                     else -> {
                         val node = HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap())
                         stack.last().children.add(node)
-                        stack.addLast(node)
+                        if (tag !in HTML_VOID_TAGS) stack.addLast(node)
                     }
                 }
             }
@@ -78,7 +82,7 @@ internal fun parseHtmlTree(html: String): HtmlNode.Element {
 
             override fun onCloseTag(name: String, isImplied: Boolean) {
                 val tag = name.lowercase()
-                if (tag == "br" || tag == "img") return
+                if (tag in HTML_VOID_TAGS || stack.none { it.tag == tag }) return
                 while (stack.size > 1) {
                     val last = stack.removeLast()
                     if (last.tag == tag) {
@@ -121,11 +125,22 @@ private fun parseCssRules(styleBlocks: List<String>): List<CssRule> {
                 if (normalizedSelector.isBlank()) return@forEach
                 if (normalizedSelector.contains("::")) return@forEach
 
-                val parts = normalizedSelector
-                    .split(' ')
-                    .mapNotNull { parseSelectorPart(it) }
-                if (parts.isEmpty()) return@forEach
-
+                val selectorTokens = Regex("(?:\\[[^\\]]*\\]|[^\\s>\\[])+|>").findAll(normalizedSelector).map { it.value }.toList()
+                val parts = mutableListOf<SelectorPart>()
+                var directParent = false
+                var valid = true
+                for (token in selectorTokens) {
+                    if (token == ">") {
+                        if (parts.isEmpty() || directParent) { valid = false; break }
+                        directParent = true
+                    } else {
+                        val part = parseSelectorPart(token)
+                        if (part == null) { valid = false; break }
+                        parts.add(part.copy(directParent = directParent))
+                        directParent = false
+                    }
+                }
+                if (!valid || directParent || parts.isEmpty()) return@forEach
                 rules.add(
                     CssRule(
                         selectorRaw = normalizedSelector.lowercase(),
@@ -140,40 +155,22 @@ private fun parseCssRules(styleBlocks: List<String>): List<CssRule> {
 }
 
 private fun parseSelectorPart(rawPart: String): SelectorPart? {
-    val withoutPseudoClass = rawPart.substringBefore(':').trim()
-    if (withoutPseudoClass.isBlank()) return null
-
     val attrPresence = linkedSetOf<String>()
     val attrEquals = linkedMapOf<String, String>()
-    cssAttrRegex.findAll(withoutPseudoClass).forEach { match ->
-        val key = match.groupValues.getOrNull(1)?.trim()?.lowercase().orEmpty()
-        if (key.isBlank()) return@forEach
+    cssAttrRegex.findAll(rawPart).forEach { match ->
+        val key = match.groupValues[1].trim().lowercase()
         attrPresence.add(key)
-        val value = match.groupValues.getOrNull(3)?.trim().orEmpty()
-        if (value.isNotBlank()) {
-            attrEquals[key] = value.lowercase()
-        }
+        if (match.value.contains('=')) attrEquals[key] = match.groupValues[3].trim()
     }
-
-    val withoutAttr = withoutPseudoClass.replace(cssAttrRegex, "")
-    val chunks = withoutAttr.split('.').filter { it.isNotBlank() }
-    val tag = chunks.firstOrNull()?.takeIf { withoutAttr.trim().startsWith(it) && it != "*" }?.lowercase()
-    val classes = if (chunks.isEmpty()) {
-        emptySet()
-    } else {
-        val startIndex = if (tag != null) 1 else 0
-        chunks.drop(startIndex).map { it.lowercase() }.toSet()
-    }
-
-    if (tag == null && classes.isEmpty() && attrPresence.isEmpty()) return null
-    return SelectorPart(
-        tag = tag,
-        classes = classes,
-        attrPresence = attrPresence,
-        attrEquals = attrEquals
-    )
+    val simple = rawPart.replace(cssAttrRegex, "")
+    // Unsupported pseudo-classes/combinators must not silently become unconditional selectors.
+    if (!simple.matches(Regex("(?:[A-Za-z][\\w-]*|\\*)?(?:[.#][\\w-]+)*"))) return null
+    val tag = Regex("^[A-Za-z][\\w-]*").find(simple)?.value?.lowercase()
+    val classes = Regex("\\.([\\w-]+)").findAll(simple).map { it.groupValues[1] }.toSet()
+    val ids = Regex("#([\\w-]+)").findAll(simple).map { it.groupValues[1] }.toSet()
+    if (simple.isEmpty() && attrPresence.isEmpty()) return null
+    return SelectorPart(tag = tag, ids = ids, classes = classes, attrPresence = attrPresence, attrEquals = attrEquals)
 }
-
 private fun resolveMatchedDeclarations(
     tag: String,
     attrs: Map<String, String>,
@@ -184,6 +181,9 @@ private fun resolveMatchedDeclarations(
     val ancestorChain = ancestors.filter { it.tag != "#root" }
     return rules
         .filter { it.matches(ancestorChain, current) }
+        .sortedWith(compareBy<CssRule> { rule -> rule.parts.sumOf { it.ids.size } }
+            .thenBy { rule -> rule.parts.sumOf { it.classes.size + it.attrPresence.size } }
+            .thenBy { rule -> rule.parts.count { it.tag != null } })
         .map { it.declaration }
 }
 
@@ -192,6 +192,11 @@ private fun CssRule.matches(ancestors: List<NodeContext>, current: NodeContext):
     if (!parts.last().matches(current)) return false
     var ancestorCursor = ancestors.lastIndex
     for (index in parts.lastIndex - 1 downTo 0) {
+        if (parts[index + 1].directParent) {
+            if (ancestorCursor < 0 || !parts[index].matches(ancestors[ancestorCursor])) return false
+            ancestorCursor--
+            continue
+        }
         var found = false
         while (ancestorCursor >= 0) {
             if (parts[index].matches(ancestors[ancestorCursor])) {
@@ -208,17 +213,17 @@ private fun CssRule.matches(ancestors: List<NodeContext>, current: NodeContext):
 
 private fun SelectorPart.matches(node: NodeContext): Boolean {
     if (tag != null && tag != node.tag.lowercase()) return false
+    if (ids.any { it != node.attrs["id"] }) return false
 
     val nodeAttrs = node.attrs.mapKeys { it.key.lowercase() }
     if (attrPresence.any { !nodeAttrs.containsKey(it) }) return false
-    if (attrEquals.any { (key, value) -> nodeAttrs[key]?.lowercase() != value }) return false
+    if (attrEquals.any { (key, value) -> nodeAttrs[key] != value }) return false
 
     if (classes.isNotEmpty()) {
         val nodeClasses = nodeAttrs["class"]
             .orEmpty()
             .split(Regex("\\s+"))
             .filter { it.isNotBlank() }
-            .map { it.lowercase() }
             .toSet()
         if (!classes.all { it in nodeClasses }) return false
     }
@@ -318,20 +323,13 @@ internal fun isHtmlTreeTooComplex(root: HtmlNode.Element): Boolean {
 }
 
 internal fun normalizeHtmlText(text: String, whiteSpace: String?): String {
-    if (text.isEmpty()) return text
+    val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
     return when (whiteSpace?.lowercase()) {
-        "pre", "pre-wrap" -> text.replace("\r\n", "\n").replace('\r', '\n')
-        "nowrap" -> text
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
-            .replace(Regex("[\\t\\n]+"), " ")
-        else -> text
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
-            .replace(Regex("[\\t ]+"), " ")
+        "pre", "pre-wrap", "break-spaces" -> normalized
+        "pre-line" -> normalized.replace(Regex("[\\t\\u000B\\f ]+"), " ")
+        else -> normalized.replace(Regex("[\\t\\n\\u000B\\f ]+"), " ")
     }
 }
-
 internal fun String.hasRenderableHtmlText(): Boolean {
     return any { char -> char == '\u00A0' || char == '\n' || !char.isWhitespace() }
 }

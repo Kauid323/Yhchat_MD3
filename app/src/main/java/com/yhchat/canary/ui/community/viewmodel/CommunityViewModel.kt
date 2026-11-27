@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -53,6 +54,39 @@ class CommunityViewModel @Inject constructor(
     private val _latestPostListState = MutableStateFlow(CommunityPostListState())
     val latestPostListState: StateFlow<CommunityPostListState> = _latestPostListState.asStateFlow()
     
+    private val _oldestPostListState = MutableStateFlow(CommunityPostListState())
+    val oldestPostListState: StateFlow<CommunityPostListState> = _oldestPostListState.asStateFlow()
+    private var oldestPostJob: kotlinx.coroutines.Job? = null
+
+    fun loadOldestPostList(token: String, page: Int = 1, isRefresh: Boolean = false) {
+        val current = _oldestPostListState.value
+        if (page > 1 && (current.isLoading || current.isRefreshing || !current.hasMore)) return
+        oldestPostJob?.cancel()
+        _oldestPostListState.value = current.copy(
+            isLoading = !isRefresh, isRefreshing = isRefresh, error = null
+        )
+        oldestPostJob = viewModelScope.launch {
+            val result = communityRepository.getPostList(token = token, baId = 1, typ = 3, size = 20, page = page)
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            result.onSuccess { response ->
+                val posts = (if (page == 1) response.data.posts else current.posts + response.data.posts).distinctBy { it.id }
+                _oldestPostListState.value = current.copy(
+                    posts = posts, currentPage = page, total = response.data.total,
+                    hasMore = posts.size < response.data.total && response.data.posts.isNotEmpty(),
+                    isLoading = false, isRefreshing = false, error = null
+                )
+            }.onFailure { error ->
+                _oldestPostListState.value = _oldestPostListState.value.copy(
+                    isLoading = false, isRefreshing = false, error = error.message ?: "加载最旧文章失败"
+                )
+            }
+        }
+    }
+
+    fun loadMoreOldestPosts(token: String) {
+        loadOldestPostList(token, page = _oldestPostListState.value.currentPage + 1)
+    }
+
     // 文章详情状态
     private val _postDetailState = MutableStateFlow(PostDetailState())
     val postDetailState: StateFlow<PostDetailState> = _postDetailState.asStateFlow()

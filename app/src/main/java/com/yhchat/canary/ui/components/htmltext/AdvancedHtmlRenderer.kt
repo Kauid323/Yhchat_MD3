@@ -96,28 +96,29 @@ fun AdvancedHtmlRenderer(
     html: String,
     modifier: Modifier = Modifier,
     onImageClick: ((String) -> Unit)? = null,
-    onLinkClick: ((String) -> Unit)? = null
+    onLinkClick: ((String) -> Unit)? = null,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    style: TextStyle = MaterialTheme.typography.bodyMedium
 ) {
     when (val source = remember(html) { prepareHtmlRenderSource(html) }) {
         is HtmlRenderSource.PlainText -> {
             Text(
                 text = source.text,
                 modifier = modifier,
-                color = MaterialTheme.colorScheme.onSurface
+                color = color,
+                style = style
             )
         }
         is HtmlRenderSource.Tree -> {
-            val defaultTextColor = MaterialTheme.colorScheme.onSurface
+            val defaultText = CssStyle(
+                fontSize = style.fontSize.takeIf { it != TextUnit.Unspecified } ?: 14.sp,
+                lineHeight = style.lineHeight.takeIf { it != TextUnit.Unspecified },
+                fontWeight = style.fontWeight,
+                color = color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface
+            )
             Column(modifier = modifier) {
-                source.root.children.forEach { node ->
-                    if (node is HtmlNode.Element && node.tag in NON_CONTENT_TAGS) return@forEach
-                    RenderHtmlNode(
-                        node = node,
-                        inheritedText = CssStyle(fontSize = 14.sp, color = defaultTextColor),
-                        onImageClick = onImageClick,
-                        onLinkClick = onLinkClick
-                    )
-                }
+                // Adjacent inline nodes belong to one paragraph, including nodes at the document root.
+                RenderInlineFlow(source.root.children, defaultText, onImageClick, onLinkClick)
             }
         }
     }
@@ -180,142 +181,104 @@ private fun HtmlFlexNode(
     onImageClick: ((String) -> Unit)?,
     onLinkClick: ((String) -> Unit)?
 ) {
-    val isRow = node.style.flexDirection?.equals("column", ignoreCase = true) != true
-    val gap = node.style.gap ?: 0.dp
+    val direction = node.style.flexDirection?.lowercase().orEmpty()
+    val isRow = direction !in setOf("column", "column-reverse")
+    val gap = (node.style.gap ?: 0.dp).coerceAtLeast(0.dp)
+    val children = remember(node, inheritedText.whiteSpace) {
+        htmlFlexItems(node.children, inheritedText.whiteSpace).let {
+            if (direction.endsWith("-reverse")) it.reversed() else it
+        }
+    }
     val horizontalArrangement = when (node.style.justifyContent?.lowercase()) {
-        "center" -> Arrangement.Center
-        "end", "flex-end", "right" -> Arrangement.End
+        "center" -> Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
+        "end", "flex-end", "right" -> Arrangement.spacedBy(gap, Alignment.End)
         "space-between" -> Arrangement.SpaceBetween
         "space-around" -> Arrangement.SpaceAround
         "space-evenly" -> Arrangement.SpaceEvenly
-        else -> Arrangement.Start
+        else -> Arrangement.spacedBy(gap)
     }
     val verticalAlignment = when (node.style.alignItems?.lowercase()) {
         "center" -> Alignment.CenterVertically
         "end", "flex-end" -> Alignment.Bottom
         else -> Alignment.Top
     }
-
+    @Composable
+    fun renderChild(child: HtmlNode) {
+        RenderHtmlNode(child, inheritedText, onImageClick, onLinkClick, avoidFillMaxWidth = true)
+    }
     if (isRow && node.style.flexWrap?.equals("wrap", ignoreCase = true) == true) {
         FlowRow(
-            modifier = Modifier.fillMaxWidth().htmlBoxModel(node.style),
-            horizontalArrangement = if (gap > 0.dp) Arrangement.spacedBy(gap) else Arrangement.Start,
-            verticalArrangement = if (gap > 0.dp) Arrangement.spacedBy(gap) else Arrangement.Top
+            modifier = Modifier.htmlBoxModel(node.style)
+                .then(if (node.style.width == null && node.style.widthPercent == null) Modifier.fillMaxWidth() else Modifier),
+            horizontalArrangement = horizontalArrangement,
+            verticalArrangement = Arrangement.spacedBy(gap)
         ) {
-            node.children.forEach { child ->
-                when (child) {
-                    is HtmlNode.Text -> {
-                        val text = normalizeHtmlText(child.text, inheritedText.whiteSpace)
-                        if (text.hasRenderableHtmlText()) {
-                            Text(text = text, style = inheritedText.toComposeTextStyle())
-                        }
-                    }
-                    is HtmlNode.Element -> {
-                        RenderHtmlNode(
-                            node = child,
-                            inheritedText = child.style.mergeText(inheritedText),
-                            onImageClick = onImageClick,
-                            onLinkClick = onLinkClick,
-                            avoidFillMaxWidth = true
-                        )
-                    }
-                }
-            }
+            children.forEach { child -> Box { renderChild(child) } }
         }
     } else if (isRow) {
         Row(
-            modifier = Modifier.fillMaxWidth().htmlBoxModel(node.style),
+            modifier = Modifier.htmlBoxModel(node.style)
+                .then(if (node.style.width == null && node.style.widthPercent == null) Modifier.fillMaxWidth() else Modifier),
             horizontalArrangement = horizontalArrangement,
             verticalAlignment = verticalAlignment
         ) {
-            // 关键：按文档顺序渲染。
-            //
-            // 旧实现先把所有 Text 节点合成一个块、再把所有 Element 节点排在后面，
-            // 于是 `<span>名字</span><span>(ID)</span>` 这类结构顺序还行，
-            // 但 `<img/><span>名字</span>` 里两者会被拆散重排；更糟的是
-            // `<div>` 子节点之间的纯空白文本也会被渲染成独立的 Text，
-            // 在 Row 里占掉一整份间距，表现为头像和文字之间出现莫名其妙的空隙。
-            //
-            // 这里改成一次遍历：连续的文本节点攒成一段 AnnotatedString 一次性输出，
-            // 遇到元素节点就单独渲染，顺序与 HTML 完全一致。
-            val inlineBuffer = mutableListOf<HtmlNode>()
-
-            @Composable
-            fun flushInlineBuffer() {
-                if (inlineBuffer.isEmpty()) return
-                val (annotated, style) = buildInlineAnnotated(inlineBuffer.toList(), inheritedText)
-                inlineBuffer.clear()
-                if (!annotated.text.hasRenderableHtmlText()) return
-                @Suppress("DEPRECATION")
-                ClickableText(
-                    text = annotated,
-                    style = style,
-                    onClick = { offset ->
-                        annotated.getStringAnnotations("URL", offset, offset + 1)
-                            .firstOrNull()
-                            ?.let { onLinkClick?.invoke(it.item) }
-                    }
-                )
-            }
-
-            var isFirstChild = true
-            node.children.forEach { child ->
-                when (child) {
-                    is HtmlNode.Text -> inlineBuffer += child
-                    is HtmlNode.Element -> {
-                        flushInlineBuffer()
-                        val childFlexGrow = child.style.flexGrow ?: child.style.flex ?: 0f
-                        // gap 用「非首个子项加前导间距」实现；以前的写法漏掉了
-                        // 文本节点，导致带文字和图片混排时间距错位
-                        val gapModifier =
-                            if (!isFirstChild && gap > 0.dp && horizontalArrangement == Arrangement.Start) {
-                                Modifier.padding(start = gap)
-                            } else {
-                                Modifier
-                            }
-
-                        // weight 只能用于 Row/Column 的直接子项，所以这里把它直接串在
-                        // Box 的 modifier 上 —— 这段代码本来就在 Row 的 content lambda
-                        // （RowScope）里，可以直接调用 weight。
-                        // 以前用的是 fillMaxWidth：两个 flex:1 的子项各自撑满整行，
-                        // 把后面的兄弟节点挤到屏幕外。
-                        Box(
-                            modifier = gapModifier.then(
-                                if (childFlexGrow > 0f) Modifier.weight(childFlexGrow) else Modifier
-                            )
-                        ) {
-                            RenderHtmlNode(
-                                node = child,
-                                inheritedText = child.style.mergeText(inheritedText),
-                                onImageClick = onImageClick,
-                                onLinkClick = onLinkClick,
-                                avoidFillMaxWidth = true
-                            )
-                        }
-                        isFirstChild = false
-                    }
+            children.forEach { child ->
+                val childStyle = (child as? HtmlNode.Element)?.style
+                val grow = childStyle?.flexGrow ?: childStyle?.flex ?: 0f
+                Box(Modifier.then(if (grow.isFinite() && grow > 0f) Modifier.weight(grow) else Modifier)) {
+                    renderChild(child)
                 }
             }
-            flushInlineBuffer()
         }
     } else {
         Column(
-            modifier = Modifier.fillMaxWidth().htmlBoxModel(node.style),
-            verticalArrangement = if (gap > 0.dp) Arrangement.spacedBy(gap) else Arrangement.Top,
+            modifier = Modifier.htmlBoxModel(node.style)
+                .then(if (node.style.width == null && node.style.widthPercent == null) Modifier.fillMaxWidth() else Modifier),
+            verticalArrangement = when (node.style.justifyContent?.lowercase()) {
+                "center" -> Arrangement.spacedBy(gap, Alignment.CenterVertically)
+                "end", "flex-end" -> Arrangement.spacedBy(gap, Alignment.Bottom)
+                "space-between" -> Arrangement.SpaceBetween
+                "space-around" -> Arrangement.SpaceAround
+                "space-evenly" -> Arrangement.SpaceEvenly
+                else -> Arrangement.spacedBy(gap)
+            },
             horizontalAlignment = when (node.style.alignItems?.lowercase()) {
                 "center" -> Alignment.CenterHorizontally
                 "end", "flex-end" -> Alignment.End
                 else -> Alignment.Start
             }
         ) {
-            node.children.forEach { child ->
-                RenderHtmlNode(child, inheritedText, onImageClick, onLinkClick)
-            }
+            children.forEach { child -> renderChild(child) }
         }
     }
 }
 
-private val NON_CONTENT_TAGS = setOf("html", "head", "meta", "title", "script", "link")
+/** CSS flex anonymous items: adjacent text is one item; formatting-only whitespace is not an item. */
+internal fun htmlFlexItems(children: List<HtmlNode>, whiteSpace: String?): List<HtmlNode> {
+    val items = mutableListOf<HtmlNode>()
+    val text = StringBuilder()
+    fun flushText() {
+        val normalized = normalizeHtmlText(text.toString(), whiteSpace)
+        if (normalized.any { !it.isWhitespace() || it == '\u00a0' }) items += HtmlNode.Text(normalized)
+        text.setLength(0)
+    }
+    children.forEach { child ->
+        when (child) {
+            is HtmlNode.Text -> text.append(child.text)
+            is HtmlNode.Element -> {
+                if (!child.isHiddenHtmlNode()) {
+                    flushText()
+                    items += child
+                }
+            }
+        }
+    }
+    flushText()
+    return items
+}
+private val NON_CONTENT_TAGS = setOf("head", "meta", "title", "script", "style", "link", "template", "base")
+
+internal fun HtmlNode.Element.isHiddenHtmlNode(): Boolean = tag in NON_CONTENT_TAGS || attrs.containsKey("hidden") || style.display?.trim()?.equals("none", ignoreCase = true) == true
 
 @Composable
 private fun RenderHtmlNode(
@@ -335,6 +298,7 @@ private fun RenderHtmlNode(
         )
     )
 
+    if (node is HtmlNode.Element && node.isHiddenHtmlNode()) return
     when (node) {
         is HtmlNode.Text -> {
             Text(
@@ -361,6 +325,7 @@ private fun RenderHtmlNode(
             }
 
             when (themeAdjustedNode.tag) {
+                "hr" -> androidx.compose.material3.HorizontalDivider(Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 "img" -> HtmlImageNode(themeAdjustedNode, onImageClick)
                 "details" -> HtmlDetailsNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
                 "blockquote" -> HtmlBlockquoteNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
@@ -387,9 +352,21 @@ private fun HtmlGenericNode(
         "h4" -> CssStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeightMultiplier = 1.2f, marginBottom = 6.dp)
         "h5" -> CssStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, marginBottom = 2.dp)
         "h6" -> CssStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, marginBottom = 2.dp)
+        "p" -> CssStyle(marginBottom = 8.dp)
+        "pre" -> CssStyle(fontFamily = "monospace", whiteSpace = "pre", padding = 12.dp, marginBottom = 8.dp)
         else -> CssStyle()
     }
-    val merged = headingStyle.mergeText(node.style.mergeText(inheritedText))
+    val effectiveStyle = headingStyle.mergeWith(node.style)
+    val merged = effectiveStyle.mergeText(inheritedText)
+    if (node.tag == "pre") {
+        val preserveLineWidth = merged.whiteSpace?.lowercase() in setOf("pre", "nowrap")
+        Column(Modifier.fillMaxWidth()
+            .then(if (preserveLineWidth) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+            .htmlBoxModel(effectiveStyle)) {
+            RenderInlineFlow(node.children, merged, onImageClick, onLinkClick)
+        }
+        return
+    }
     val forceBlockLayout = shouldRenderAsBlockNode(node)
     
     // 妫€鏌ユ槸鍚︽槸閾炬帴鏍囩锛堢敤浜庡鐞嗗潡绾ч摼鎺ョ殑鍙偣鍑绘€э級
@@ -405,7 +382,7 @@ private fun HtmlGenericNode(
 
     if (displayMode == "inline-block") {
         Box(
-            modifier = Modifier.htmlBoxModel(node.style)
+            modifier = Modifier.htmlBoxModel(effectiveStyle)
         ) {
             RenderInlineFlow(node.children, merged, onImageClick, onLinkClick)
         }
@@ -427,9 +404,10 @@ private fun HtmlGenericNode(
         }
 
         Column(
-            modifier = (if (avoidFillMaxWidth) Modifier else Modifier.fillMaxWidth())
+            modifier = Modifier
                 .then(clickableModifier)
-                .htmlBoxModel(node.style)
+                .htmlBoxModel(effectiveStyle)
+                .then(if (avoidFillMaxWidth || effectiveStyle.width != null || effectiveStyle.widthPercent != null) Modifier else Modifier.fillMaxWidth())
         ) {
             RenderInlineFlow(node.children, merged, onImageClick, onLinkClick)
         }
@@ -499,6 +477,7 @@ private fun RenderInlineFlow(
         when (child) {
             is HtmlNode.Text -> inlineBuffer += child
             is HtmlNode.Element -> {
+                if (child.isHiddenHtmlNode()) return@forEach
                 if (shouldRenderInline(child)) {
                     inlineBuffer += child
                 } else {
@@ -547,167 +526,64 @@ private fun buildInlineAnnotated(
     nodes: List<HtmlNode>,
     inheritedText: CssStyle
 ): Pair<AnnotatedString, TextStyle> {
-    val defaultTextColor = MaterialTheme.colorScheme.onSurface
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val normalizedInheritedText = inheritedText.copy(
-        color = normalizeTextColorForTheme(inheritedText.color, defaultTextColor, isDarkTheme)
-    )
-    val baseStyle = normalizedInheritedText.toComposeTextStyle()
-    val linkColor = MaterialTheme.colorScheme.primary
-
-    val annotated = buildAnnotatedString {
-        fun appendNode(node: HtmlNode, parentStyle: CssStyle) {
-            when (node) {
-                is HtmlNode.Text -> append(normalizeHtmlText(node.text, parentStyle.whiteSpace))
-                is HtmlNode.Element -> {
-                    val mergedRaw = node.style.mergeText(parentStyle)
-                    val merged = mergedRaw.copy(
-                        color = normalizeTextColorForTheme(mergedRaw.color, defaultTextColor, isDarkTheme)
-                    )
-                    when (node.tag) {
-                        "strong", "b" -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontWeight = FontWeight.Bold)) }
-                        }
-                        "em", "i" -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontStyle = FontStyle.Italic)) }
-                        }
-                        "u" -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
-                            node.children.forEach { appendNode(it, merged.copy(textDecoration = TextDecoration.Underline)) }
-                        }
-                        "s" -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                            node.children.forEach { appendNode(it, merged.copy(textDecoration = TextDecoration.LineThrough)) }
-                        }
-                        "small" -> withStyle(SpanStyle(fontSize = 12.sp)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontSize = 12.sp)) }
-                        }
-                        "a" -> {
-                            val href = node.attrs["href"].orEmpty()
-                            pushStringAnnotation(tag = "URL", annotation = href)
-                            // 链接样式走统一判定：写了 color:inherit / text-decoration:none
-                            // 就照办，不要强行染蓝加下划线
-                            val linkStyle = buildLinkSpanStyle(merged, inheritedText, linkColor)
-                            withStyle(linkStyle) {
-                                node.children.forEach {
-                                    appendNode(it, merged.copy(color = linkStyle.color.takeIf { c -> c != Color.Unspecified }))
-                                }
-                            }
-                            runCatching { pop() }
-                        }
-                        else -> {
-                            val spanStyle = SpanStyle(
-                                color = merged.color ?: Color.Unspecified,
-                                fontSize = merged.fontSize ?: TextUnit.Unspecified,
-                                fontWeight = merged.fontWeight,
-                                fontStyle = merged.fontStyle,
-                                textDecoration = merged.textDecoration
-                            )
-                            withStyle(spanStyle) {
-                                node.children.forEach { appendNode(it, merged) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        nodes.forEach { appendNode(it, normalizedInheritedText) }
-    }
-
-    return annotated to baseStyle
+    val defaultColor = MaterialTheme.colorScheme.onSurface
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val base = inheritedText.copy(color = normalizeTextColorForTheme(inheritedText.color, defaultColor, isDark))
+    return buildHtmlInlineText(nodes, base, MaterialTheme.colorScheme.primary, defaultColor, isDark) to base.toComposeTextStyle()
 }
 
-/**
- * 甯﹂摼鎺ョ殑 AnnotatedString 鏋勫缓鍑芥暟
- * 鐢ㄤ簬澶勭悊甯︽湁 href 灞炴€х殑 <a> 鏍囩
- */
+/** Keep one inline traversal for both plain and linked containers. */
 @Composable
 private fun buildInlineAnnotatedWithLink(
-    nodes: List<HtmlNode>,
-    inheritedText: CssStyle,
-    href: String
-): Pair<AnnotatedString, TextStyle> {
-    val defaultTextColor = MaterialTheme.colorScheme.onSurface
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val normalizedInheritedText = inheritedText.copy(
-        color = normalizeTextColorForTheme(inheritedText.color, defaultTextColor, isDarkTheme)
-    )
-    val baseStyle = normalizedInheritedText.toComposeTextStyle()
-    val linkColor = MaterialTheme.colorScheme.primary
+    nodes: List<HtmlNode>, inheritedText: CssStyle, href: String
+): Pair<AnnotatedString, TextStyle> = buildInlineAnnotated(
+    listOf(HtmlNode.Element("a", attrs = mapOf("href" to href), children = nodes.toMutableList())), inheritedText
+)
 
-    val annotated = buildAnnotatedString {
-        fun appendNode(node: HtmlNode, parentStyle: CssStyle) {
-            when (node) {
-                is HtmlNode.Text -> append(normalizeHtmlText(node.text, parentStyle.whiteSpace))
-                is HtmlNode.Element -> {
-                    val mergedRaw = node.style.mergeText(parentStyle)
-                    val merged = mergedRaw.copy(
-                        color = normalizeTextColorForTheme(mergedRaw.color, defaultTextColor, isDarkTheme)
-                    )
-                    when (node.tag) {
-                        "strong", "b" -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontWeight = FontWeight.Bold)) }
-                        }
-                        "em", "i" -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontStyle = FontStyle.Italic)) }
-                        }
-                        "u" -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
-                            node.children.forEach { appendNode(it, merged.copy(textDecoration = TextDecoration.Underline)) }
-                        }
-                        "s" -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                            node.children.forEach { appendNode(it, merged.copy(textDecoration = TextDecoration.LineThrough)) }
-                        }
-                        "small" -> withStyle(SpanStyle(fontSize = 12.sp)) {
-                            node.children.forEach { appendNode(it, merged.copy(fontSize = 12.sp)) }
-                        }
-                        "a" -> {
-                            // 宓屽鐨?<a> 鏍囩锛屼娇鐢ㄥ叾鑷韩鐨?href
-                            val nestedHref = node.attrs["href"].orEmpty()
-                            pushStringAnnotation(tag = "URL", annotation = nestedHref)
-                            val linkStyle = buildLinkSpanStyle(merged, inheritedText, linkColor)
-                            withStyle(linkStyle) {
-                                node.children.forEach {
-                                    appendNode(it, merged.copy(color = linkStyle.color.takeIf { c -> c != Color.Unspecified }))
-                                }
-                            }
-                            runCatching { pop() }
-                        }
-                        else -> {
-                            val spanStyle = SpanStyle(
-                                color = merged.color ?: Color.Unspecified,
-                                fontSize = merged.fontSize ?: TextUnit.Unspecified,
-                                fontWeight = merged.fontWeight,
-                                fontStyle = merged.fontStyle,
-                                textDecoration = merged.textDecoration
-                            )
-                            withStyle(spanStyle) {
-                                node.children.forEach { appendNode(it, merged) }
-                            }
-                        }
-                    }
+internal fun buildHtmlInlineText(
+    nodes: List<HtmlNode>, inheritedText: CssStyle, linkColor: Color,
+    defaultColor: Color, isDark: Boolean
+): AnnotatedString = buildAnnotatedString {
+    fun appendNode(node: HtmlNode, parent: CssStyle) {
+        when (node) {
+            is HtmlNode.Text -> append(normalizeHtmlText(node.text, parent.whiteSpace))
+            is HtmlNode.Element -> {
+                if (node.isHiddenHtmlNode()) return
+                if (node.tag == "br") { append("\n"); return }
+                val defaults = when (node.tag) {
+                    "strong", "b" -> CssStyle(fontWeight = FontWeight.Bold)
+                    "em", "i" -> CssStyle(fontStyle = FontStyle.Italic)
+                    "s", "del", "strike" -> CssStyle(textDecoration = TextDecoration.LineThrough)
+                    "u", "ins" -> CssStyle(textDecoration = TextDecoration.Underline)
+                    "code", "kbd", "samp" -> CssStyle(fontFamily = "monospace")
+                    "small" -> CssStyle(fontSize = (parent.fontSize ?: 14.sp) * 0.8f)
+                    else -> CssStyle()
                 }
-            }
-        }
-
-        pushStringAnnotation(tag = "URL", annotation = href)
-        withStyle(
-            SpanStyle(
-                color = normalizedInheritedText.color ?: linkColor,
-                textDecoration = normalizedInheritedText.textDecoration ?: TextDecoration.Underline
-            )
-        ) {
-            nodes.forEach {
-                appendNode(
-                    it,
-                    normalizedInheritedText.copy(color = normalizedInheritedText.color ?: linkColor)
+                var resolved = defaults.mergeWith(node.style).mergeText(parent)
+                val href = node.attrs["href"]?.takeIf { it.isNotBlank() && node.tag == "a" }
+                if (href != null) {
+                    // Check authored values before inheritance; otherwise every link appears to
+                    // have an explicit color and loses the default link color.
+                    val link = buildLinkSpanStyle(node.style, parent, linkColor)
+                    resolved = resolved.copy(color = link.color, textDecoration = link.textDecoration)
+                }
+                resolved = resolved.copy(color = normalizeTextColorForTheme(resolved.color, defaultColor, isDark))
+                val span = resolved.toComposeTextStyle().toSpanStyle().copy(
+                    background = node.style.backgroundColor ?: Color.Unspecified,
+                    baselineShift = when (node.tag) {
+                        "sup" -> androidx.compose.ui.text.style.BaselineShift.Superscript
+                        "sub" -> androidx.compose.ui.text.style.BaselineShift.Subscript
+                        else -> null
+                    }
                 )
+                if (href != null) pushStringAnnotation("URL", href)
+                withStyle(span) { node.children.forEach { appendNode(it, resolved) } }
+                if (href != null) pop()
             }
         }
-        runCatching { pop() }
     }
-
-    return annotated to baseStyle
+    nodes.forEach { appendNode(it, inheritedText) }
 }
-
 /**
  * 构造链接的 SpanStyle，尊重作者的显式样式意图。
  *
@@ -755,14 +631,7 @@ private fun HtmlImageNode(
     val src = node.attrs["src"].orEmpty()
     if (src.isEmpty()) return
     val context = LocalContext.current
-    val model: Any = if (src.contains("jwznb.com", ignoreCase = true)) {
-        ImageRequest.Builder(context)
-            .data(src)
-            .addHeader("Referer", "https://myapp.jwznb.com")
-            .build()
-    } else {
-        src
-    }
+    val model = com.yhchat.canary.ui.components.ImageUtils.createImageRequest(context, src)
 
     val imageScale = when (node.style.objectFit?.lowercase()) {
         "cover" -> ContentScale.Crop
@@ -962,16 +831,16 @@ private fun extractTable(table: HtmlNode.Element): HtmlTableData {
     val rows = mutableListOf<HtmlTableRow>()
 
     fun walk(node: HtmlNode) {
-        if (node is HtmlNode.Element) {
+        if (node is HtmlNode.Element && !node.isHiddenHtmlNode()) {
             if (node.tag == "tr") {
                 val cells = node.children
                     .filterIsInstance<HtmlNode.Element>()
-                    .filter { it.tag == "td" || it.tag == "th" }
+                    .filter { (it.tag == "td" || it.tag == "th") && !it.isHiddenHtmlNode() }
                     .map {
                         HtmlTableCell(
                             node = it,
                             isHeader = it.tag == "th",
-                            colSpan = positiveInt(it.attrs["colspan"], 1)
+                            colSpan = positiveInt(it.attrs["colspan"], 1).coerceAtMost(100)
                         )
                     }
                 rows += HtmlTableRow(node.style, cells)
@@ -1009,6 +878,8 @@ private fun HtmlTableNode(
             } else {
                 screenWidth
             }
+            val columnCount = table.rows.maxOf { row -> row.cells.sumOf { it.colSpan } }.coerceAtLeast(1)
+            val columnWidth = (viewportWidth / columnCount).coerceIn(120.dp, 280.dp)
             Box(
                 modifier = Modifier
                     .width(viewportWidth)
@@ -1026,7 +897,7 @@ private fun HtmlTableNode(
                                 val baseText = if (cell.isHeader) inheritedText.copy(fontWeight = FontWeight.Bold) else inheritedText
                                 Box(
                                     modifier = Modifier
-                                        .defaultMinSize(minWidth = (80 * cell.colSpan).dp)
+                                        .width(columnWidth * cell.colSpan)
                                         .then(
                                             if (cell.node.style.backgroundColor != null) Modifier.background(cell.node.style.backgroundColor)
                                             else Modifier
