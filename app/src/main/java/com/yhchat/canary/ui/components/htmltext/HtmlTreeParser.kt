@@ -27,11 +27,8 @@ private data class NodeContext(
     val attrs: Map<String, String>
 )
 
-private val styleBlockRegex = Regex("(?is)<style[^>]*>(.*?)</style>")
-private val cssCommentRegex = Regex("(?s)/\\*.*?\\*/")
-private val cssRuleRegex = Regex("(?s)([^{}]+)\\{([^{}]*)\\}")
-private val cssAttrRegex = Regex("\\[([^\\]=\\s]+)(?:\\s*=\\s*(['\"]?)([^\\]'\"]+)\\2)?\\]")
-
+private val styleBlockRegex = Regex("(?is)<style\\b[^>]*>(.*?)</style\\s*>")
+private val cssAttrRegex = Regex("""\[\s*([\w-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))\s*)?\]""")
 internal fun parseHtmlTree(html: String): HtmlNode.Element {
     val (htmlWithoutStyles, styleBlocks) = extractStyleBlocks(html)
     val cssRules = parseCssRules(styleBlocks)
@@ -113,19 +110,16 @@ private fun extractStyleBlocks(html: String): Pair<String, List<String>> {
 private fun parseCssRules(styleBlocks: List<String>): List<CssRule> {
     val rules = mutableListOf<CssRule>()
     styleBlocks.forEach { block ->
-        val cleaned = block.replace(cssCommentRegex, "")
-        cssRuleRegex.findAll(cleaned).forEach { match ->
-            val selectorGroup = match.groupValues.getOrNull(1)?.trim().orEmpty()
-            val declaration = match.groupValues.getOrNull(2)?.trim().orEmpty()
+        readCssBlocks(block).forEach { rule ->
+            val selectorGroup = rule.selector
+            val declaration = rule.declarations.trim()
             if (selectorGroup.isBlank() || declaration.isBlank()) return@forEach
-            if (selectorGroup.startsWith("@")) return@forEach
 
-            selectorGroup.split(',').forEach { rawSelector ->
-                val normalizedSelector = rawSelector.trim().replace(Regex("\\s+"), " ")
+            splitCssTopLevel(selectorGroup, ',').forEach { rawSelector ->
+                val normalizedSelector = rawSelector.trim()
                 if (normalizedSelector.isBlank()) return@forEach
-                if (normalizedSelector.contains("::")) return@forEach
 
-                val selectorTokens = Regex("(?:\\[[^\\]]*\\]|[^\\s>\\[])+|>").findAll(normalizedSelector).map { it.value }.toList()
+                val selectorTokens = tokenizeCssSelector(normalizedSelector)
                 val parts = mutableListOf<SelectorPart>()
                 var directParent = false
                 var valid = true
@@ -160,7 +154,9 @@ private fun parseSelectorPart(rawPart: String): SelectorPart? {
     cssAttrRegex.findAll(rawPart).forEach { match ->
         val key = match.groupValues[1].trim().lowercase()
         attrPresence.add(key)
-        if (match.value.contains('=')) attrEquals[key] = match.groupValues[3].trim()
+        if (match.value.contains('=')) {
+            attrEquals[key] = match.groups[2]?.value ?: match.groups[3]?.value ?: match.groupValues[4]
+        }
     }
     val simple = rawPart.replace(cssAttrRegex, "")
     // Unsupported pseudo-classes/combinators must not silently become unconditional selectors.
@@ -190,27 +186,24 @@ private fun resolveMatchedDeclarations(
 private fun CssRule.matches(ancestors: List<NodeContext>, current: NodeContext): Boolean {
     if (parts.isEmpty()) return false
     if (!parts.last().matches(current)) return false
-    var ancestorCursor = ancestors.lastIndex
-    for (index in parts.lastIndex - 1 downTo 0) {
-        if (parts[index + 1].directParent) {
-            if (ancestorCursor < 0 || !parts[index].matches(ancestors[ancestorCursor])) return false
-            ancestorCursor--
-            continue
-        }
-        var found = false
-        while (ancestorCursor >= 0) {
-            if (parts[index].matches(ancestors[ancestorCursor])) {
-                found = true
-                ancestorCursor -= 1
-                break
+    // Backtrack through ancestor candidates: a nearer matching descendant may fail a
+    // preceding direct-parent constraint while a farther one satisfies the whole selector.
+    val memo = mutableMapOf<Pair<Int, Int>, Boolean>()
+    fun matchPrevious(partIndex: Int, ancestorIndex: Int): Boolean {
+        if (partIndex < 0) return true
+        if (ancestorIndex < 0) return false
+        return memo.getOrPut(partIndex to ancestorIndex) {
+            if (parts[partIndex + 1].directParent) {
+                parts[partIndex].matches(ancestors[ancestorIndex]) && matchPrevious(partIndex - 1, ancestorIndex - 1)
+            } else {
+                (ancestorIndex downTo 0).any { index ->
+                    parts[partIndex].matches(ancestors[index]) && matchPrevious(partIndex - 1, index - 1)
+                }
             }
-            ancestorCursor -= 1
         }
-        if (!found) return false
     }
-    return true
+    return matchPrevious(parts.lastIndex - 1, ancestors.lastIndex)
 }
-
 private fun SelectorPart.matches(node: NodeContext): Boolean {
     if (tag != null && tag != node.tag.lowercase()) return false
     if (ids.any { it != node.attrs["id"] }) return false

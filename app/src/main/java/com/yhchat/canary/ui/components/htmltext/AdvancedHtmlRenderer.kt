@@ -648,17 +648,21 @@ private fun HtmlImageNode(
     val attrWidth = node.attrs["width"]?.let { parseHtmlSizeAttr(it) }
     val attrHeight = node.attrs["height"]?.let { parseHtmlSizeAttr(it) }
 
-    val hasExplicitSize = node.style.width != null || node.style.height != null ||
-        node.style.widthPercent != null || node.style.heightPercent != null ||
-        attrWidth != null || attrHeight != null
+    val attrWidthPercent = node.attrs["width"]?.trim()?.takeIf { it.endsWith('%') }
+        ?.dropLast(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it >= 0f }?.div(100f)
+    val attrHeightPercent = node.attrs["height"]?.trim()?.takeIf { it.endsWith('%') }
+        ?.dropLast(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it >= 0f }?.div(100f)
+    val effectiveStyle = node.style.copy(
+        width = node.style.width ?: attrWidth.takeIf { node.style.widthPercent == null },
+        height = node.style.height ?: attrHeight.takeIf { node.style.heightPercent == null },
+        widthPercent = node.style.widthPercent ?: attrWidthPercent.takeIf { node.style.width == null },
+        heightPercent = node.style.heightPercent ?: attrHeightPercent.takeIf { node.style.height == null }
+    )
+    val hasExplicitSize = effectiveStyle.width != null || effectiveStyle.height != null ||
+        effectiveStyle.widthPercent != null || effectiveStyle.heightPercent != null
 
-    // 用 BoxWithConstraints 拿到可用宽度：百分比尺寸（width:100%）要算成实际 Dp。
+    // 百分比宽度相对于当前可用容器，而不是整个屏幕。
     BoxWithConstraints {
-        // 把属性尺寸并进 style，交给统一的 media box 处理（含圆角裁剪）
-        val effectiveStyle = node.style.copy(
-            width = node.style.width ?: attrWidth,
-            height = node.style.height ?: attrHeight
-        )
         val modifier = Modifier
             .then(if (onImageClick != null) Modifier.clickable { onImageClick(src) } else Modifier)
             .htmlMediaBoxModel(effectiveStyle, maxWidth.takeIf { it > 0.dp && it < Dp.Infinity })
@@ -690,7 +694,7 @@ private fun parseHtmlSizeAttr(raw: String): Dp? {
     // 百分比（width="100%"）交给 style 的百分比通道，这里不处理
     if (value.endsWith("%")) return null
     val numeric = value.removeSuffix("px").removeSuffix("PX").trim()
-    return numeric.toFloatOrNull()?.dp
+    return numeric.toFloatOrNull()?.takeIf { it.isFinite() && it >= 0f }?.dp
 }
 
 @Composable

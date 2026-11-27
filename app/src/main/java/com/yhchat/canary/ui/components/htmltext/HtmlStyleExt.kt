@@ -196,24 +196,48 @@ internal fun Modifier.htmlBoxModel(style: CssStyle): Modifier {
         modifier = modifier.background(androidx.compose.ui.graphics.Brush.linearGradient(colors))
     }
 
-    if (style.border != null || style.borderTop != null || style.borderRight != null ||
-        style.borderBottom != null || style.borderLeft != null) {
+    val borderColor = style.color ?: Color(0xFFE0E0E0)
+    val topBorder = parseHtmlBorder(style.borderTop ?: style.border, borderColor)
+    val rightBorder = parseHtmlBorder(style.borderRight ?: style.border, borderColor)
+    val bottomBorder = parseHtmlBorder(style.borderBottom ?: style.border, borderColor)
+    val leftBorder = parseHtmlBorder(style.borderLeft ?: style.border, borderColor)
+    if (listOf(topBorder, rightBorder, bottomBorder, leftBorder).any { it.width > 0.dp }) {
         modifier = modifier.drawBehind {
-            style.border?.let {
-                drawRect(color = parseBorderColor(it), style = Stroke(width = 1.dp.toPx()))
+            val uniform = topBorder == rightBorder && topBorder == bottomBorder && topBorder == leftBorder
+            if (uniform) {
+                val stroke = topBorder.width.toPx().coerceAtMost(minOf(size.width, size.height))
+                if (stroke > 0f) {
+                    val inset = stroke / 2f
+                    val radiusPx = if (style.borderRadiusIsCircle) minOf(size.width, size.height) / 2f
+                        else (style.borderRadius?.toPx() ?: 0f)
+                    drawRoundRect(
+                        color = topBorder.color,
+                        topLeft = Offset(inset, inset),
+                        size = androidx.compose.ui.geometry.Size((size.width - stroke).coerceAtLeast(0f), (size.height - stroke).coerceAtLeast(0f)),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius((radiusPx - inset).coerceAtLeast(0f)),
+                        style = Stroke(width = stroke, pathEffect = topBorder.pathEffect(stroke))
+                    )
+                }
+            } else {
+                fun edge(border: HtmlBorder, start: Offset, end: Offset, width: Float) {
+                    if (width > 0f) drawLine(border.color, start, end, strokeWidth = width, pathEffect = border.pathEffect(width))
+                }
+                val top = topBorder.width.toPx().coerceAtMost(size.height)
+                val bottom = bottomBorder.width.toPx().coerceAtMost(size.height)
+                val left = leftBorder.width.toPx().coerceAtMost(size.width)
+                val right = rightBorder.width.toPx().coerceAtMost(size.width)
+                edge(topBorder, Offset(0f, top / 2), Offset(size.width, top / 2), top)
+                edge(bottomBorder, Offset(0f, size.height - bottom / 2), Offset(size.width, size.height - bottom / 2), bottom)
+                edge(leftBorder, Offset(left / 2, 0f), Offset(left / 2, size.height), left)
+                edge(rightBorder, Offset(size.width - right / 2, 0f), Offset(size.width - right / 2, size.height), right)
             }
-            style.borderTop?.let { drawLine(parseBorderColor(it), Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
-            style.borderBottom?.let { drawLine(parseBorderColor(it), Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
-            style.borderLeft?.let { drawLine(parseBorderColor(it), Offset(0f, 0f), Offset(0f, size.height), 1.dp.toPx()) }
-            style.borderRight?.let { drawLine(parseBorderColor(it), Offset(size.width, 0f), Offset(size.width, size.height), 1.dp.toPx()) }
         }
     }
-
     return modifier.padding(
-        top = paddingTop,
-        bottom = paddingBottom,
-        start = paddingStart,
-        end = paddingEnd
+        top = paddingTop + topBorder.width,
+        bottom = paddingBottom + bottomBorder.width,
+        start = paddingStart + leftBorder.width,
+        end = paddingEnd + rightBorder.width
     )
 }
 
@@ -232,19 +256,10 @@ internal fun Modifier.htmlMediaBoxModel(style: CssStyle, containerWidth: Dp?, co
     val resolvedHeight = style.height
         ?: style.heightPercent?.let { pct -> containerHeight?.let { it * pct } }
 
-    val radius = style.borderRadius
-    when {
-        style.borderRadiusIsCircle -> modifier = modifier.clip(CircleShape)
-        radius != null -> modifier = modifier.clip(RoundedCornerShape(radius))
-        else -> Unit
-    }
-
     modifier = modifier.htmlBoxModel(
         style.copy(
             width = resolvedWidth,
-            height = resolvedHeight,
-            borderRadius = null,
-            borderRadiusIsCircle = false
+            height = resolvedHeight
         )
     )
     return modifier

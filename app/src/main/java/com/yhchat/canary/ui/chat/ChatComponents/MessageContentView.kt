@@ -70,6 +70,7 @@ import com.yhchat.canary.ui.components.DownloadManager
 import com.yhchat.canary.ui.components.DownloadState
 import com.yhchat.canary.ui.components.ExpressionText
 import com.yhchat.canary.ui.components.ImageUtils
+import com.yhchat.canary.ui.components.imageViewerThumbnail
 import com.yhchat.canary.ui.components.LinkDetector
 import com.yhchat.canary.ui.components.LinkText
 import com.yhchat.canary.ui.components.MarkdownText
@@ -228,6 +229,7 @@ fun MessageContentView(
                                 // 原先 120~280dp 的尺寸会撑满一大块，把同一屏的
                                 // 其它消息挤出去。点开才是看原图的地方。
                                 .size(ImageThumbWidth, ImageThumbHeight)
+                                .imageViewerThumbnail(imageUrl)
                                 .clip(RoundedCornerShape(8.dp))
                                 .combinedClickable(
                                     onClick = { onImageClick(imageUrl) },
@@ -245,6 +247,7 @@ fun MessageContentView(
                             modifier = Modifier
                                 // 跟上面的 TGS 分支保持同一个缩略图尺寸
                                 .size(ImageThumbWidth, ImageThumbHeight)
+                                .imageViewerThumbnail(imageUrl)
                                 .clip(RoundedCornerShape(8.dp))
                                 .combinedClickable(
                                     onClick = { onImageClick(imageUrl) },

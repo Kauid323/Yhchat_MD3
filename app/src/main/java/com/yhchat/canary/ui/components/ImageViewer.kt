@@ -1,5 +1,21 @@
 package com.yhchat.canary.ui.components
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
@@ -36,6 +52,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
@@ -112,130 +129,197 @@ fun ImageViewer(
     imageUrls: List<String>,
     initialIndex: Int = 0,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    imageKeys: List<String>? = null,
+    onPageSettled: ((Int) -> Unit)? = null,
+    isLoadingMore: Boolean = false,
+    loadMoreError: String? = null,
+    onRetryLoadMore: (() -> Unit)? = null
 ) {
-    val sanitizedUrls = remember(imageUrls) { imageUrls.filter { it.isNotBlank() } }
+    // Keep duplicate URLs: two messages can contain the same picture; pager keys use the index.
+    val validIndices = remember(imageUrls) { imageUrls.indices.filter { imageUrls[it].isNotBlank() } }
+    val sanitizedUrls = remember(imageUrls) { validIndices.map { imageUrls[it] } }
+    val keys = remember(imageUrls, imageKeys) {
+        validIndices.map { index -> imageKeys?.getOrNull(index) ?: "$index:${imageUrls[index]}" }
+    }
     if (sanitizedUrls.isEmpty()) return
-
     val context = LocalContext.current
-    val pagerState = rememberPagerState(
-        initialPage = initialIndex.coerceIn(0, sanitizedUrls.lastIndex),
-        pageCount = { sanitizedUrls.size }
-    )
-    val zoomedPages = remember { mutableStateMapOf<Int, Boolean>() }
-    val gestureLockedPages = remember { mutableStateMapOf<Int, Boolean>() }
-    val refreshKeys = remember { mutableStateMapOf<Int, Int>() }
-    var controlsVisible by remember { mutableStateOf(true) }
-    val currentImageUrl by remember(sanitizedUrls, pagerState) {
-        derivedStateOf { sanitizedUrls[pagerState.currentPage.coerceIn(0, sanitizedUrls.lastIndex)] }
+    val scope = rememberCoroutineScope()
+    val latestDismiss by rememberUpdatedState(onDismiss)
+    val openingIndex = remember(imageUrls, initialIndex) {
+        imageUrls.take(initialIndex.coerceAtLeast(0)).count { it.isNotBlank() }.coerceIn(0, sanitizedUrls.lastIndex)
     }
-    val isCurrentPageZoomed by remember(pagerState, zoomedPages) {
-        derivedStateOf { zoomedPages[pagerState.currentPage] == true }
-    }
-    val isCurrentPageGestureLocked by remember(pagerState, gestureLockedPages) {
-        derivedStateOf { gestureLockedPages[pagerState.currentPage] == true }
-    }
+    val pagerState = rememberPagerState(initialPage = openingIndex, pageCount = { sanitizedUrls.size })
+    val zoomedPages = remember { mutableStateMapOf<String, Boolean>() }
+    val gestureLockedPages = remember { mutableStateMapOf<String, Boolean>() }
+    val refreshKeys = remember { mutableStateMapOf<String, Int>() }
+    val progress = remember { Animatable(0f) }
+    var closing by remember { mutableStateOf(false) }
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    var dragging by remember { mutableStateOf(false) }
+    var returning by remember { mutableStateOf(false) }
+    var viewerHeight by remember { mutableFloatStateOf(1f) }
+    var viewport by remember { mutableStateOf(Size.Zero) }
+    val displayedRects = remember { mutableStateMapOf<String, Rect>() }
+    val ownerWindow = androidx.compose.ui.platform.LocalView.current.windowToken
+    var near by remember { mutableStateOf(ViewerThumbnails.bounds(sanitizedUrls[openingIndex], ownerWindow)) }
+    var closingRect by remember { mutableStateOf<Rect?>(null) }
+    val currentKey = keys[pagerState.currentPage.coerceIn(0, keys.lastIndex)]
+    val zoomed = zoomedPages[currentKey] == true
+    val locked = gestureLockedPages[currentKey] == true
+    val currentImageUrl = sanitizedUrls[pagerState.currentPage.coerceIn(0, sanitizedUrls.lastIndex)]
+    val dragFraction = (drag.y / viewerHeight.coerceAtLeast(1f)).coerceIn(0f, 1f)
+    val dragScale = 1f - dragFraction * 0.45f
+    val backdrop = progress.value * (1f - (dragFraction * 2).coerceIn(0f, 1f))
 
+    fun close() {
+        if (closing) return
+        near = ViewerThumbnails.bounds(currentImageUrl, ownerWindow)
+        val shown = displayedRects[currentKey]
+        closingRect = shown?.let {
+            val center = Offset(viewport.width / 2f, viewport.height / 2f)
+            Rect(center + (it.topLeft - center) * dragScale + drag,
+                center + (it.bottomRight - center) * dragScale + drag)
+        }
+        closing = true
+        scope.launch {
+            progress.animateTo(0f, tween(200))
+            latestDismiss()
+        }
+    }
+    val canDrag by rememberUpdatedState(!closing && !returning && progress.value == 1f && !zoomed && !locked && !pagerState.isScrollInProgress)
+    val releaseDrag by rememberUpdatedState<(Boolean) -> Unit> { dismiss ->
+        dragging = false
+        if (dismiss) close() else {
+            returning = true
+            val from = drag
+            scope.launch {
+                try {
+                    animate(0f, 1f, animationSpec = tween(220)) { value, _ -> drag = from * (1f - value) }
+                } finally {
+                    drag = Offset.Zero
+                    returning = false
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(240)) }
+    LaunchedEffect(sanitizedUrls, openingIndex) {
+        if (pagerState.currentPage !in sanitizedUrls.indices) pagerState.scrollToPage(openingIndex)
+    }
+    val notifyPage by rememberUpdatedState(onPageSettled)
+    LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress, keys, closing) {
+        // Give the pager a layout pass to relocate its stable key after a prepend.
+        androidx.compose.runtime.withFrameNanos { }
+        if (!closing && !pagerState.isScrollInProgress) notifyPage?.invoke(pagerState.currentPage)
+    }
     Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
+        onDismissRequest = { close() },
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = !isCurrentPageZoomed && !isCurrentPageGestureLocked,
-                key = { page -> sanitizedUrls[page] }
-            ) { page ->
-                ZoomableImagePage(
-                    imageUrl = sanitizedUrls[page],
-                    reloadKey = refreshKeys[page] ?: 0,
-                    onToggleControls = { controlsVisible = !controlsVisible },
-                    onZoomStateChange = { isZoomed -> zoomedPages[page] = isZoomed },
-                    onGestureLockChange = { locked -> gestureLockedPages[page] = locked }
+        BackHandler { close() }
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(view) {
+            val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            window?.setDimAmount(0f)
+            window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            onDispose { }
+        }
+        Box(modifier.fillMaxSize().onSizeChanged { viewerHeight = it.height.toFloat(); viewport = Size(it.width.toFloat(), it.height.toFloat()) }) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = backdrop.coerceIn(0f, 1f))))
+            Box(
+                Modifier.fillMaxSize()
+                    .viewerDismissGesture(
+                        enabled = { canDrag },
+                        onDrag = { dragging = true; drag = it },
+                        onRelease = { releaseDrag(it) }
+                    )
+                    .graphicsLayer {
+                        alpha = if (near != null && progress.value < 1f && !isTgsUrl(currentImageUrl)) 0f else progress.value
+                        translationX = drag.x
+                        translationY = drag.y
+                        scaleX = (0.9f + 0.1f * progress.value) * dragScale
+                        scaleY = scaleX
+                    }
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    pageSpacing = 16.dp,
+                    userScrollEnabled = !zoomed && !locked && !dragging && !returning && !closing,
+                    key = { page -> keys[page] }
+                ) { page ->
+                    val pageKey = keys[page]
+                    ZoomableImagePage(
+                        imageUrl = sanitizedUrls[page],
+                        reloadKey = refreshKeys[pageKey] ?: 0,
+                        active = page == pagerState.currentPage,
+                        onToggleControls = { close() },
+                        onZoomStateChange = { zoomedPages[pageKey] = it },
+                        onDisplayedRect = { displayedRects[pageKey] = it },
+                        onGestureLockChange = { gestureLockedPages[pageKey] = it }
+                    )
+                }
+            }
+            // Fly the current picture between its on-screen thumbnail and fitted/zoomed bounds.
+            val source = near
+            if (source != null && progress.value < 1f && viewport.width > 0f && !isTgsUrl(currentImageUrl)) {
+                val destination = if (closing) closingRect else displayedRects[currentKey]
+                val far = destination ?: Rect(Offset.Zero, viewport)
+                val rect = androidx.compose.ui.geometry.lerp(source, far, progress.value)
+                val density = LocalDensity.current
+                AsyncImage(
+                    model = createViewerImageRequest(context, currentImageUrl, viewport.width.toInt().coerceAtLeast(1), viewport.height.toInt().coerceAtLeast(1)),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                        .requiredSize(with(density) { rect.width.coerceAtLeast(1f).toDp() }, with(density) { rect.height.coerceAtLeast(1f).toDp() })
+                        .clip(RoundedCornerShape((8f * (1f - progress.value)).dp))
                 )
             }
-
-            AnimatedVisibility(
-                visible = controlsVisible,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onDismiss,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "关闭"
-                        )
+            val showChrome = progress.value == 1f && !closing && !dragging && !returning && !zoomed
+            AnimatedVisibility(showChrome, enter = fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    ViewerAction(Icons.Default.Close, "关闭", onClick = { close() })
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.14f), contentColor = Color.White) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (isLoadingMore) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            Text("${pagerState.currentPage + 1} / ${sanitizedUrls.size}", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
-
-                    Text(
-                        text = "${pagerState.currentPage + 1} / ${sanitizedUrls.size}",
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(
-                            onClick = {
-                                val page = pagerState.currentPage
-                                refreshKeys[page] = (refreshKeys[page] ?: 0) + 1
-                            },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "刷新"
-                            )
+                }
+            }
+            if (loadMoreError != null && showChrome) {
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 88.dp),
+                    shape = RoundedCornerShape(16.dp), color = Color(0xFF242424), contentColor = Color.White
+                ) {
+                    Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(loadMoreError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        androidx.compose.material3.TextButton(onClick = { onRetryLoadMore?.invoke() }, enabled = !isLoadingMore) {
+                            Text("重试", color = Color.White)
                         }
-                        IconButton(
-                            onClick = { downloadImageToGallery(context, currentImageUrl) },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "保存"
-                            )
+                    }
+                }
+            }
+            AnimatedVisibility(showChrome, enter = fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 20.dp)) {
+                Surface(shape = CircleShape, color = Color(0xFF242424).copy(alpha = 0.92f), contentColor = Color.White) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ViewerAction(Icons.Default.Refresh, "重载") {
+                            val pageKey = currentKey
+                            refreshKeys[pageKey] = (refreshKeys[pageKey] ?: 0) + 1
                         }
-                        IconButton(
-                            onClick = { shareImage(context, currentImageUrl) },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "分享"
-                            )
+                        ViewerAction(Icons.Default.Download, "保存") { downloadImageToGallery(context, currentImageUrl) }
+                        ViewerAction(Icons.Default.Share, "分享") { shareImage(context, currentImageUrl) }
+                        ViewerAction(Icons.Default.ContentCopy, "复制链接") {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("图片链接", currentImageUrl))
+                            Toast.makeText(context, "已复制图片链接", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -244,6 +328,13 @@ fun ImageViewer(
     }
 }
 
+@Composable
+private fun ViewerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, colors = IconButtonDefaults.iconButtonColors(
+        containerColor = Color.White.copy(alpha = 0.12f), contentColor = Color.White)) {
+        Icon(icon, label)
+    }
+}
 @Composable
 fun SimpleImageViewer(
     imageUrl: String,
@@ -275,9 +366,11 @@ fun AdvancedImageViewer(
 private fun ZoomableImagePage(
     imageUrl: String,
     reloadKey: Int = 0,
+    active: Boolean = true,
     onToggleControls: () -> Unit,
     onZoomStateChange: (Boolean) -> Unit,
-    onGestureLockChange: (Boolean) -> Unit
+    onGestureLockChange: (Boolean) -> Unit,
+    onDisplayedRect: (Rect) -> Unit
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -294,7 +387,12 @@ private fun ZoomableImagePage(
             imageUrl = imageUrl,
             width = requestWidth,
             height = requestHeight
-        )
+        ).newBuilder().apply {
+            if (reloadKey > 0) {
+                memoryCachePolicy(coil.request.CachePolicy.DISABLED)
+                diskCachePolicy(coil.request.CachePolicy.DISABLED)
+            }
+        }.build()
     }
     val painter = rememberAsyncImagePainter(
         model = imageRequest
@@ -323,7 +421,50 @@ private fun ZoomableImagePage(
         with(density) { containerSize.width.toDp() } to with(density) { containerSize.height.toDp() }
     }
 
-    val transformableState = rememberTransformableState { _, zoomChange, panChange, _ ->
+    val fittedSize = with(density) { Size(fittedWidthDp.toPx(), fittedHeightDp.toPx()) }
+    LaunchedEffect(fittedSize, containerSize, scale, offsetX, offsetY) {
+        if (fittedSize.width > 0f && fittedSize.height > 0f) {
+            val width = fittedSize.width * scale
+            val height = fittedSize.height * scale
+            val left = (containerSize.width - width) / 2f + offsetX
+            val top = (containerSize.height - height) / 2f + offsetY
+            onDisplayedRect(Rect(left, top, left + width, top + height))
+        }
+    }
+    DisposableEffect(imageUrl) {
+        onDispose { onZoomStateChange(false); onGestureLockChange(false) }
+    }
+    var zoomAnimation by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    LaunchedEffect(active, reloadKey) {
+        zoomAnimation?.cancel()
+        scale = 1f; offsetX = 0f; offsetY = 0f
+        isLivePhotoPlaying = false
+        onGestureLockChange(false)
+    }
+    val pageScope = rememberCoroutineScope()
+    fun toggleZoom(tap: Offset) {
+        zoomAnimation?.cancel()
+        val targetScale = if (scale > 1.02f) 1f else 2.5f
+        val centered = tap - Offset(containerSize.width / 2f, containerSize.height / 2f)
+        val targetOffset = if (targetScale == 1f) Offset.Zero else boundImageOffset(
+            containerSize, targetScale, fittedSize, centered * (1f - targetScale)
+        )
+        val fromScale = scale
+        val fromOffset = Offset(offsetX, offsetY)
+        onGestureLockChange(true)
+        zoomAnimation = pageScope.launch {
+            try {
+                animate(0f, 1f, animationSpec = tween(220)) { fraction, _ ->
+                    scale = fromScale + (targetScale - fromScale) * fraction
+                    val offset = fromOffset + (targetOffset - fromOffset) * fraction
+                    offsetX = offset.x
+                    offsetY = offset.y
+                }
+            } finally { onGestureLockChange(false) }
+        }
+    }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        zoomAnimation?.cancel()
         val previousScale = scale
         val newScale = (scale * zoomChange).coerceIn(1f, 5f)
         if (newScale <= 1f) {
@@ -335,6 +476,7 @@ private fun ZoomableImagePage(
 
         val boundedOffset = boundImageOffset(
             containerSize = containerSize,
+            contentSize = fittedSize,
             scale = newScale,
             desiredOffset = Offset(
                 x = offsetX + panChange.x,
@@ -357,7 +499,7 @@ private fun ZoomableImagePage(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
         if (isTgsUrl(imageUrl)) {
@@ -403,8 +545,8 @@ private fun ZoomableImagePage(
                     contentAlignment = Alignment.Center
                 ) {
                     // 底层静止原图
-                    AsyncImage(
-                        model = imageRequest,
+                    androidx.compose.foundation.Image(
+                        painter = painter,
                         contentDescription = "预览图片",
                         modifier = Modifier
                             .fillMaxSize()
@@ -419,7 +561,7 @@ private fun ZoomableImagePage(
                     )
 
                     // 实况图片播放层：精确自适应原图 Fit 显示分辨率、尺寸、缩放与位移
-                    if (isLivePhotoPlaying && liveVideoFile != null) {
+                    if (active && isLivePhotoPlaying && liveVideoFile != null) {
                         LivePhotoVideoPlayer(
                             videoFile = liveVideoFile,
                             isPlaying = true,
@@ -466,79 +608,17 @@ private fun ZoomableImagePage(
                                 if (liveVideoFile != null) {
                                     detectTapGestures(
                                         onPress = {
-                                            var isLongPress = false
-                                            val job = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
-                                                delay(260)
-                                                isLongPress = true
-                                                isLivePhotoPlaying = true
-                                            }
-                                            try {
-                                                tryAwaitRelease()
-                                            } finally {
-                                                job.cancel()
-                                                if (isLongPress) {
-                                                    isLivePhotoPlaying = false
-                                                }
-                                            }
+                                            try { tryAwaitRelease() } finally { isLivePhotoPlaying = false }
                                         },
-                                        onDoubleTap = { tapOffset ->
-                                            if (scale > 1f) {
-                                                scale = 1f
-                                                offsetX = 0f
-                                                offsetY = 0f
-                                                onGestureLockChange(false)
-                                            } else {
-                                                val targetScale = 2.5f
-                                                val centeredTap = Offset(
-                                                    x = tapOffset.x - containerSize.width / 2f,
-                                                    y = tapOffset.y - containerSize.height / 2f
-                                                )
-                                                val targetOffset = boundImageOffset(
-                                                    containerSize = containerSize,
-                                                    scale = targetScale,
-                                                    desiredOffset = Offset(
-                                                        x = -centeredTap.x * (targetScale - 1f),
-                                                        y = -centeredTap.y * (targetScale - 1f)
-                                                    )
-                                                )
-                                                scale = targetScale
-                                                offsetX = targetOffset.x
-                                                offsetY = targetOffset.y
-                                                onGestureLockChange(true)
-                                            }
-                                        },
+                                        onLongPress = { isLivePhotoPlaying = true },
+                                        onDoubleTap = { toggleZoom(it) },
                                         onTap = {
                                             onToggleControls()
                                         }
                                     )
                                 } else {
                                     detectTapGestures(
-                                        onDoubleTap = { tapOffset ->
-                                            if (scale > 1f) {
-                                                scale = 1f
-                                                offsetX = 0f
-                                                offsetY = 0f
-                                                onGestureLockChange(false)
-                                            } else {
-                                                val targetScale = 2.5f
-                                                val centeredTap = Offset(
-                                                    x = tapOffset.x - containerSize.width / 2f,
-                                                    y = tapOffset.y - containerSize.height / 2f
-                                                )
-                                                val targetOffset = boundImageOffset(
-                                                    containerSize = containerSize,
-                                                    scale = targetScale,
-                                                    desiredOffset = Offset(
-                                                        x = -centeredTap.x * (targetScale - 1f),
-                                                        y = -centeredTap.y * (targetScale - 1f)
-                                                    )
-                                                )
-                                                scale = targetScale
-                                                offsetX = targetOffset.x
-                                                offsetY = targetOffset.y
-                                                onGestureLockChange(true)
-                                            }
-                                        },
+                                        onDoubleTap = { toggleZoom(it) },
                                         onTap = {
                                             onToggleControls()
                                         },
@@ -727,10 +807,11 @@ private fun TgsImagePage(
 private fun boundImageOffset(
     containerSize: Size,
     scale: Float,
+    contentSize: Size = containerSize,
     desiredOffset: Offset
 ): Offset {
-    val maxX = ((containerSize.width * scale) - containerSize.width) / 2f
-    val maxY = ((containerSize.height * scale) - containerSize.height) / 2f
+    val maxX = (((contentSize.width * scale) - containerSize.width) / 2f).coerceAtLeast(0f)
+    val maxY = (((contentSize.height * scale) - containerSize.height) / 2f).coerceAtLeast(0f)
     return Offset(
         x = desiredOffset.x.coerceIn(-maxX, maxX),
         y = desiredOffset.y.coerceIn(-maxY, maxY)
@@ -753,7 +834,7 @@ private fun createViewerImageRequest(
         }
         .size(width, height)
         .precision(Precision.INEXACT)
-        .crossfade(true)
+        .crossfade(false)
         .build()
 }
 

@@ -894,6 +894,43 @@ class MessageRepository @Inject constructor(
         }
     }
     
+    suspend fun getPictureMessages(
+        chatId: String,
+        chatType: Int,
+        referenceSeq: Long,
+        older: Boolean
+    ): Result<List<ChatMessage>> {
+        return try {
+            require(referenceSeq > 0) { "图片消息缺少有效序号" }
+            val token = tokenRepository.getToken().first()?.token
+            check(!token.isNullOrBlank()) { "用户未登录" }
+            val request = list_message_by_mid_seq_send.newBuilder()
+                .setChatId(chatId)
+                .setChatType(chatType.toLong())
+                .setMsgSeq(referenceSeq)
+                .setMsgId("")
+                .setUnknown(if (older) 10L else 0L)
+                .setMsgCount(if (older) 0L else 10L)
+                .build()
+            val response = apiService.listPictureMessageByMidSeq(
+                token, request.toByteArray().toRequestBody("application/x-protobuf".toMediaType())
+            )
+            if (!response.isSuccessful) {
+                response.errorBody()?.close()
+                error("加载图片失败：HTTP ${response.code()}")
+            }
+            val bytes = response.body()?.use { it.bytes() }
+            check(bytes != null && bytes.isNotEmpty()) { "图片列表响应为空" }
+            val result = list_message_by_mid_seq.parseFrom(bytes)
+            check(result.status.code == 1) { result.status.msg.ifBlank { "加载图片失败（${result.status.code}）" } }
+            Result.success(result.msgList.map { convertProtoToMessage(it, chatId, chatType) })
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     /**
      * 插入新消息到本地缓存
      */

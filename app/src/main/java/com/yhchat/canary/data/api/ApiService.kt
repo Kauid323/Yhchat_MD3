@@ -207,6 +207,13 @@ interface ApiService {
         @Body request: okhttp3.RequestBody
     ): Response<okhttp3.ResponseBody>
     
+    /** 图片消息双向分页，使用与 list-message-by-mid-seq 相同的 protobuf。 */
+    @POST("v1/msg/pic-list-message-by-mid-seq")
+    suspend fun listPictureMessageByMidSeq(
+        @Header("token") token: String,
+        @Body request: okhttp3.RequestBody
+    ): Response<okhttp3.ResponseBody>
+
     /**
      * 发送消息 - 使用protobuf
      */

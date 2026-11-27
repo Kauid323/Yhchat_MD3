@@ -51,6 +51,7 @@ import com.yhchat.canary.ui.bot.BotDetailActivity
 import com.yhchat.canary.ui.chat.ChatComponents.*
 import com.yhchat.canary.ui.share.SendToChatActivity
 import com.yhchat.canary.ui.share.SendToChatContent
+import com.yhchat.canary.ui.components.galleryPicture
 import com.yhchat.canary.ui.components.ChatInputBar
 import com.yhchat.canary.ui.components.ImageViewer
 import com.yhchat.canary.ui.components.MultiSelectBottomBar
@@ -169,6 +170,7 @@ fun ChatScreen(
     }
     var currentImageGallery by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var currentImageIndex by rememberSaveable { mutableStateOf(0) }
+    var galleryMessageId by rememberSaveable(chatId, chatType) { mutableStateOf<String?>(null) }
     val chatImageGallery by remember(messages) {
         derivedStateOf { buildChatImageGallery(messages) }
     }
@@ -609,6 +611,7 @@ fun ChatScreen(
             modifier = Modifier.zIndex(2f),
             onImageClick = { url ->
                 currentImageUrl = url
+                galleryMessageId = null
                 currentImageGallery = listOf(url)
                 currentImageIndex = 0
                 showImageViewer = true
@@ -626,6 +629,7 @@ fun ChatScreen(
             modifier = Modifier.zIndex(2f),
             onImageClick = { url ->
                 currentImageUrl = url
+                galleryMessageId = null
                 currentImageGallery = listOf(url)
                 currentImageIndex = 0
                 showImageViewer = true
@@ -763,6 +767,8 @@ fun ChatScreen(
                                 )
                             },
                             onImageClick = { imageUrl ->
+                                val picture = message.galleryPicture()
+                                galleryMessageId = message.msgId.takeIf { picture?.url == imageUrl }
                                 val gallery = if (chatImageGallery.isNotEmpty() && chatImageGallery.contains(imageUrl)) {
                                     chatImageGallery
                                 } else {
@@ -1561,16 +1567,29 @@ fun ChatScreen(
     
     // 图片预览器
     if (showImageViewer && !currentImageUrl.isNullOrEmpty()) {
-        ImageViewer(
-            imageUrls = currentImageGallery.ifEmpty { listOf(currentImageUrl!!) },
-            initialIndex = currentImageIndex,
-            onDismiss = {
-                showImageViewer = false
-                currentImageUrl = null
-                currentImageGallery = emptyList()
-                currentImageIndex = 0
-            }
-        )
+        val dismissViewer = {
+            showImageViewer = false
+            currentImageUrl = null
+            currentImageGallery = emptyList()
+            currentImageIndex = 0
+            galleryMessageId = null
+        }
+        if (galleryMessageId != null) {
+            com.yhchat.canary.ui.components.ChatImageViewer(
+                chatId = chatId,
+                chatType = chatType,
+                initialMessages = messages,
+                initialMessageId = galleryMessageId!!,
+                fallbackUrl = currentImageUrl!!,
+                onDismiss = dismissViewer
+            )
+        } else {
+            ImageViewer(
+                imageUrls = currentImageGallery.ifEmpty { listOf(currentImageUrl!!) },
+                initialIndex = currentImageIndex,
+                onDismiss = dismissViewer
+            )
+        }
     }
     
     // .splitfiles 清单的下载还原弹窗
