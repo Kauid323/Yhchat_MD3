@@ -24,7 +24,7 @@ zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
 calvinReorderable = "3.1.0"
 ksoupHtml = "0.6.0"
-mikepenzMarkdown = "0.41.0"
+mikepenzMarkdown = "0.46.0"
 latex = "1.4.5-kt2.1.0"
 desugarJdkLibs = "2.1.5"
 

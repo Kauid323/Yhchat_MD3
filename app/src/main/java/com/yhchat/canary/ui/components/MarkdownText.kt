@@ -1123,71 +1123,6 @@ private fun parseMarkdownSegments(markdown: String): List<MarkdownSegment> {
     return segments
 }
 
-private data class MarkdownDetailsBlock(
-    val summary: String,
-    val content: String,
-    val prefix: String?,
-    val suffix: String?,
-    val nextIndex: Int
-)
-
-private fun extractDetailsBlock(lines: List<String>, startIndex: Int): MarkdownDetailsBlock? {
-    val trimmed = lines.getOrNull(startIndex)?.trim() ?: return null
-    if (!trimmed.startsWith("<details")) return null
-
-    val prefix = lines[startIndex].substringBefore("<details", missingDelimiterValue = lines[startIndex])
-        .takeIf { it.isNotBlank() }
-
-    var i = startIndex + 1
-    val contentLines = mutableListOf<String>()
-    var summary: String? = null
-
-    while (i < lines.size) {
-        val line = lines[i]
-        val t = line.trim()
-
-        if (t.startsWith("<summary")) {
-            val afterTag = line.substringAfter(">", missingDelimiterValue = "")
-            val sameLine = afterTag.substringBefore("</summary>", missingDelimiterValue = afterTag)
-            if (line.contains("</summary>")) {
-                summary = sameLine.trim()
-            } else {
-                val summaryLines = mutableListOf<String>()
-                if (sameLine.isNotBlank()) summaryLines += sameLine
-                i++
-                while (i < lines.size && !lines[i].contains("</summary>")) {
-                    summaryLines += lines[i]
-                    i++
-                }
-                if (i < lines.size) {
-                    val beforeClose = lines[i].substringBefore("</summary>")
-                    if (beforeClose.isNotBlank()) summaryLines += beforeClose
-                }
-                summary = summaryLines.joinToString("\n").trim()
-            }
-        } else if (t.startsWith("</details")) {
-            break
-        } else {
-            contentLines += line
-        }
-        i++
-    }
-
-    if (i >= lines.size) return null
-
-    val content = contentLines.joinToString("\n").trim('\n', ' ')
-    val suffixRemainder = lines[i].substringAfter("</details>", missingDelimiterValue = "")
-        .takeIf { it.isNotBlank() }
-
-    return MarkdownDetailsBlock(
-        summary = summary?.takeIf { it.isNotBlank() } ?: "详情",
-        content = content,
-        prefix = prefix,
-        suffix = suffixRemainder,
-        nextIndex = i + 1
-    )
-}
-
 @Composable
 private fun MarkdownDetailsBlock(
     summary: String,
@@ -1211,14 +1146,13 @@ private fun MarkdownDetailsBlock(
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-            .clickable {
-                expanded = !expanded
-                MarkdownRendererCache.setDetailsExpanded(detailsCacheKey, expanded)
-            }
             .padding(12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clickable {
+                expanded = !expanded
+                MarkdownRendererCache.setDetailsExpanded(detailsCacheKey, expanded)
+            },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

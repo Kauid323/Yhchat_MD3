@@ -64,7 +64,7 @@
 
 > 最新构建请看[Actions](https://github.com/Kauid323/Yhchat_MD3/actions)，正式版下载请点击[Release](https://github.com/Kauid323/Yhchat_MD3/releases)下载，或[加入云湖群聊](https://yhfx.jwznb.com/share?key=csahOdGjPUYX&ts=1778391867)，使用高速下载通道
 
-# 特别感谢
+# 特别感谢 / Credits
 ### [yhchatAPI](https://github.com/yh-Tpdev/yhchatAPI)
 ### [FlymeLive](https://github.com/wsu2059q/FlymeLive)
 ### [图标@星河间](https://github.com/Kauid323/Yhchat_MD3/issues/12)
@@ -73,6 +73,11 @@
 ### [KsoupHtml](https://github.com/MohamedRejeb/Ksoup)
 ### [轻昼](http://github.com/shijuhao/QingZhouCE)
 ### [Oolong](https://github.com/HuanCheng65/Oolong)
+### [markdown_widget](https://github.com/asjqkkkk/markdown_widget)
+### [A2UI-Andorid](https://github.com/lmee/A2UI-Android)
+### [flutter_widget_from_html](https://github.com/daohoangson/flutter_widget_from_html)
+### [Chromium Blink](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/)
+### [multiplatform-markdown-renderer](https://github.com/mikepenz/multiplatform-markdown-renderer)
 
 以及项目里用到的所有库
 
