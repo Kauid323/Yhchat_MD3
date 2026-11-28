@@ -41,6 +41,19 @@ class PostDetailViewModel @Inject constructor(
     private val _commentListState = MutableStateFlow(CommentListState())
     val commentListState: StateFlow<CommentListState> = _commentListState.asStateFlow()
 
+    private val _commentReplyStates = MutableStateFlow<Map<Int, CommentReplyListState>>(emptyMap())
+    val commentReplyStates: StateFlow<Map<Int, CommentReplyListState>> = _commentReplyStates.asStateFlow()
+    private var replyStatePostId: Int? = null
+    private var replyRequestVersion: Long = 0L
+    private val pendingReplyRefreshes = mutableSetOf<Int>()
+
+    /** 同一条评论的切换请求尚未完成时禁止重复发送。 */
+    private val pendingCommentLikes = mutableSetOf<Int>()
+    private var commentLikeVersion: Long = 0L
+    private val commentLikeUpdates = mutableMapOf<Int, CommentLikeUpdate>()
+
+    private data class CommentLikeUpdate(val version: Long, val liked: String, val count: Int)
+
     private val _followingBoardListState = MutableStateFlow(BoardListState())
     val followingBoardListState: StateFlow<BoardListState> = _followingBoardListState.asStateFlow()
 
@@ -176,6 +189,12 @@ class PostDetailViewModel @Inject constructor(
      * 使用TokenRepository加载评论列表
      */
     fun loadCommentListWithToken(postId: Int, page: Int = 1) {
+        if (page == 1 && replyStatePostId != postId) {
+            replyStatePostId = postId
+            replyRequestVersion += 1
+            pendingReplyRefreshes.clear()
+            _commentReplyStates.value = emptyMap()
+        }
         viewModelScope.launch {
             try {
                 val token = tokenRepository.getTokenSync()
@@ -199,10 +218,14 @@ class PostDetailViewModel @Inject constructor(
                 _commentListState.value = _commentListState.value.copy(isLoading = true, error = null)
             }
             
+            val likeVersion = commentLikeVersion
+            val pendingLikes = pendingCommentLikes.toSet()
             communityRepository.getCommentList(token, postId, page = page)
                 .onSuccess { response ->
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    val incoming = reconcileCommentLikes(response.data.comments, likeVersion, pendingLikes)
                     val merged = if (page == 1) {
-                        response.data.comments
+                        incoming
                     } else {
                         // 按 id 去重后再拼。
                         //
@@ -215,7 +238,7 @@ class PostDetailViewModel @Inject constructor(
                         // 换成新的那份会让对应的 item 重建、位置闪一下。
                         val knownIds = _commentListState.value.comments.mapTo(HashSet()) { it.id }
                         _commentListState.value.comments +
-                            response.data.comments.filter { it.id !in knownIds }
+                            incoming.filter { it.id !in knownIds }
                     }
 
                     // 保留接口的最新在前顺序；后续页直接追加更早评论，按 id 去重。
@@ -240,6 +263,97 @@ class PostDetailViewModel @Inject constructor(
         }
     }
     
+    /**
+     * 按父楼层加载楼中楼回复。各楼层独立分页，loading 在启动协程前同步置位，避免快速点击重复请求。
+     */
+    fun loadCommentRepliesWithToken(
+        postId: Int,
+        parentCommentId: Int,
+        refresh: Boolean = false,
+        loadMore: Boolean = false
+    ) {
+        if (replyStatePostId != postId) {
+            replyStatePostId = postId
+            replyRequestVersion += 1
+            pendingReplyRefreshes.clear()
+            _commentReplyStates.value = emptyMap()
+        }
+        val requestVersion = replyRequestVersion
+        val current = _commentReplyStates.value[parentCommentId] ?: CommentReplyListState()
+        if (current.isLoading) {
+            if (refresh) pendingReplyRefreshes.add(parentCommentId)
+            return
+        }
+        val page = when {
+            refresh -> 1
+            current.retryPage != null -> current.retryPage
+            current.currentPage == 0 -> 1
+            loadMore && current.hasMore -> current.currentPage + 1
+            else -> return
+        }
+        _commentReplyStates.update { states ->
+            states + (parentCommentId to current.copy(isLoading = true, error = null, retryPage = null))
+        }
+
+        viewModelScope.launch {
+            try {
+                val token = tokenRepository.getTokenSync()
+                check(!token.isNullOrBlank()) { "未登录" }
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (requestVersion != replyRequestVersion || replyStatePostId != postId) return@launch
+
+                val likeVersion = commentLikeVersion
+                val pendingLikes = pendingCommentLikes.toSet()
+                val response = communityRepository.getCommentReplyList(token, parentCommentId, page = page)
+                    .getOrThrow()
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (requestVersion != replyRequestVersion || replyStatePostId != postId) return@launch
+
+                val latest = _commentReplyStates.value[parentCommentId] ?: current
+                val replies = reconcileCommentLikes(response.data.comments, likeVersion, pendingLikes)
+                val merged = if (page == 1) {
+                    replies.distinctBy { it.id }
+                } else {
+                    (latest.replies + replies).distinctBy { it.id }
+                }
+                val pageMadeProgress = merged.size > latest.replies.size || page == 1
+                _commentReplyStates.update { states ->
+                    states + (parentCommentId to latest.copy(
+                        replies = merged,
+                        total = response.data.total,
+                        currentPage = page,
+                        hasMore = pageMadeProgress && merged.size < response.data.total,
+                        isLoading = false,
+                        error = null,
+                        retryPage = null
+                    ))
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (requestVersion != replyRequestVersion || replyStatePostId != postId) return@launch
+                _commentReplyStates.update { states ->
+                    val latest = states[parentCommentId] ?: current
+                    states + (parentCommentId to latest.copy(
+                        isLoading = false,
+                        error = error.message ?: "加载回复失败",
+                        retryPage = page
+                    ))
+                }
+            } finally {
+                if (requestVersion == replyRequestVersion && replyStatePostId == postId) {
+                    _commentReplyStates.update { states ->
+                        val latest = states[parentCommentId] ?: current
+                        states + (parentCommentId to latest.copy(isLoading = false))
+                    }
+                    if (pendingReplyRefreshes.remove(parentCommentId)) {
+                        loadCommentRepliesWithToken(postId, parentCommentId, refresh = true)
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * 使用TokenRepository点赞文章
      */
@@ -315,9 +429,11 @@ class PostDetailViewModel @Inject constructor(
                 if (token != null) {
                     communityRepository.commentPost(token, postId, content, commentId)
                         .onSuccess {
-                            // 重新加载评论列表。这里直接等它跑完再收状态，
-                            // 免得面板刚关、列表还在转圈
+                            // 刷新顶层评论计数，并按所属楼层刷新回复列表。
                             loadCommentList(token, postId, 1)
+                            if (commentId > 0) {
+                                loadCommentRepliesWithToken(postId, commentId, refresh = true)
+                            }
                             onSuccess()
                         }
                         .onFailure { error ->
@@ -327,6 +443,8 @@ class PostDetailViewModel @Inject constructor(
                 } else {
                     _commentListState.value = _commentListState.value.copy(error = "未登录")
                 }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 _commentListState.value =
                     _commentListState.value.copy(error = "获取登录信息失败: ${e.message}")
@@ -351,19 +469,93 @@ class PostDetailViewModel @Inject constructor(
      * 使用TokenRepository点赞评论
      */
     fun likeCommentWithToken(postId: Int, commentId: Int) {
-        viewModelScope.launch {
-            try {
-                val token = tokenRepository.getTokenSync()
-                if (token != null) {
-                    likeComment(token, postId, commentId)
-                } else {
-                    _commentListState.value = _commentListState.value.copy(error = "未登录")
-                }
-            } catch (e: Exception) {
-                _commentListState.value = _commentListState.value.copy(error = "获取登录信息失败: ${e.message}")
+        toggleCommentLike(commentId) { tokenRepository.getTokenSync() }
+    }
+
+    private fun findComment(commentId: Int): CommunityComment? {
+        _commentListState.value.comments.firstOrNull { it.id == commentId }?.let { return it }
+        _commentReplyStates.value.values.firstNotNullOfOrNull { state ->
+            state.replies.firstOrNull { it.id == commentId }
+        }?.let { return it }
+        return _commentListState.value.comments.firstNotNullOfOrNull { root ->
+            root.replies.orEmpty().firstOrNull { it.id == commentId }
+        }
+    }
+
+    /** 列表请求开始后发生的点赞，以及当时尚未完成的点赞，以本地结果为准。 */
+    private fun reconcileCommentLikes(
+        comments: List<CommunityComment>,
+        requestVersion: Long,
+        pendingAtRequest: Set<Int>
+    ): List<CommunityComment> {
+        fun reconcile(comment: CommunityComment): CommunityComment {
+            val update = commentLikeUpdates[comment.id]?.takeIf {
+                it.version > requestVersion || comment.id in pendingAtRequest || comment.id in pendingCommentLikes
+            }
+            return comment.copy(
+                isLiked = update?.liked ?: comment.isLiked,
+                likeNum = update?.count ?: comment.likeNum,
+                replies = comment.replies?.map { reconcile(it) }
+            )
+        }
+        return comments.map { reconcile(it) }
+    }
+
+    private fun recordCommentLike(commentId: Int, liked: String, likeNum: Int) {
+        commentLikeVersion += 1
+        commentLikeUpdates[commentId] = CommentLikeUpdate(commentLikeVersion, liked, likeNum)
+        updateCommentLike(commentId, liked, likeNum)
+    }
+
+    private fun updateCommentLike(commentId: Int, liked: String, likeNum: Int) {
+        fun CommunityComment.withLikeState() =
+            if (id == commentId) copy(isLiked = liked, likeNum = likeNum)
+            else copy(replies = replies?.map { reply ->
+                if (reply.id == commentId) reply.copy(isLiked = liked, likeNum = likeNum) else reply
+            })
+
+        _commentListState.update { state ->
+            state.copy(comments = state.comments.map { it.withLikeState() })
+        }
+        _commentReplyStates.update { states ->
+            states.mapValues { (_, replyState) ->
+                replyState.copy(replies = replyState.replies.map { it.withLikeState() })
             }
         }
     }
+
+    private fun toggleCommentLike(commentId: Int, tokenProvider: suspend () -> String?) {
+        if (!pendingCommentLikes.add(commentId)) return
+        val previous = findComment(commentId)
+        if (previous == null) {
+            pendingCommentLikes.remove(commentId)
+            return
+        }
+
+        val wasLiked = previous.isLiked == "1"
+        val optimisticLiked = if (wasLiked) "0" else "1"
+        val optimisticCount = (previous.likeNum + if (wasLiked) -1 else 1).coerceAtLeast(0)
+        recordCommentLike(commentId, optimisticLiked, optimisticCount)
+
+        viewModelScope.launch {
+            try {
+                val token = tokenProvider()
+                check(!token.isNullOrBlank()) { "未登录" }
+                communityRepository.likeComment(token, commentId).getOrThrow()
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                recordCommentLike(commentId, optimisticLiked, optimisticCount)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                recordCommentLike(commentId, previous.isLiked, previous.likeNum)
+                throw cancelled
+            } catch (error: Exception) {
+                recordCommentLike(commentId, previous.isLiked, previous.likeNum)
+                _commentListState.update { it.copy(error = error.message ?: "点赞失败") }
+            } finally {
+                pendingCommentLikes.remove(commentId)
+            }
+        }
+    }
+
 
     /**
      * 使用TokenRepository删除评论
@@ -467,16 +659,7 @@ class PostDetailViewModel @Inject constructor(
      * 点赞评论
      */
     fun likeComment(token: String, postId: Int, commentId: Int) {
-        viewModelScope.launch {
-            communityRepository.likeComment(token, commentId)
-                .onSuccess {
-                    // 重新加载评论列表以获取最新状态
-                    loadCommentList(token, postId, 1)
-                }
-                .onFailure { error ->
-                    _commentListState.value = _commentListState.value.copy(error = error.message)
-                }
-        }
+        toggleCommentLike(commentId) { token }
     }
 
     /**
@@ -742,6 +925,17 @@ data class CommentListState(
     val hasMore: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null
+)
+
+data class CommentReplyListState(
+    val replies: List<CommunityComment> = emptyList(),
+    val total: Int = 0,
+    /** 0表示尚未从回复列表接口成功加载。 */
+    val currentPage: Int = 0,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val retryPage: Int? = null
 )
 
 data class CommunityReportState(

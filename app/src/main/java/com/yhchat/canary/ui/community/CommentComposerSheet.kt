@@ -62,17 +62,19 @@ import androidx.compose.ui.unit.dp
 internal fun CommentComposerSheet(
     replyTo: ReplyTarget?,
     sending: Boolean,
+    error: String? = null,
     onDismiss: () -> Unit,
     onSend: (String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var text by remember { mutableStateOf("") }
+    LaunchedEffect(replyTo) { text = "" }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
     ModalBottomSheet(
         // 发送期间不响应关闭：请求已经出去了，这时收面板会让人不知道到底发没发出去。
-        // 等 commentSending 回落，由调用方的 LaunchedEffect 收起。
+        // 调用方仅在发送成功后收起面板，失败时保留草稿。
         onDismissRequest = { if (!sending) onDismiss() },
         sheetState = sheetState,
         // 面板要装键盘和输入区，不要圆角那种小卡片观感
@@ -91,6 +93,14 @@ internal fun CommentComposerSheet(
             replyTo?.let { target ->
                 ReplyTargetChip(target = target, onClear = null)
                 Spacer(modifier = Modifier.height(10.dp))
+            }
+            error?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
             }
 
             // 输入区。给一个足够大的高度，长评论能一眼看到好几行
@@ -236,6 +246,10 @@ private fun ReplyTargetChip(
  * 持有对象会让面板里显示的内容跟列表脱节。
  */
 internal data class ReplyTarget(
-    val commentId: Int,
-    val name: String
+    /** 回复要挂载的顶层评论ID，根评论回复时即为该评论自身ID。 */
+    val rootCommentId: Int,
+    val name: String,
+    /** 仅回复楼中楼用户时填写，用于正文前缀。 */
+    val mentionUserId: String? = null,
+    val mentionNickname: String? = null
 )

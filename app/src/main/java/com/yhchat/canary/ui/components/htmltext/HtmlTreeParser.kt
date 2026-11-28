@@ -1,11 +1,13 @@
 package com.yhchat.canary.ui.components.htmltext
 
-import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlHandler
-import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlParser
-
-private val HTML_VOID_TAGS = setOf("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr")
+import org.jsoup.nodes.DataNode
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
+import org.jsoup.parser.Parser
 
 internal const val DETAILS_OPEN_STYLE_ATTR = "__details_open_style__"
+internal const val SVG_STYLES_ATTR = "__svg_styles__"
 
 private data class SelectorPart(
     val tag: String?,
@@ -13,7 +15,8 @@ private data class SelectorPart(
     val directParent: Boolean = false,
     val classes: Set<String>,
     val attrPresence: Set<String>,
-    val attrEquals: Map<String, String>
+    val attrEquals: Map<String, String>,
+    val pseudoClasses: List<String>
 )
 
 private data class CssRule(
@@ -24,87 +27,107 @@ private data class CssRule(
 
 private data class NodeContext(
     val tag: String,
-    val attrs: Map<String, String>
+    val attrs: Map<String, String>,
+    val isRoot: Boolean,
+    val elementIndex: Int,
+    val siblingCount: Int,
+    val isEmpty: Boolean
 )
 
-private val styleBlockRegex = Regex("(?is)<style\\b[^>]*>(.*?)</style\\s*>")
+private fun Element.selectorContext(attrs: Map<String, String>): NodeContext = NodeContext(
+    tag = normalName(),
+    attrs = attrs,
+    isRoot = parent() is org.jsoup.nodes.Document,
+    elementIndex = elementSiblingIndex(),
+    siblingCount = parent()?.childrenSize() ?: 1,
+    // CSS :empty ignores comments, but even whitespace text prevents a match.
+    isEmpty = childNodes().none { child ->
+        child is Element || (child is TextNode && child.wholeText.isNotEmpty()) ||
+            (child is DataNode && child.wholeData.isNotEmpty())
+    }
+)
+
+private val supportedStructuralPseudos = setOf("root", "first-child", "last-child", "only-child", "empty")
+private val cssPseudoRegex = Regex(":([\\w-]+)")
+
 private val cssAttrRegex = Regex("""\[\s*([\w-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))\s*)?\]""")
-internal fun parseHtmlTree(html: String): HtmlNode.Element {
-    val (htmlWithoutStyles, styleBlocks) = extractStyleBlocks(html)
-    val cssRules = parseCssRules(styleBlocks)
+
+internal fun parseHtmlTree(
+    html: String,
+    externalStylesheets: Map<String, String> = emptyMap()
+): HtmlNode.Element {
+    val source = parseNativeHtmlDocument(html)
+    val cssRules = parseCssRules(extractStyleBlocks(source, externalStylesheets))
+
+    fun convert(node: Node, ancestors: List<NodeContext>): HtmlNode? = when (node) {
+        is TextNode -> HtmlNode.Text(node.wholeText)
+        is DataNode -> HtmlNode.Text(node.wholeData)
+        is Element -> {
+            val tag = node.normalName()
+            val attrs = node.htmlAttributes().toMutableMap()
+            val context = node.selectorContext(attrs.toMap())
+            val declarations = resolveMatchedDeclarations(context, ancestors, cssRules)
+            val inlineStyle = attrs["style"].orEmpty()
+            if (node.tag().namespace() == Parser.NamespaceSvg) {
+                attrs[SVG_STYLES_ATTR] = buildRawStyle(declarations, inlineStyle)
+            }
+            resolveDetailsOpenDeclaration(tag, cssRules).takeIf { it.isNotBlank() }?.let {
+                attrs[DETAILS_OPEN_STYLE_ATTR] = it
+            }
+            val result = HtmlNode.Element(
+                tag = tag,
+                style = buildCssStyle(declarations, inlineStyle),
+                attrs = attrs.toMap()
+            )
+            // Keep metadata elements for selector ancestry, but never expose their source as text.
+            val inert = tag == "script" || tag == "style" ||
+                (tag == "template" && node.tag().namespace() == Parser.NamespaceHtml)
+            if (!inert) {
+                val childAncestors = ancestors + context
+                node.childNodes().forEach { child ->
+                    convert(child, childAncestors)?.let(result.children::add)
+                }
+            }
+            result
+        }
+        else -> null // Comments, doctypes and processing instructions are not rendered.
+    }
 
     val root = HtmlNode.Element(tag = "#root")
-    val stack = ArrayDeque<HtmlNode.Element>()
-    stack.addLast(root)
-
-    val parser = KsoupHtmlParser(
-        handler = object : KsoupHtmlHandler {
-            override fun onOpenTag(name: String, attributes: Map<String, String>, isImplied: Boolean) {
-                val tag = name.lowercase()
-                val normalizedAttrs = attributes.mapKeys { it.key.lowercase() }.toMutableMap()
-                val matchedDeclarations = resolveMatchedDeclarations(
-                    tag = tag,
-                    attrs = normalizedAttrs,
-                    ancestors = stack.map { NodeContext(it.tag, it.attrs) },
-                    rules = cssRules
-                )
-                val openStateDeclaration = resolveDetailsOpenDeclaration(tag, cssRules)
-
-                if (openStateDeclaration.isNotBlank()) {
-                    normalizedAttrs[DETAILS_OPEN_STYLE_ATTR] = openStateDeclaration
-                }
-
-                val style = buildCssStyle(
-                    declarations = matchedDeclarations,
-                    inlineStyle = normalizedAttrs["style"].orEmpty()
-                )
-
-                when (tag) {
-                    "br" -> stack.last().children.add(HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap()))
-                    "img" -> stack.last().children.add(
-                        HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap())
-                    )
-                    else -> {
-                        val node = HtmlNode.Element(tag = tag, style = style, attrs = normalizedAttrs.toMap())
-                        stack.last().children.add(node)
-                        if (tag !in HTML_VOID_TAGS) stack.addLast(node)
-                    }
-                }
-            }
-
-            override fun onText(text: String) {
-                if (text.isEmpty()) return
-                stack.last().children.add(HtmlNode.Text(text))
-            }
-
-            override fun onCloseTag(name: String, isImplied: Boolean) {
-                val tag = name.lowercase()
-                if (tag in HTML_VOID_TAGS || stack.none { it.tag == tag }) return
-                while (stack.size > 1) {
-                    val last = stack.removeLast()
-                    if (last.tag == tag) {
-                        break
-                    }
-                }
-            }
-        }
-    )
-
-    parser.write(htmlWithoutStyles)
-    parser.end()
+    source.document.childNodes().forEach { node ->
+        convert(node, emptyList())?.let(root.children::add)
+    }
     return root
 }
 
-private fun extractStyleBlocks(html: String): Pair<String, List<String>> {
-    val blocks = mutableListOf<String>()
-    val stripped = styleBlockRegex.replace(html) { match ->
-        val content = match.groupValues.getOrNull(1).orEmpty()
-        if (content.isNotBlank()) {
-            blocks.add(content)
+/** Match styles only after HTML5 tree repair; template contents do not style the document. */
+private fun extractStyleBlocks(
+    source: ParsedHtmlDocument,
+    externalStylesheets: Map<String, String>
+): List<String> = buildList {
+    source.activeElements.forEach { element ->
+        when (element.normalName()) {
+            "style" -> {
+                val type = element.attr("type").trim()
+                if (type.isEmpty() || type.equals("text/css", ignoreCase = true)) {
+                    // Raw-text style contents are DataNodes; SVG style can contain TextNodes.
+                    val css = buildString {
+                        element.childNodes().forEach { child ->
+                            when (child) {
+                                is DataNode -> append(child.wholeData)
+                                is TextNode -> append(child.wholeText)
+                            }
+                        }
+                    }
+                    if (css.isNotBlank()) add(css)
+                }
+            }
+            "link" -> if (element.tag().namespace() == Parser.NamespaceHtml &&
+                isStylesheetLink(element.htmlAttributes())) {
+                externalStylesheets[element.attr("href")]?.takeIf { it.isNotBlank() }?.let(::add)
+            }
         }
-        ""
     }
-    return stripped to blocks
 }
 
 private fun parseCssRules(styleBlocks: List<String>): List<CssRule> {
@@ -158,27 +181,31 @@ private fun parseSelectorPart(rawPart: String): SelectorPart? {
             attrEquals[key] = match.groups[2]?.value ?: match.groups[3]?.value ?: match.groupValues[4]
         }
     }
-    val simple = rawPart.replace(cssAttrRegex, "")
-    // Unsupported pseudo-classes/combinators must not silently become unconditional selectors.
+    val withoutAttrs = rawPart.replace(cssAttrRegex, "")
+    val pseudos = cssPseudoRegex.findAll(withoutAttrs).map { it.groupValues[1].lowercase() }.toList()
+    if (pseudos.any { it !in supportedStructuralPseudos }) return null
+    val simple = withoutAttrs.replace(cssPseudoRegex, "")
+    // Reject unsupported functional pseudo-classes and combinators, rather than broadening a rule.
     if (!simple.matches(Regex("(?:[A-Za-z][\\w-]*|\\*)?(?:[.#][\\w-]+)*"))) return null
     val tag = Regex("^[A-Za-z][\\w-]*").find(simple)?.value?.lowercase()
     val classes = Regex("\\.([\\w-]+)").findAll(simple).map { it.groupValues[1] }.toSet()
     val ids = Regex("#([\\w-]+)").findAll(simple).map { it.groupValues[1] }.toSet()
-    if (simple.isEmpty() && attrPresence.isEmpty()) return null
-    return SelectorPart(tag = tag, ids = ids, classes = classes, attrPresence = attrPresence, attrEquals = attrEquals)
+    if (simple.isEmpty() && attrPresence.isEmpty() && pseudos.isEmpty()) return null
+    return SelectorPart(
+        tag = tag, ids = ids, classes = classes, attrPresence = attrPresence,
+        attrEquals = attrEquals, pseudoClasses = pseudos
+    )
 }
 private fun resolveMatchedDeclarations(
-    tag: String,
-    attrs: Map<String, String>,
+    current: NodeContext,
     ancestors: List<NodeContext>,
     rules: List<CssRule>
 ): List<String> {
-    val current = NodeContext(tag = tag, attrs = attrs)
     val ancestorChain = ancestors.filter { it.tag != "#root" }
     return rules
         .filter { it.matches(ancestorChain, current) }
         .sortedWith(compareBy<CssRule> { rule -> rule.parts.sumOf { it.ids.size } }
-            .thenBy { rule -> rule.parts.sumOf { it.classes.size + it.attrPresence.size } }
+            .thenBy { rule -> rule.parts.sumOf { it.classes.size + it.attrPresence.size + it.pseudoClasses.size } }
             .thenBy { rule -> rule.parts.count { it.tag != null } })
         .map { it.declaration }
 }
@@ -207,6 +234,16 @@ private fun CssRule.matches(ancestors: List<NodeContext>, current: NodeContext):
 private fun SelectorPart.matches(node: NodeContext): Boolean {
     if (tag != null && tag != node.tag.lowercase()) return false
     if (ids.any { it != node.attrs["id"] }) return false
+    if (!pseudoClasses.all { pseudo ->
+        when (pseudo) {
+            "root" -> node.isRoot
+            "first-child" -> node.elementIndex == 0
+            "last-child" -> node.elementIndex == node.siblingCount - 1
+            "only-child" -> node.siblingCount == 1
+            "empty" -> node.isEmpty
+            else -> false
+        }
+    }) return false
 
     val nodeAttrs = node.attrs.mapKeys { it.key.lowercase() }
     if (attrPresence.any { !nodeAttrs.containsKey(it) }) return false
@@ -223,21 +260,23 @@ private fun SelectorPart.matches(node: NodeContext): Boolean {
     return true
 }
 
-private fun buildCssStyle(declarations: List<String>, inlineStyle: String): CssStyle {
-    val stylePayload = buildString {
-        declarations.forEach { declaration ->
-            val normalized = declaration.trim().removeSuffix(";")
-            if (normalized.isNotBlank()) {
-                append(normalized)
-                append(';')
-            }
-        }
-        val normalizedInline = inlineStyle.trim().removeSuffix(";")
-        if (normalizedInline.isNotBlank()) {
-            append(normalizedInline)
+private fun buildRawStyle(declarations: List<String>, inlineStyle: String): String = buildString {
+    declarations.forEach { declaration ->
+        val normalized = declaration.trim().removeSuffix(";")
+        if (normalized.isNotBlank()) {
+            append(normalized)
             append(';')
         }
     }
+    val normalizedInline = inlineStyle.trim().removeSuffix(";")
+    if (normalizedInline.isNotBlank()) {
+        append(normalizedInline)
+        append(';')
+    }
+}
+
+private fun buildCssStyle(declarations: List<String>, inlineStyle: String): CssStyle {
+    val stylePayload = buildRawStyle(declarations, inlineStyle)
     return if (stylePayload.isBlank()) CssStyle() else CssParser.parseStyle(stylePayload)
 }
 
@@ -266,7 +305,6 @@ internal const val MAX_HTML_NESTING_DEPTH = 40
 /** 降级展示时最多保留的纯文本字符数。 */
 internal const val HTML_PLAIN_TEXT_LIMIT = 4_000
 
-private val htmlTagRegex = Regex("(?s)<[^>]*>")
 private val htmlHorizontalSpaceRegex = Regex("[\\t\\u000B\\f\\r ]+")
 private val htmlBlankLineRegex = Regex("\\n{2,}")
 
@@ -281,15 +319,43 @@ internal fun truncateAtSafeBoundary(text: String, maxChars: Int): String {
     return text.substring(0, end)
 }
 
-/**
- * 去掉 HTML 标签，得到用于降级展示的纯文本。
- *
- * 只会处理开头 [maxRawChars] 个字符，避免对超大字符串做正则替换导致内存问题。
- */
+/** Bounded, iterative text fallback, independent of the render-tree depth/node limits. */
 internal fun htmlToPlainText(html: String, maxRawChars: Int = MAX_HTML_INPUT_LENGTH): String {
-    if (html.isEmpty()) return ""
-    return truncateAtSafeBoundary(html, maxRawChars)
-        .replace(htmlTagRegex, " ")
+    if (html.isEmpty() || maxRawChars <= 0) return ""
+    val raw = truncateAtSafeBoundary(html, maxRawChars.coerceAtMost(MAX_HTML_INPUT_LENGTH))
+    val document = Parser.htmlParser().parseInput(raw, "")
+    data class PendingText(val node: Node, val closing: Boolean = false)
+    val pending = ArrayDeque<PendingText>()
+    pending.addLast(PendingText(document))
+    val text = StringBuilder()
+    while (pending.isNotEmpty()) {
+        val (node, closing) = pending.removeLast()
+        if (closing) {
+            text.append('\n')
+            continue
+        }
+        when (node) {
+            is TextNode -> text.append(node.wholeText)
+            is Element -> {
+                val tag = node.normalName()
+                if (tag in setOf("head", "script", "style", "template") || node.hasAttr("hidden")) continue
+                if (tag == "br") {
+                    text.append('\n')
+                    continue
+                }
+                if (tag == "img") text.append(node.attr("alt"))
+                val block = isBlockTag(tag)
+                if (block) {
+                    text.append('\n')
+                    pending.addLast(PendingText(node, closing = true))
+                }
+                for (index in node.childNodeSize() - 1 downTo 0) {
+                    pending.addLast(PendingText(node.childNode(index)))
+                }
+            }
+        }
+    }
+    return text.toString()
         .replace(htmlHorizontalSpaceRegex, " ")
         .replace(htmlBlankLineRegex, "\n")
         .trim()

@@ -2,6 +2,7 @@ package com.yhchat.canary.ui.components.htmltext
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,12 +12,15 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
@@ -24,20 +28,26 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +58,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil.decode.SvgDecoder
 
 /**
  * HTML 的渲染源：[Tree] 表示可以交给高级渲染器正常渲染，
@@ -67,11 +77,11 @@ private sealed interface HtmlRenderSource {
  *  - 节点数量过多的 HTML；
  *  - 嵌套层数过深的 HTML。
  */
-private fun prepareHtmlRenderSource(html: String): HtmlRenderSource {
+private fun prepareHtmlRenderSource(html: String, externalStylesheets: Map<String, String>): HtmlRenderSource {
     if (html.length > MAX_HTML_INPUT_LENGTH) {
         return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
     }
-    val root = runCatching { parseHtmlTree(html) }.getOrNull()
+    val root = runCatching { parseHtmlTree(html, externalStylesheets) }.getOrNull()
         ?: return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
     if (isHtmlTreeTooComplex(root)) {
         return HtmlRenderSource.PlainText(buildPlainTextFallback(html))
@@ -98,9 +108,14 @@ fun AdvancedHtmlRenderer(
     onImageClick: ((String) -> Unit)? = null,
     onLinkClick: ((String) -> Unit)? = null,
     color: Color = MaterialTheme.colorScheme.onSurface,
-    style: TextStyle = MaterialTheme.typography.bodyMedium
+    style: TextStyle = MaterialTheme.typography.bodyMedium,
+    baseUrl: String? = null
 ) {
-    when (val source = remember(html) { prepareHtmlRenderSource(html) }) {
+    var externalStylesheets by remember(html, baseUrl) { mutableStateOf(emptyMap<String, String>()) }
+    LaunchedEffect(html, baseUrl) {
+        externalStylesheets = loadExternalStylesheets(html, baseUrl)
+    }
+    when (val source = remember(html, externalStylesheets) { prepareHtmlRenderSource(html, externalStylesheets) }) {
         is HtmlRenderSource.PlainText -> {
             Text(
                 text = source.text,
@@ -327,6 +342,7 @@ private fun RenderHtmlNode(
             when (themeAdjustedNode.tag) {
                 "hr" -> androidx.compose.material3.HorizontalDivider(Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 "img" -> HtmlImageNode(themeAdjustedNode, onImageClick)
+                "svg" -> HtmlSvgNode(themeAdjustedNode, normalizedInheritedText)
                 "details" -> HtmlDetailsNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
                 "blockquote" -> HtmlBlockquoteNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
                 "ul", "ol" -> HtmlListNode(themeAdjustedNode, normalizedInheritedText, onImageClick, onLinkClick)
@@ -413,28 +429,12 @@ private fun HtmlGenericNode(
         }
     } else {
         // 瀵逛簬琛屽唴閾炬帴锛岄渶瑕佹纭鐞?<a> 鏍囩鐨?href
-        val rendered = if (isLink && !href.isNullOrBlank()) {
-            buildInlineAnnotatedWithLink(
-                node.children.ifEmpty { mutableListOf(HtmlNode.Text("")) },
-                merged,
-                href
-            )
-        } else {
-            buildInlineAnnotated(node.children.ifEmpty { mutableListOf(HtmlNode.Text("")) }, merged)
-        }
-        if (rendered.first.text.isNotEmpty()) {
-            @Suppress("DEPRECATION")
-            ClickableText(
-                text = rendered.first,
-                style = rendered.second,
-                onClick = { offset ->
-                    // end is exclusive; use offset+1 to hit the annotation range
-                    rendered.first.getStringAnnotations("URL", offset, offset + 1)
-                        .firstOrNull()
-                        ?.let { onLinkClick?.invoke(it.item) }
-                }
-            )
-        }
+        HtmlInlineText(
+            nodes = node.children.ifEmpty { mutableListOf(HtmlNode.Text("")) },
+            inheritedText = merged,
+            onLinkClick = onLinkClick,
+            href = href?.takeIf { isLink && it.isNotBlank() }
+        )
     }
 }
 
@@ -457,20 +457,9 @@ private fun RenderInlineFlow(
     @Composable
     fun flushInline() {
         if (inlineBuffer.isEmpty()) return
-        val (annotated, style) = buildInlineAnnotated(inlineBuffer.toList(), inheritedText)
+        val nodes = inlineBuffer.toList()
         inlineBuffer.clear()
-        if (!annotated.text.hasRenderableHtmlText()) return
-        @Suppress("DEPRECATION")
-        ClickableText(
-            text = annotated,
-            style = style,
-            onClick = { offset ->
-                // end is exclusive; use offset+1 to hit the annotation range
-                annotated.getStringAnnotations("URL", offset, offset + 1)
-                    .firstOrNull()
-                    ?.let { onLinkClick?.invoke(it.item) }
-            }
-        )
+        HtmlInlineText(nodes, inheritedText, onLinkClick)
     }
 
     children.forEach { child ->
@@ -495,10 +484,10 @@ private fun shouldRenderInline(node: HtmlNode.Element): Boolean {
     if (node.style.display != null) {
         when (node.style.display.lowercase()) {
             "block", "flex", "table", "table-row", "table-cell", "list-item" -> return false
-            "inline-block" -> return true
         }
     }
-    if (isBlockTag(node.tag) && !isInlineTag(node.tag)) return false
+    if (node.tag == "svg") return true
+    if (isBlockTag(node.tag) && !isInlineTag(node.tag) && node.style.display != "inline-block") return false
     if (node.children.any { child ->
             when (child) {
                 is HtmlNode.Text -> false
@@ -521,28 +510,90 @@ private fun shouldRenderAsBlockNode(node: HtmlNode.Element): Boolean {
     }
 }
 
+private data class InlineHtmlContent(
+    val annotated: AnnotatedString,
+    val style: TextStyle,
+    val svgAssets: Map<String, HtmlSvgAsset>
+)
+
+@Composable
+private fun HtmlInlineText(
+    nodes: List<HtmlNode>,
+    inheritedText: CssStyle,
+    onLinkClick: ((String) -> Unit)?,
+    href: String? = null
+) {
+    BoxWithConstraints {
+        val inlineNodes = if (href == null) nodes else listOf(
+            HtmlNode.Element("a", attrs = mapOf("href" to href), children = nodes.toMutableList())
+        )
+        val content = buildInlineAnnotated(
+            inlineNodes, inheritedText,
+            maxWidth.takeIf { it > 0.dp && it < Dp.Infinity },
+            maxHeight.takeIf { it > 0.dp && it < Dp.Infinity }
+        )
+        if (content.annotated.text.hasRenderableHtmlText()) HtmlClickableText(content, onLinkClick)
+    }
+}
+
 @Composable
 private fun buildInlineAnnotated(
     nodes: List<HtmlNode>,
-    inheritedText: CssStyle
-): Pair<AnnotatedString, TextStyle> {
+    inheritedText: CssStyle,
+    containerWidth: Dp?,
+    containerHeight: Dp?
+): InlineHtmlContent {
     val defaultColor = MaterialTheme.colorScheme.onSurface
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val base = inheritedText.copy(color = normalizeTextColorForTheme(inheritedText.color, defaultColor, isDark))
-    return buildHtmlInlineText(nodes, base, MaterialTheme.colorScheme.primary, defaultColor, isDark) to base.toComposeTextStyle()
+    val svgAssets = linkedMapOf<String, HtmlSvgAsset>()
+    val density = LocalDensity.current
+    val annotated = buildHtmlInlineText(
+        nodes, base, MaterialTheme.colorScheme.primary, defaultColor, isDark,
+        svgAssets, { with(density) { it.toDp() } }, containerWidth, containerHeight
+    )
+    return InlineHtmlContent(annotated, base.toComposeTextStyle(), svgAssets)
 }
 
-/** Keep one inline traversal for both plain and linked containers. */
 @Composable
-private fun buildInlineAnnotatedWithLink(
-    nodes: List<HtmlNode>, inheritedText: CssStyle, href: String
-): Pair<AnnotatedString, TextStyle> = buildInlineAnnotated(
-    listOf(HtmlNode.Element("a", attrs = mapOf("href" to href), children = nodes.toMutableList())), inheritedText
-)
+private fun HtmlClickableText(content: InlineHtmlContent, onLinkClick: ((String) -> Unit)?) {
+    val density = LocalDensity.current
+    var layout by remember(content.annotated) { mutableStateOf<TextLayoutResult?>(null) }
+    val inlineContent = remember(content.svgAssets, density) {
+        content.svgAssets.mapValues { (_, asset) ->
+            InlineTextContent(
+                Placeholder(
+                    width = with(density) { asset.width.toSp() },
+                    height = with(density) { asset.height.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                )
+            ) {
+                HtmlSvgImage(asset, Modifier.fillMaxSize())
+            }
+        }
+    }
+    BasicText(
+        text = content.annotated,
+        style = content.style,
+        inlineContent = inlineContent,
+        onTextLayout = { layout = it },
+        modifier = if (onLinkClick == null) Modifier else Modifier.pointerInput(content.annotated, onLinkClick) {
+            detectTapGestures { position ->
+                val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
+                content.annotated.getStringAnnotations("URL", offset, offset + 1)
+                    .firstOrNull()?.let { onLinkClick(it.item) }
+            }
+        }
+    )
+}
 
 internal fun buildHtmlInlineText(
     nodes: List<HtmlNode>, inheritedText: CssStyle, linkColor: Color,
-    defaultColor: Color, isDark: Boolean
+    defaultColor: Color, isDark: Boolean,
+    inlineSvgAssets: MutableMap<String, HtmlSvgAsset> = linkedMapOf(),
+    fontSizeToDp: (TextUnit) -> Dp = { it.value.dp },
+    containerWidth: Dp? = null,
+    containerHeight: Dp? = null
 ): AnnotatedString = buildAnnotatedString {
     fun appendNode(node: HtmlNode, parent: CssStyle) {
         when (node) {
@@ -568,6 +619,16 @@ internal fun buildHtmlInlineText(
                     resolved = resolved.copy(color = link.color, textDecoration = link.textDecoration)
                 }
                 resolved = resolved.copy(color = normalizeTextColorForTheme(resolved.color, defaultColor, isDark))
+                if (node.tag == "svg") {
+                    val asset = buildHtmlSvgAsset(
+                        node, resolved.color, fontSizeToDp(resolved.fontSize ?: 14.sp),
+                        containerWidth, containerHeight
+                    ) ?: return
+                    val id = "html-svg-${inlineSvgAssets.size}"
+                    inlineSvgAssets[id] = asset
+                    appendInlineContent(id)
+                    return
+                }
                 val span = resolved.toComposeTextStyle().toSpanStyle().copy(
                     background = node.style.backgroundColor ?: Color.Unspecified,
                     baselineShift = when (node.tag) {
@@ -632,6 +693,9 @@ private fun HtmlImageNode(
     if (src.isEmpty()) return
     val context = LocalContext.current
     val model = com.yhchat.canary.ui.components.ImageUtils.createImageRequest(context, src)
+        .newBuilder(context)
+        .decoderFactory(SvgDecoder.Factory())
+        .build()
 
     val imageScale = when (node.style.objectFit?.lowercase()) {
         "cover" -> ContentScale.Crop
@@ -821,6 +885,7 @@ private data class HtmlTableCell(
 
 private data class HtmlTableRow(
     val style: CssStyle,
+    val textStyle: CssStyle,
     val cells: List<HtmlTableCell>
 )
 
@@ -831,11 +896,12 @@ private data class HtmlTableData(
     val borderSpacing: Int
 )
 
-private fun extractTable(table: HtmlNode.Element): HtmlTableData {
+private fun extractTable(table: HtmlNode.Element, inheritedText: CssStyle): HtmlTableData {
     val rows = mutableListOf<HtmlTableRow>()
 
-    fun walk(node: HtmlNode) {
+    fun walk(node: HtmlNode, parentText: CssStyle) {
         if (node is HtmlNode.Element && !node.isHiddenHtmlNode()) {
+            val textStyle = node.style.mergeText(parentText)
             if (node.tag == "tr") {
                 val cells = node.children
                     .filterIsInstance<HtmlNode.Element>()
@@ -847,14 +913,15 @@ private fun extractTable(table: HtmlNode.Element): HtmlTableData {
                             colSpan = positiveInt(it.attrs["colspan"], 1).coerceAtMost(100)
                         )
                     }
-                rows += HtmlTableRow(node.style, cells)
-            } else {
-                node.children.forEach(::walk)
+                rows += HtmlTableRow(node.style, textStyle, cells)
+            } else if (node === table || node.tag in setOf("thead", "tbody", "tfoot")) {
+                // A caption or nested table must never contribute rows to this table.
+                node.children.forEach { walk(it, textStyle) }
             }
         }
     }
 
-    walk(table)
+    walk(table, inheritedText)
     return HtmlTableData(
         style = table.style,
         rows = rows,
@@ -870,12 +937,18 @@ private fun HtmlTableNode(
     onImageClick: ((String) -> Unit)?,
     onLinkClick: ((String) -> Unit)?
 ) {
-    val table = remember(node) { extractTable(node) }
-    if (table.rows.isEmpty()) return
+    val table = remember(node, inheritedText) { extractTable(node, inheritedText) }
+    val captions = node.children.filterIsInstance<HtmlNode.Element>()
+        .filter { it.tag == "caption" && !it.isHiddenHtmlNode() }
+    if (table.rows.isEmpty() && captions.isEmpty()) return
     val hState = rememberScrollState()
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 
     Column(modifier = Modifier.fillMaxWidth().htmlBoxModel(table.style)) {
+        captions.forEach { caption ->
+            RenderHtmlNode(caption, node.style.mergeText(inheritedText), onImageClick, onLinkClick)
+        }
+        if (table.rows.isEmpty()) return@Column
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val viewportWidth = if (maxWidth < Dp.Infinity && maxWidth > 0.dp) {
                 maxWidth
@@ -898,7 +971,7 @@ private fun HtmlTableNode(
                             horizontalArrangement = Arrangement.Start
                         ) {
                             row.cells.forEach { cell ->
-                                val baseText = if (cell.isHeader) inheritedText.copy(fontWeight = FontWeight.Bold) else inheritedText
+                                val baseText = if (cell.isHeader) row.textStyle.copy(fontWeight = FontWeight.Bold) else row.textStyle
                                 Box(
                                     modifier = Modifier
                                         .width(columnWidth * cell.colSpan)

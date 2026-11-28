@@ -9,6 +9,7 @@ import com.yhchat.canary.data.api.BoardsByCreateRequest
 import com.yhchat.canary.data.api.CollectPostListRequest
 import com.yhchat.canary.data.api.CollectPostRequest
 import com.yhchat.canary.data.api.CommentListRequest
+import com.yhchat.canary.data.api.CommentReplyListRequest
 import com.yhchat.canary.data.api.CommentPostRequest
 import com.yhchat.canary.data.api.CreateBoardRequest
 import com.yhchat.canary.data.api.CreateBoardResponse
@@ -515,6 +516,36 @@ class CommunityRepository @Inject constructor(
     }
     
     /**
+     * 获取评论回复列表
+     */
+    suspend fun getCommentReplyList(
+        token: String,
+        commentId: Int,
+        size: Int = 10,
+        page: Int = 1
+    ): Result<CommentListResponse> {
+        return try {
+            val request = CommentReplyListRequest(commentId = commentId, size = size, page = page)
+            val response = apiService.getCommentReplyList(token, request)
+
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null && body.code == 1) {
+                    Result.success(body)
+                } else {
+                    Result.failure(Exception("API返回错误: ${body?.msg ?: "未知错误"}"))
+                }
+            } else {
+                Result.failure(Exception("网络请求失败: ${response.code()}"))
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 点赞文章
      */
     suspend fun likePost(
@@ -642,6 +673,8 @@ class CommunityRepository @Inject constructor(
             } else {
                 Result.failure(Exception("网络请求失败: ${response.code()}"))
             }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -672,7 +705,7 @@ class CommunityRepository @Inject constructor(
             Result.failure(e)
         }
     }
-    
+
     /**
      * 创建文章
      */

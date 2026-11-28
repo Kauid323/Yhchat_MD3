@@ -39,7 +39,8 @@ fun HtmlTextMessage(
     onUriClick: ((String) -> Unit)? = null,
     onImageClick: ((String) -> Unit)? = null,
     enableCssSupport: Boolean = true,
-    useAdvancedRenderer: Boolean = true
+    useAdvancedRenderer: Boolean = true,
+    baseUrl: String? = null
 ) {
     if (useAdvancedRenderer) {
         // 使用高级渲染器处理复杂的 CSS 布局
@@ -49,7 +50,8 @@ fun HtmlTextMessage(
             onImageClick = onImageClick,
             onLinkClick = onUriClick,
             color = color,
-            style = style
+            style = style,
+            baseUrl = baseUrl
         )
     } else {
         // 使用传统的 AnnotatedString 渲染器

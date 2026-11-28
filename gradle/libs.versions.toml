@@ -24,6 +24,7 @@ zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
 calvinReorderable = "3.1.0"
 ksoupHtml = "0.6.0"
+jsoup = "1.21.2"
 mikepenzMarkdown = "0.46.0"
 latex = "1.8.0"
 desugarJdkLibs = "2.1.5"
@@ -77,6 +78,7 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.r
 zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 calvin-reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "calvinReorderable" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 ksoup-html = { group = "com.mohamedrejeb.ksoup", name = "ksoup-html", version.ref = "ksoupHtml" }
 mikepenz-markdown-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "mikepenzMarkdown" }
 latex-base = { group = "io.github.huarangmeng", name = "latex-base", version.ref = "latex" }

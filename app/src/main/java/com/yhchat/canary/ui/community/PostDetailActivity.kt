@@ -873,15 +873,25 @@ fun CommentItem(
     isLz: Boolean = false,
     canDelete: Boolean = false,
     onLikeClick: (Int) -> Unit = {},
-    onReplyClick: (Int) -> Unit = {},
+    onReplyClick: (CommunityComment) -> Unit = {},
+    onLoadReplies: (Int) -> Unit = {},
+    repliesOverride: List<CommunityComment>? = null,
+    replyLoading: Boolean = false,
+    replyHasMore: Boolean = false,
+    replyError: String? = null,
+    onLoadMoreReplies: (Int) -> Unit = {},
     onDeleteClick: (CommunityComment) -> Unit = {},
     onReportClick: (CommunityComment) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val rule = floorRuleColor()
-    val replies = comment.replies.orEmpty()
+    val replies = repliesOverride ?: comment.replies.orEmpty()
     val density = LocalDensity.current
+
+    LaunchedEffect(comment.id) {
+        onLoadReplies(comment.id)
+    }
 
     // 整层（楼层 + 回复）自己的布局坐标，回复靠它换算「我相对这层顶部有多高」
     var floorCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -1104,7 +1114,7 @@ fun CommentItem(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { onReplyClick(comment.id) }
+                            modifier = Modifier.clickable { onReplyClick(comment) }
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Comment,
@@ -1145,19 +1155,37 @@ fun CommentItem(
                 CommentReplyItem(
                     reply = reply,
                     isLast = index == replies.lastIndex,
+                    onLikeClick = onLikeClick,
+                    onReplyClick = onReplyClick,
                     // 上报「这条回复的小头像中心，相对整层顶部有多高」。
-                    // 用 LayoutCoordinates 直接换算，不靠累加高度猜 —— 文本折行、
-                    // 图片、多行内容都会让高度不固定，猜出来的 y 就会歪。
                     onPlaced = { replyCoords ->
                         val floor = floorCoords
                         if (floor != null && floor.isAttached && replyCoords.isAttached) {
-                            // LayoutCoordinates 本身不带 density，用 Item 里取好的那个换算 dp→px
                             val avatarCenterPx = with(density) { ReplyAvatarCenter.toPx() }
                             val y = floor.localPositionOf(replyCoords, Offset.Zero).y + avatarCenterPx
                             if (branchYs[reply.id] != y) branchYs[reply.id] = y
                         }
                     }
                 )
+            }
+
+            if (replyLoading) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(start = 72.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
+            } else if (replyError != null) {
+                TextButton(
+                    onClick = { onLoadReplies(comment.id) },
+                    modifier = Modifier.padding(start = 72.dp)
+                ) { Text("加载回复失败，点此重试", color = MaterialTheme.colorScheme.error) }
+            } else if (replyHasMore) {
+                TextButton(
+                    onClick = { onLoadMoreReplies(comment.id) },
+                    modifier = Modifier.padding(start = 72.dp)
+                ) { Text("查看更多回复") }
             }
         }
     }
@@ -1223,6 +1251,8 @@ private fun FloorAction(
 fun CommentReplyItem(
     reply: CommunityComment,
     isLast: Boolean = false,
+    onLikeClick: (Int) -> Unit = {},
+    onReplyClick: (CommunityComment) -> Unit = {},
     onPlaced: (LayoutCoordinates) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -1304,6 +1334,66 @@ fun CommentReplyItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val liked = reply.isLiked == "1"
+                    val likeScale by animateFloatAsState(
+                        targetValue = if (liked) 1.15f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "replyLikeScale"
+                    )
+                    val likeTint by animateColorAsState(
+                        targetValue = if (liked) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        animationSpec = tween(180),
+                        label = "replyLikeTint"
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onLikeClick(reply.id) }
+                    ) {
+                        Icon(
+                            imageVector = if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                            contentDescription = "点赞",
+                            tint = likeTint,
+                            modifier = Modifier.size(15.dp).scale(likeScale)
+                        )
+                        if (reply.likeNum > 0) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = reply.likeNum.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = likeTint
+                            )
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onReplyClick(reply) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Comment,
+                            contentDescription = "回复",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        if (reply.repliesNum > 0) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = reply.repliesNum.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -2080,6 +2170,7 @@ fun PostDetailScreen(
     // 获取状态
     val postDetailState by viewModel.postDetailState.collectAsState()
     val commentListState by viewModel.commentListState.collectAsState()
+    val commentReplyStates by viewModel.commentReplyStates.collectAsState()
     val followingBoardListState by viewModel.followingBoardListState.collectAsState()
     val communityReportState by viewModel.communityReportState.collectAsState()
     
@@ -2089,6 +2180,7 @@ fun PostDetailScreen(
     var searchResultCount by remember { mutableStateOf(0) }
     // 评论输入面板是否弹起。底部「评论」按钮和评论区的回复图标都走这个开关
     var showCommentComposer by remember { mutableStateOf(false) }
+    var replyTarget by remember(postId) { mutableStateOf<ReplyTarget?>(null) }
     // 发送中状态来自 ViewModel，UI 只读。发送期间面板不关、按钮转圈
     val commentSending by viewModel.commentSending.collectAsState()
 
@@ -2120,6 +2212,17 @@ fun PostDetailScreen(
         focusManager.clearFocus()
         showCommentsSidebar = false
     }
+    val formatReplyContent: (String) -> String = { raw ->
+        val target = replyTarget
+        val mentionId = target?.mentionUserId
+        val mentionNickname = target?.mentionNickname
+        val body = raw.trim()
+        if (!mentionId.isNullOrBlank() && !mentionNickname.isNullOrBlank()) {
+            "回复 @[$mentionId:$mentionNickname]：$body"
+        } else {
+            body
+        }
+    }
     val embeddedCommentPaneWidth = with(layoutDensity) { detailWidthPx.toDp() }
         .times(0.5f).coerceIn(280.dp, 400.dp)
 
@@ -2130,25 +2233,6 @@ fun PostDetailScreen(
     LaunchedEffect(embeddedCommentsVisible, postDetailState.post != null) {
         if (embeddedCommentsVisible && postDetailState.post != null) {
             commentInputFocusRequester.requestFocus()
-        }
-    }
-
-    // 一次发送结束（sending 从 true 落回 false）时收起面板并滚到评论区。
-    // 用一个「本轮是否已开始」的标志，避免初次组合时 sending 本来就是 false 就误触发。
-    var awaitingSendResult by remember { mutableStateOf(false) }
-    LaunchedEffect(commentSending) {
-        if (commentSending) {
-            awaitingSendResult = true
-        } else if (awaitingSendResult) {
-            awaitingSendResult = false
-            if (showCommentComposer) {
-                showCommentComposer = false
-                if (sideBySideComments) {
-                    commentPaneState.animateScrollToItem(0)
-                } else if (showCommentsInline) {
-                    listState.animateScrollToItem(1)
-                }
-            }
         }
     }
 
@@ -2240,14 +2324,8 @@ fun PostDetailScreen(
         }
     }
     
-    // 错误处理
-    LaunchedEffect(postDetailState.error, commentListState.error) {
-        postDetailState.error?.let { error ->
-            // 可以在这里显示Snackbar或其他错误提示
-            viewModel.clearError()
-        }
-        commentListState.error?.let { error ->
-            // 可以在这里显示Snackbar或其他错误提示
+    LaunchedEffect(postDetailState.error) {
+        postDetailState.error?.let {
             viewModel.clearError()
         }
     }
@@ -2480,13 +2558,17 @@ fun PostDetailScreen(
                     onCommentCompose = {
                         if (embeddedInSplitPane && canShowSideBySideComments) {
                             if (!showCommentsSidebar) {
+                                replyTarget = null
                                 showCommentsSidebar = true
                             } else if (!commentSending && commentDraft.isNotBlank()) {
+                                val submittedReplyTarget = replyTarget
                                 viewModel.commentPostWithToken(
                                     postId = postId,
-                                    content = commentDraft.trim(),
+                                    content = formatReplyContent(commentDraft),
+                                    commentId = submittedReplyTarget?.rootCommentId ?: 0,
                                     onSuccess = {
                                         commentDraft = ""
+                                        if (replyTarget == submittedReplyTarget) replyTarget = null
                                         coroutineScope.launch {
                                             commentPaneState.animateScrollToItem(0)
                                         }
@@ -2494,6 +2576,7 @@ fun PostDetailScreen(
                                 )
                             }
                         } else {
+                            replyTarget = null
                             showCommentComposer = true
                         }
                     },
@@ -2651,9 +2734,33 @@ fun PostDetailScreen(
                                     onLikeClick = { commentId ->
                                         viewModel.likeCommentWithToken(postId, commentId)
                                     },
-                                    // 点评论底部的回复图标：弹起同一个输入面板
-                                    onReplyClick = {
-                                        showCommentComposer = true
+                                    onLoadReplies = { rootCommentId ->
+                                        viewModel.loadCommentRepliesWithToken(postId, rootCommentId)
+                                    },
+                                    repliesOverride = commentReplyStates[comment.id]
+                                        ?.takeIf { it.currentPage > 0 }
+                                        ?.replies ?: comment.replies,
+                                    replyLoading = commentReplyStates[comment.id]?.isLoading == true,
+                                    replyHasMore = commentReplyStates[comment.id]?.hasMore == true,
+                                    replyError = commentReplyStates[comment.id]?.error,
+                                    onLoadMoreReplies = { rootCommentId ->
+                                        viewModel.loadCommentRepliesWithToken(postId, rootCommentId, loadMore = true)
+                                    },
+                                    // 回复图标沿用评论输入入口；嵌入式分栏使用侧栏草稿，其余布局弹出输入面板。
+                                    onReplyClick = { targetComment ->
+                                        if (!commentSending) {
+                                            replyTarget = ReplyTarget(
+                                                rootCommentId = comment.id,
+                                                name = targetComment.senderNickname,
+                                                mentionUserId = targetComment.senderId.takeIf { targetComment.id != comment.id },
+                                                mentionNickname = targetComment.senderNickname.takeIf { targetComment.id != comment.id }
+                                            )
+                                            if (embeddedCommentsVisible) {
+                                                commentInputFocusRequester.requestFocus()
+                                            } else {
+                                                showCommentComposer = true
+                                            }
+                                        }
                                     },
                                     onDeleteClick = { selectedComment ->
                                         pendingDeleteComment = selectedComment
@@ -2796,6 +2903,25 @@ fun PostDetailScreen(
                                                     Text("收起评论区")
                                                 }
                                             }
+                                            replyTarget?.let { target ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "回复 ${target.name}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    TextButton(
+                                                        onClick = { replyTarget = null },
+                                                        enabled = !commentSending
+                                                    ) {
+                                                        Text("取消回复")
+                                                    }
+                                                }
+                                            }
                                             commentListState.error?.let { error ->
                                                 Text(
                                                     text = error,
@@ -2862,13 +2988,29 @@ fun PostDetailScreen(
             // 评论输入面板。底部「评论」药丸和评论区的回复图标都弹它
             if (showCommentComposer) {
                 CommentComposerSheet(
-                    replyTo = null,
+                    replyTo = replyTarget,
                     sending = commentSending,
-                    onDismiss = { showCommentComposer = false },
+                    error = commentListState.error,
+                    onDismiss = {
+                        showCommentComposer = false
+                        if (!commentSending) replyTarget = null
+                    },
                     onSend = { content ->
-                        // 发送交给 ViewModel，面板先不关：等 commentSending 回落再关，
-                        // 这样按钮上的转圈能看到，失败时也不会闪一下就没了
-                        viewModel.commentPostWithToken(postId = postId, content = content)
+                        val submittedReplyTarget = replyTarget
+                        viewModel.commentPostWithToken(
+                            postId = postId,
+                            content = formatReplyContent(content),
+                            commentId = submittedReplyTarget?.rootCommentId ?: 0,
+                            onSuccess = {
+                                showCommentComposer = false
+                                if (replyTarget == submittedReplyTarget) replyTarget = null
+                                if (sideBySideComments) {
+                                    coroutineScope.launch { commentPaneState.animateScrollToItem(0) }
+                                } else if (showCommentsInline) {
+                                    coroutineScope.launch { listState.animateScrollToItem(1) }
+                                }
+                            }
+                        )
                     }
                 )
             }

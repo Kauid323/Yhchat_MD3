@@ -213,6 +213,7 @@ dependencies {
     implementation(libs.lottie.compose)
 
     implementation(libs.ksoup.html)
+    implementation(libs.jsoup) // HTML5 tree construction for the native HTML renderer
     
     // HTML 文本渲染支持
     implementation("androidx.compose.ui:ui-text-google-fonts")

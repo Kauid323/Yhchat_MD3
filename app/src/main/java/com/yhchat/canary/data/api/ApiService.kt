@@ -982,6 +982,12 @@ interface ApiService {
         @Header("token") token: String,
         @Body request: CommentListRequest
     ): Response<com.yhchat.canary.data.model.CommentListResponse>
+
+    @POST("v1/community/comment/comment-reply-list")
+    suspend fun getCommentReplyList(
+        @Header("token") token: String,
+        @Body request: CommentReplyListRequest
+    ): Response<com.yhchat.canary.data.model.CommentListResponse>
     
     @POST("v1/community/posts/post-like")
     suspend fun likePost(
@@ -1862,6 +1868,20 @@ data class CommentListRequest(
     @SerializedName("size")
     val size: Int = 10,
     
+    @SerializedName("page")
+    val page: Int = 1
+)
+
+/**
+ * 楼中楼回复列表请求
+ */
+data class CommentReplyListRequest(
+    @SerializedName("commentId")
+    val commentId: Int,
+
+    @SerializedName("size")
+    val size: Int = 10,
+
     @SerializedName("page")
     val page: Int = 1
 )
