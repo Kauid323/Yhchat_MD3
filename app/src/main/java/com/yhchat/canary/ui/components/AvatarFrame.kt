@@ -2,6 +2,7 @@ package com.yhchat.canary.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,14 +50,10 @@ private const val FrameScale = 1.8f
  *
  * @param showFrame 是否显示装饰框
  * @param avatarSize 头像本身的直径。框会按 [frameScale] 放大
- * @param frameScale 框相对头像的倍数。默认 [FrameScale] 是按素材内圆
- *        精确算出来的；聊天列表那种地方头像只有 40dp，用默认值会让整行
- *        高出一大截，需要传小一点（1.35 左右）—— 代价是框的内圆比头像小，
- *        装饰环会盖住头像最外一圈，视觉上仍然是「框住」的效果
+ * @param frameScale 框相对头像的倍数。默认 [FrameScale] 按素材透明内圆的比例计算，能让内圆完整包住头像。
  * @param reserveFrameSpace 外层是否按框的尺寸留位。
  *        true：给框留出完整空间，适合独立摆放的头像（如个人资料页）；
- *        false：外层保持头像尺寸，框溢出到外面。列表里用这个可以避免
- *        一行因为加框而变高
+ *        false：外层保持头像尺寸，装饰框仍按完整尺寸绘制并向外溢出，适合聊天列表避免行高增加。
  */
 @Composable
 fun FramedAvatar(
@@ -79,7 +76,7 @@ fun FramedAvatar(
             Image(
                 painter = painterResource(id = R.drawable.avatar_frame_halloween),
                 contentDescription = null,
-                modifier = Modifier.size(frameSize)
+                modifier = Modifier.requiredSize(frameSize)
             )
         }
     }
