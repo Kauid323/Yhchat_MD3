@@ -73,6 +73,8 @@ import com.hrm.latex.renderer.Latex
 import com.hrm.latex.renderer.LatexAutoWrap
 import com.hrm.latex.renderer.measure.rememberLatexMeasurer
 import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.latex.renderer.model.LatexTheme
+import com.hrm.latex.renderer.model.LatexThemeColors
 import com.mikepenz.markdown.m3.Markdown as MikepenzMarkdown
 import com.mikepenz.markdown.model.MarkdownState
 import com.mikepenz.markdown.model.ReferenceLinkHandler
@@ -133,8 +135,10 @@ fun MarkdownText(
     val latexConfig = remember(textColor, context) {
         LatexConfig(
             fontSize = 16.sp,
-            color = textColor,
-            darkColor = textColor,
+            theme = LatexTheme.auto(
+                light = LatexThemeColors(color = textColor),
+                dark = LatexThemeColors(color = textColor)
+            ),
             accessibilityEnabled = true,
             onHyperlinkClick = { url ->
                 try {
@@ -166,6 +170,7 @@ fun MarkdownText(
                                                 if (block.isNotBlank()) {
                                                     MarkdownTextRun(
                                                         content = block,
+                                                        baseColor = textColor,
                                                         latexConfig = latexConfig,
                                                         latexEnabled = latexEnabled,
                                                         highlightKeyword = highlightKeyword,
@@ -204,6 +209,7 @@ fun MarkdownText(
                                                 Box(modifier = Modifier.fillMaxWidth()) {
                                                     MarkdownTextRun(
                                                         content = run.content,
+                                                        baseColor = textColor,
                                                         latexConfig = latexConfig,
                                                         latexEnabled = latexEnabled,
                                                         highlightKeyword = highlightKeyword,
@@ -340,6 +346,7 @@ fun MarkdownText(
 @Composable
 private fun MarkdownTextRun(
     content: String,
+    baseColor: Color,
     latexConfig: LatexConfig,
     latexEnabled: Boolean,
     highlightKeyword: String,
@@ -366,7 +373,7 @@ private fun MarkdownTextRun(
             Box(modifier = Modifier.fillMaxWidth()) {
                 MikepenzMarkdownText(
                     markdown = highlightedMarkdown,
-                    baseColor = latexConfig.color,
+                    baseColor = baseColor,
                     onLinkClicked = onLinkClicked,
                     persistRenderState = persistRenderState,
                     modifier = Modifier.fillMaxWidth()
@@ -386,7 +393,7 @@ private fun MarkdownTextRun(
             Box(modifier = Modifier.fillMaxWidth()) {
                 MikepenzMarkdownText(
                     markdown = highlightedMarkdown,
-                    baseColor = latexConfig.color,
+                    baseColor = baseColor,
                     onLinkClicked = onLinkClicked,
                     persistRenderState = persistRenderState,
                     modifier = Modifier.fillMaxWidth()
@@ -423,7 +430,7 @@ private fun MarkdownTextRun(
                         maybeSelection {
                             MikepenzMarkdownText(
                                 markdown = highlightedMarkdown,
-                                baseColor = latexConfig.color,
+                                baseColor = baseColor,
                                 onLinkClicked = onLinkClicked,
                                 persistRenderState = persistRenderState,
                                 modifier = Modifier.fillMaxWidth()
@@ -662,7 +669,7 @@ private fun InlineMarkdownWithLatex(
                                     maybeSelection {
                                         MikepenzMarkdownText(
                                             markdown = highlighted,
-                                            baseColor = latexConfig.color,
+                                            baseColor = baseColor,
                                             onLinkClicked = onLinkClicked,
                                             persistRenderState = true,
                                             modifier = Modifier.wrapContentWidth()
