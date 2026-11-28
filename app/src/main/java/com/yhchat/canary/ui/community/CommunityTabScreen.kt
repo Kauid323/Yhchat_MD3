@@ -110,6 +110,7 @@ fun CommunityTabScreen(
     onMyPostsNavigate: (() -> Unit)? = null,
     onMyCollectPostsNavigate: (() -> Unit)? = null,
     onBlockedUsersNavigate: (() -> Unit)? = null,
+    onPostNavigate: ((postId: Int, postTitle: String) -> Unit)? = null,
     // 是否启用侧边抽屉。大屏分屏里这个页面只占约 1/3 屏宽（360dp 屏幕上
     // 只有约 130dp），而 ModalDrawerSheet 有 360dp 的固定宽度下限 ——
     // 抽屉收起时是「按自己的宽度平移出屏」，容器比抽屉窄，平移量不足，
@@ -386,12 +387,16 @@ fun CommunityTabScreen(
                     else viewModel.loadMoreLatestPosts(token)
                 },
                 onPostClick = { post ->
-                    val intent = Intent(context, PostDetailActivity::class.java).apply {
-                        putExtra("post_id", post.id)
-                        putExtra("post_title", post.title)
-                        putExtra("token", token)
+                    if (onPostNavigate != null) {
+                        onPostNavigate(post.id, post.title)
+                    } else {
+                        val intent = Intent(context, PostDetailActivity::class.java).apply {
+                            putExtra("post_id", post.id)
+                            putExtra("post_title", post.title)
+                            putExtra("token", token)
+                        }
+                        context.startActivity(intent)
                     }
-                    context.startActivity(intent)
                 },
                 modifier = Modifier
                     .fillMaxSize()

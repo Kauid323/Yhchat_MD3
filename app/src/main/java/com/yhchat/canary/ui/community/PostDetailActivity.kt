@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -116,6 +118,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
@@ -130,6 +134,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.SpanStyle
@@ -473,8 +478,12 @@ fun PostBottomActionBarDuo3(
     searchResultCount: Int,
     onSearchTextChange: (String) -> Unit,
     onSearchToggle: () -> Unit,
-    /** 点评论按钮：弹起评论输入面板。 */
+    /** 嵌入详情中展开评论侧栏并发送草稿；默认弹起评论输入面板。 */
     onCommentCompose: () -> Unit = onCommentInputToggle,
+    commentActionLabel: String = "评论",
+    commentActionIsSend: Boolean = false,
+    commentActionEnabled: Boolean = true,
+    commentActionSending: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var searchExpandSettled by remember { mutableStateOf(false) }
@@ -759,7 +768,10 @@ fun PostBottomActionBarDuo3(
                     shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(200))
             ) {
                 Surface(
-                    modifier = Modifier.clickable { onCommentCompose() },
+                    modifier = Modifier.clickable(
+                        enabled = commentActionEnabled && !commentActionSending,
+                        onClick = onCommentCompose
+                    ),
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
@@ -768,14 +780,22 @@ fun PostBottomActionBarDuo3(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Comment,
-                            contentDescription = "写评论",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (commentActionSending) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (commentActionIsSend) Icons.AutoMirrored.Filled.Send
+                                    else Icons.AutoMirrored.Filled.Comment,
+                                contentDescription = commentActionLabel,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Text(
-                            text = "评论",
+                            text = commentActionLabel,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1290,8 +1310,8 @@ fun CommentReplyItem(
 }
 
 /**
- * 评论区标题：左边「评论 + 条数」，右边「复制原文」。
- * 承接文章正文，所以上方留一点空白，跟正文形成段落感，不加分割线。
+ * 评论区标题：左边「评论 + 条数」，右边「全部 / 只看楼主」。
+ * 窄屏承接正文并保留上方间距；宽屏作为独立评论栏的等高顶栏。
  */
 @Composable
 private fun CommentSectionHeader(
@@ -1299,13 +1319,17 @@ private fun CommentSectionHeader(
     visibleCount: Int,
     filterLzOnly: Boolean,
     onFilterChange: (Boolean) -> Unit,
-    onCopyPost: () -> Unit = {}
+    onCopyPost: () -> Unit = {},
+    useTopBarHeight: Boolean = false
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp),
+            .then(
+                if (useTopBarHeight) Modifier.height(DetailBarRowHeight)
+                else Modifier.padding(top = 8.dp)
+            )
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -2050,7 +2074,8 @@ fun PostDetailScreen(
     postTitle: String,
     viewModel: PostDetailViewModel,
     onBackClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    embeddedInSplitPane: Boolean = false
 ) {
     // 获取状态
     val postDetailState by viewModel.postDetailState.collectAsState()
@@ -2077,8 +2102,36 @@ fun PostDetailScreen(
     val disableLargeScreen by com.yhchat.canary.ui.components.rememberBooleanPreference(
         "layout_settings", "force_disable_large_screen_mode", false
     )
-    val sideBySideComments = !disableLargeScreen && with(layoutDensity) { detailWidthPx.toDp() } >= 720.dp
+    // MainActivity 已判断为大屏；嵌入详情无需再次满足整页的 720dp 门槛。
+    val canShowSideBySideComments = !disableLargeScreen &&
+        (embeddedInSplitPane || with(layoutDensity) { detailWidthPx.toDp() } >= 720.dp)
+    var showCommentsSidebar by rememberSaveable(postId, embeddedInSplitPane) {
+        mutableStateOf(!embeddedInSplitPane)
+    }
+    val sideBySideComments = canShowSideBySideComments &&
+        (!embeddedInSplitPane || showCommentsSidebar)
+    val showCommentsInline = !canShowSideBySideComments
+    val embeddedCommentsVisible = embeddedInSplitPane && sideBySideComments
+    var commentDraft by rememberSaveable(postId) { mutableStateOf("") }
+    val commentInputFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
+    val closeCommentsSidebar: () -> Unit = {
+        focusManager.clearFocus()
+        showCommentsSidebar = false
+    }
+    val embeddedCommentPaneWidth = with(layoutDensity) { detailWidthPx.toDp() }
+        .times(0.5f).coerceIn(280.dp, 400.dp)
+
+    BackHandler(enabled = embeddedCommentsVisible) {
+        if (!commentSending) closeCommentsSidebar()
+    }
+
+    LaunchedEffect(embeddedCommentsVisible, postDetailState.post != null) {
+        if (embeddedCommentsVisible && postDetailState.post != null) {
+            commentInputFocusRequester.requestFocus()
+        }
+    }
 
     // 一次发送结束（sending 从 true 落回 false）时收起面板并滚到评论区。
     // 用一个「本轮是否已开始」的标志，避免初次组合时 sending 本来就是 false 就误触发。
@@ -2088,9 +2141,14 @@ fun PostDetailScreen(
             awaitingSendResult = true
         } else if (awaitingSendResult) {
             awaitingSendResult = false
-            showCommentComposer = false
-            // 发完滚到评论区，让人立刻看到自己的评论
-            coroutineScope.launch { if (sideBySideComments) commentPaneState.animateScrollToItem(0) else listState.animateScrollToItem(1) }
+            if (showCommentComposer) {
+                showCommentComposer = false
+                if (sideBySideComments) {
+                    commentPaneState.animateScrollToItem(0)
+                } else if (showCommentsInline) {
+                    listState.animateScrollToItem(1)
+                }
+            }
         }
     }
 
@@ -2252,7 +2310,134 @@ fun PostDetailScreen(
     // matchedGeometryAnchor / boundsOf 全是空操作，收起进度恒为 0，顶栏永远不动。
     // nestedScroll 把 pageScroll.scrollWatcher 挂上，onPostScroll 才会被调用。
     CompositionLocalProvider(LocalPageScroll provides pageScroll) {
-        // 顶栏改成浮层，跟分区页一样是 Box 的兄弟节点。
+        val drawPostDetailTopBar: @Composable (Modifier) -> Unit = { topBarModifier ->
+            PostDetailTopBar(
+                boardName = postDetailState.board?.name
+                    ?: postDetailState.post?.group?.name
+                    ?: "文章详情",
+                boardAvatar = postDetailState.board?.avatar
+                    ?: postDetailState.post?.group?.avatarUrl,
+                hiddenFraction = { detailAway.value },
+                onBackClick = onBackClick,
+                onBoardClick = {
+                    postDetailState.board?.let { board ->
+                        val intent = Intent(context, BoardDetailActivity::class.java).apply {
+                            putExtra("board_id", board.id)
+                            putExtra("board_name", board.name)
+                            putExtra("token", if (isTokenLoaded) currentToken else "")
+                        }
+                        context.startActivity(intent)
+                    }
+                },
+                menuExpanded = topMenuExpanded,
+                onMenuClick = { topMenuExpanded = true },
+                onMenuDismiss = { topMenuExpanded = false },
+                menuContent = {
+                    DropdownMenuItem(
+                        text = { Text("复制原文") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = {
+                            topMenuExpanded = false
+                            copyPostText()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("分享") },
+                        onClick = {
+                            topMenuExpanded = false
+                            showShareDialog = true
+                        }
+                    )
+                    if (canManagePost) {
+                        DropdownMenuItem(
+                            text = { Text("修改") },
+                            onClick = {
+                                topMenuExpanded = false
+                                postDetailState.post?.let { post ->
+                                    val intent = Intent(context, CreatePostActivity::class.java).apply {
+                                        putExtra("post_id", post.id)
+                                        putExtra("token", if (isTokenLoaded) currentToken else "")
+                                        putExtra("original_title", post.title)
+                                        putExtra("original_content", post.content)
+                                        putExtra("content_type", post.contentType)
+                                        putExtra("board_id", post.baId)
+                                        putExtra("board_name", postDetailState.board?.name ?: "")
+                                    }
+                                    postEditorLauncher.launch(intent)
+                                }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移动文章") },
+                            onClick = {
+                                topMenuExpanded = false
+                                showMoveBoardDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if ((postDetailState.post?.isSticky ?: 0) == 1) {
+                                        "取消置顶"
+                                    } else {
+                                        "置顶文章"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                topMenuExpanded = false
+                                val post = postDetailState.post ?: return@DropdownMenuItem
+                                val sticky = post.isSticky != 1
+                                viewModel.togglePostStickyWithToken(
+                                    postId = post.id,
+                                    sticky = sticky,
+                                    onSuccess = {
+                                        Toast.makeText(
+                                            context,
+                                            if (sticky) "置顶成功" else "已取消置顶",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onError = { msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                topMenuExpanded = false
+                                showDeleteDialog = true
+                            }
+                        )
+                    }
+                    // 举报：原来挂在作者行右边，改成 Oolong 版式后作者行只留名字和时间，
+                    // 举报挪到 ⋮ 菜单里 —— 它本来就是低频操作，不该占正文的视觉位置
+                    DropdownMenuItem(
+                        text = { Text("举报文章") },
+                        onClick = {
+                            topMenuExpanded = false
+                            postDetailState.post?.let { p ->
+                                reportTarget = CommunityReportTarget(
+                                    typ = 1,
+                                    targetId = p.id,
+                                    title = "举报文章"
+                                )
+                            }
+                        }
+                    )
+                },
+                modifier = topBarModifier
+            )
+        }
+
+        // 顶栏保留浮层：窄屏叠在整页上，宽屏叠在文章栏内。
         //
         // 之前在 Scaffold.topBar 里：Scaffold 会按顶栏的测量高度给内容让位，
         // 而这个高度是固定的（状态栏 + 56dp）。顶栏收起、玻璃也收缩之后，
@@ -2266,6 +2451,7 @@ fun PostDetailScreen(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
+                .then(if (embeddedCommentsVisible) Modifier.imePadding() else Modifier)
                 .nestedScroll(pageScroll.scrollWatcher),
             containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -2283,13 +2469,38 @@ fun PostDetailScreen(
                         showRewardDialog = true
                     },
                     onCommentInputToggle = {
-                        // 评论区现在在正文下面，点评论就滚过去（评论标题是第 2 项：0=正文，1=标题）
-                        coroutineScope.launch {
-                            if (sideBySideComments) commentPaneState.animateScrollToItem(0) else listState.animateScrollToItem(1)
+                        if (canShowSideBySideComments) {
+                            showCommentsSidebar = true
+                            coroutineScope.launch { commentPaneState.animateScrollToItem(0) }
+                        } else if (showCommentsInline) {
+                            coroutineScope.launch { listState.animateScrollToItem(1) }
                         }
                     },
-                    // 底部「评论」药丸：弹起输入面板
-                    onCommentCompose = { showCommentComposer = true },
+                    // 嵌入详情首次展开评论侧栏，此后复用同一个按钮发送侧栏草稿。
+                    onCommentCompose = {
+                        if (embeddedInSplitPane && canShowSideBySideComments) {
+                            if (!showCommentsSidebar) {
+                                showCommentsSidebar = true
+                            } else if (!commentSending && commentDraft.isNotBlank()) {
+                                viewModel.commentPostWithToken(
+                                    postId = postId,
+                                    content = commentDraft.trim(),
+                                    onSuccess = {
+                                        commentDraft = ""
+                                        coroutineScope.launch {
+                                            commentPaneState.animateScrollToItem(0)
+                                        }
+                                    }
+                                )
+                            }
+                        } else {
+                            showCommentComposer = true
+                        }
+                    },
+                    commentActionLabel = if (embeddedCommentsVisible) "发送" else "评论",
+                    commentActionIsSend = embeddedCommentsVisible,
+                    commentActionEnabled = !embeddedCommentsVisible || commentDraft.isNotBlank(),
+                    commentActionSending = embeddedCommentsVisible && commentSending,
                     isSearchExpanded = isSearchExpanded,
                     searchText = searchText,
                     searchResultCount = searchResultCount,
@@ -2384,25 +2595,25 @@ fun PostDetailScreen(
                             // ===== 评论区：直接接在文章下方 =====
                             // 「只看楼主」时只留楼主本人的评论。楼主就是这篇的作者，
                             // 楼层按总评论数减去原始下标计算，过滤后保留原楼层。
-                            item(key = "comment_header") {
-                                CommentSectionHeader(
-                                    total = if (commentListState.total > 0) {
-                                        commentListState.total
-                                    } else {
-                                        commentListState.comments.size
-                                    },
-                                    visibleCount = visibleComments.size,
-                                    filterLzOnly = filterLzOnly,
-                                    onFilterChange = { filterLzOnly = it },
-                                    // 这里以前没传，onCopyPost 的默认值是空 lambda，
-                                    // 所以标题栏那个「复制原文」点了没有任何反应
-                                    onCopyPost = copyPostText
-                                )
+                            if (showCommentsInline) {
+                                item(key = "comment_header") {
+                                    CommentSectionHeader(
+                                        total = if (commentListState.total > 0) {
+                                            commentListState.total
+                                        } else {
+                                            commentListState.comments.size
+                                        },
+                                        visibleCount = visibleComments.size,
+                                        filterLzOnly = filterLzOnly,
+                                        onFilterChange = { filterLzOnly = it },
+                                        // 这里以前没传，onCopyPost 的默认值是空 lambda，
+                                        // 所以标题栏那个「复制原文」点了没有任何反应
+                                        onCopyPost = copyPostText
+                                    )
+                                }
                             }
 
-                            // 评论输入不再常驻在列表里，改由底部「评论」药丸弹起面板。
-                            // 常驻输入条会一直占着一行，评论多时显得挤；弹起式还能给出
-                            // 更大的书写区。见 CommentComposerSheet。
+                            // 嵌入详情的输入框固定在评论侧栏底部，其余布局沿用评论弹窗。
 
                             if (visibleComments.isEmpty() && !commentListState.isLoading) {
                                 item(key = "comment_empty") {
@@ -2498,44 +2709,116 @@ fun PostDetailScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Row(Modifier.fillMaxSize()) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .weight(1f).fillMaxHeight()
-                                // 内容上报滚动位置给顶栏
-                                .pageScroll(listState),
-                            // 顶部留出顶栏高度，正文从栏下开始；
-                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住。
-                            //
-                            // **左右不留 padding**：评论区的楼层要自己控制左边距
-                            // （楼栏从 4dp 起、正文跟在楼栏后面），外层再给 16dp
-                            // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
-                            // 正文和评论标题各自加 16dp，各自负责自己的对齐。
-                            contentPadding = PaddingValues(
-                                // 顶栏现在是浮层，不再由 Scaffold 让位，
-                                // 所以这里自己让开「状态栏 + 顶栏行高」。
-                                // 用 statusBarTop 而不是固定的 56dp：
-                                // 刘海/挖孔屏的状态栏高度不一样，写死会让正文钻到栏里。
-                                top = statusBarTop + DetailBarRowHeight + 16.dp,
-                                bottom = 140.dp
-                            ),
-                            // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
-                            // 穿过 item 之间的空隙，线才不会一层一层断开
-                            verticalArrangement = Arrangement.spacedBy(FloorGap)
-                        ) {
-                            articleItems()
-                            if (!sideBySideComments) commentItems()
-                        }
-                        if (sideBySideComments) {
-                            androidx.compose.material3.VerticalDivider(Modifier.fillMaxHeight())
-                            LazyColumn(
-                                state = commentPaneState,
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                                contentPadding = PaddingValues(top = statusBarTop + DetailBarRowHeight + 16.dp, bottom = 140.dp),
-                                verticalArrangement = Arrangement.spacedBy(FloorGap),
-                                content = commentItems
-                            )
-                        }
+                            Box(Modifier.weight(1f).fillMaxHeight()) {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        // 内容上报滚动位置给顶栏
+                                        .pageScroll(listState),
+                                    // 顶部留出顶栏高度，正文从栏下开始；
+                                    // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住。
+                                    //
+                                    // **左右不留 padding**：评论区的楼层要自己控制左边距
+                                    // （楼栏从 4dp 起、正文跟在楼栏后面），外层再给 16dp
+                                    // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
+                                    // 正文和评论标题各自加 16dp，各自负责自己的对齐。
+                                    contentPadding = PaddingValues(
+                                        // 顶栏是浮层，由列表自己让开「状态栏 + 顶栏行高」。
+                                        top = statusBarTop + DetailBarRowHeight + 16.dp,
+                                        bottom = 140.dp
+                                    ),
+                                    // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
+                                    // 穿过 item 之间的空隙，线才不会一层一层断开
+                                    verticalArrangement = Arrangement.spacedBy(FloorGap)
+                                ) {
+                                    articleItems()
+                                    if (showCommentsInline) commentItems()
+                                }
+                                if (sideBySideComments) {
+                                    // 宽屏顶栏只叠在文章栏内，宽度跟随正文栏测量。
+                                    drawPostDetailTopBar(Modifier.align(Alignment.TopStart))
+                                }
+                            }
+                            if (sideBySideComments) {
+                                androidx.compose.material3.VerticalDivider(Modifier.fillMaxHeight())
+                                Column(
+                                    modifier = (if (embeddedInSplitPane) {
+                                        Modifier.width(embeddedCommentPaneWidth)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    })
+                                        .fillMaxHeight()
+                                        .windowInsetsPadding(WindowInsets.statusBars)
+                                ) {
+                                    CommentSectionHeader(
+                                        total = if (commentListState.total > 0) {
+                                            commentListState.total
+                                        } else {
+                                            commentListState.comments.size
+                                        },
+                                        visibleCount = visibleComments.size,
+                                        filterLzOnly = filterLzOnly,
+                                        onFilterChange = { filterLzOnly = it },
+                                        onCopyPost = copyPostText,
+                                        useTopBarHeight = true
+                                    )
+                                    LazyColumn(
+                                        state = commentPaneState,
+                                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                                        contentPadding = PaddingValues(
+                                            top = 16.dp,
+                                            bottom = if (embeddedInSplitPane) 16.dp else 140.dp
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(FloorGap),
+                                        content = commentItems
+                                    )
+                                    if (embeddedInSplitPane) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp)
+                                                .padding(bottom = paddingValues.calculateBottomPadding() + 12.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "发表评论",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                TextButton(
+                                                    onClick = closeCommentsSidebar,
+                                                    enabled = !commentSending
+                                                ) {
+                                                    Text("收起评论区")
+                                                }
+                                            }
+                                            commentListState.error?.let { error ->
+                                                Text(
+                                                    text = error,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                )
+                                            }
+                                            OutlinedTextField(
+                                                value = commentDraft,
+                                                onValueChange = { commentDraft = it },
+                                                enabled = !commentSending,
+                                                placeholder = { Text("输入评论后点击底部发送") },
+                                                minLines = 2,
+                                                maxLines = 4,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .focusRequester(commentInputFocusRequester)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     
@@ -2767,132 +3050,14 @@ fun PostDetailScreen(
         }
     }
 
-        // ===== 顶栏浮层 =====
-        // 放在 Box 里、Scaffold 之后：叠在内容之上，不参与内容让位。
-        // 跟分区页的 BoardTopBar 是同一个位置关系。
-        PostDetailTopBar(
-            boardName = postDetailState.board?.name
-                ?: postDetailState.post?.group?.name
-                ?: "文章详情",
-            boardAvatar = postDetailState.board?.avatar
-                ?: postDetailState.post?.group?.avatarUrl,
-            hiddenFraction = { detailAway.value },
-            onBackClick = onBackClick,
-            onBoardClick = {
-                postDetailState.board?.let { board ->
-                    val intent = Intent(context, BoardDetailActivity::class.java).apply {
-                        putExtra("board_id", board.id)
-                        putExtra("board_name", board.name)
-                        putExtra("token", if (isTokenLoaded) currentToken else "")
-                    }
-                    context.startActivity(intent)
-                }
-            },
-            menuExpanded = topMenuExpanded,
-            onMenuClick = { topMenuExpanded = true },
-            onMenuDismiss = { topMenuExpanded = false },
-            menuContent = {
-                DropdownMenuItem(
-                    text = { Text("复制原文") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = null
-                        )
-                    },
-                    onClick = {
-                        topMenuExpanded = false
-                        copyPostText()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("分享") },
-                    onClick = {
-                        topMenuExpanded = false
-                        showShareDialog = true
-                    }
-                )
-                if (canManagePost) {
-                    DropdownMenuItem(
-                        text = { Text("修改") },
-                        onClick = {
-                            topMenuExpanded = false
-                            postDetailState.post?.let { post ->
-                                val intent = Intent(context, CreatePostActivity::class.java).apply {
-                                    putExtra("post_id", post.id)
-                                    putExtra("token", if (isTokenLoaded) currentToken else "")
-                                    putExtra("original_title", post.title)
-                                    putExtra("original_content", post.content)
-                                    putExtra("content_type", post.contentType)
-                                    putExtra("board_id", post.baId)
-                                    putExtra("board_name", postDetailState.board?.name ?: "")
-                                }
-                                postEditorLauncher.launch(intent)
-                            }
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("移动文章") },
-                        onClick = {
-                            topMenuExpanded = false
-                            showMoveBoardDialog = true
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                if ((postDetailState.post?.isSticky ?: 0) == 1) {
-                                    "取消置顶"
-                                } else {
-                                    "置顶文章"
-                                }
-                            )
-                        },
-                        onClick = {
-                            topMenuExpanded = false
-                            val post = postDetailState.post ?: return@DropdownMenuItem
-                            val sticky = post.isSticky != 1
-                            viewModel.togglePostStickyWithToken(
-                                postId = post.id,
-                                sticky = sticky,
-                                onSuccess = {
-                                    Toast.makeText(
-                                        context,
-                                        if (sticky) "置顶成功" else "已取消置顶",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                onError = { msg ->
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("删除文章", color = MaterialTheme.colorScheme.error) },
-                        onClick = {
-                            topMenuExpanded = false
-                            showDeleteDialog = true
-                        }
-                    )
-                }
-                // 举报：原来挂在作者行右边，改成 Oolong 版式后作者行只留名字和时间，
-                // 举报挪到 ⋮ 菜单里 —— 它本来就是低频操作，不该占正文的视觉位置
-                DropdownMenuItem(
-                    text = { Text("举报文章") },
-                    onClick = {
-                        topMenuExpanded = false
-                        postDetailState.post?.let { p ->
-                            reportTarget = CommunityReportTarget(
-                                typ = 1,
-                                targetId = p.id,
-                                title = "举报文章"
-                            )
-                        }
-                    }
-                )
-            }
-        )
+        // 窄屏保留整页浮层；宽屏尚未加载正文时仍提供返回与菜单入口。
+        if (!sideBySideComments || postDetailState.post == null) {
+            drawPostDetailTopBar(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth(if (sideBySideComments) 0.5f else 1f)
+            )
+        }
     }
     }
 }

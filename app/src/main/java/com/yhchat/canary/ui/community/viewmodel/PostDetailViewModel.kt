@@ -297,12 +297,19 @@ class PostDetailViewModel @Inject constructor(
     /**
      * 使用TokenRepository评论文章
      */
-    fun commentPostWithToken(postId: Int, content: String, commentId: Int = 0) {
+    fun commentPostWithToken(
+        postId: Int,
+        content: String,
+        commentId: Int = 0,
+        onSuccess: () -> Unit = {}
+    ) {
+        if (_commentSending.value) return
+        _commentSending.value = true
+        _commentListState.update { it.copy(error = null) }
         viewModelScope.launch {
             // 整个「取 token → 发请求 → 重载列表」算一次发送，所以状态包在最外层。
             // 之前放在内层 commentPost 里，token 为 null 那条路不会把它置 true，
             // 面板上的发送键就会一直不转、看起来像没反应。
-            _commentSending.value = true
             try {
                 val token = tokenRepository.getTokenSync()
                 if (token != null) {
@@ -311,6 +318,7 @@ class PostDetailViewModel @Inject constructor(
                             // 重新加载评论列表。这里直接等它跑完再收状态，
                             // 免得面板刚关、列表还在转圈
                             loadCommentList(token, postId, 1)
+                            onSuccess()
                         }
                         .onFailure { error ->
                             _commentListState.value =

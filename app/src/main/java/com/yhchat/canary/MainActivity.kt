@@ -581,6 +581,12 @@ class MainActivity : BaseActivity() {
                                                             communityPanelType = "collect"
                                                             communityPrevType = ""
                                                         },
+                                                        onPostNavigate = { postId, postTitle ->
+                                                            communityPrevType = ""
+                                                            communityPostId = postId
+                                                            communityPostTitle = postTitle
+                                                            communityPanelType = "post"
+                                                        },
                                                         onBlockedUsersNavigate = {
                                                             communityPanelType = "blocked"
                                                             communityPrevType = ""
@@ -643,6 +649,7 @@ class MainActivity : BaseActivity() {
                                                                     postId = communityPostId,
                                                                     postTitle = communityPostTitle,
                                                                     viewModel = postDetailVm,
+                                                                    embeddedInSplitPane = true,
                                                                     onBackClick = {
                                                                         when (communityPrevType) {
                                                                             "board" -> {
