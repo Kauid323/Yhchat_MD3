@@ -432,7 +432,7 @@ fun MessageItem(
                             // 只接受向左（负方向），并限制在 [ -swipeRevealPx, 0 ]
                             val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, 0f)
                             if (candidate != swipeOffsetX.value) change.consume()
-                            swipeOffsetX.tryEmit(candidate)
+                            coroutineScope.launch { swipeOffsetX.snapTo(candidate) }
                         },
                         onDragEnd = {
                             coroutineScope.launch {
