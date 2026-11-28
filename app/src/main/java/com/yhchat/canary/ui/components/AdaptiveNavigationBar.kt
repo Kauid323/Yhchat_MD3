@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -107,6 +108,7 @@ private fun NavigationRailBar(
 ) {
     NavigationRail(
         modifier = modifier
+            .width(72.dp)
             .fillMaxHeight()
     ) {
         Spacer(Modifier.height(16.dp))
@@ -114,7 +116,8 @@ private fun NavigationRailBar(
         visibleItems.forEach { item ->
             NavigationRailItem(
                 icon = { NavItemIcon(item, item.id in badgeItemIds) },
-                label = { Text(item.title) },
+                label = { Text(item.title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                alwaysShowLabel = false,
                 selected = currentScreen == item.id,
                 onClick = {
                     onScreenChange(item.id)

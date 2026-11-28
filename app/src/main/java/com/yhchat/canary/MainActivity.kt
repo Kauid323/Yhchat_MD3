@@ -374,10 +374,11 @@ class MainActivity : BaseActivity() {
                         )
                         
                         // 主内容区域
-                        Box(modifier = Modifier
+                        BoxWithConstraints(modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                         ) {
+                        val listPaneWidth = (maxWidth * 0.28f).coerceIn(240.dp, 320.dp)
                         if (visibleNavItems.isNotEmpty()) {
                             val navItem = visibleNavItems.firstOrNull { it.id == currentPageItem } ?: visibleNavItems.first()
                             Box(
@@ -387,12 +388,12 @@ class MainActivity : BaseActivity() {
                             ) {
                                     when (navItem.id) {
                                         "conversation" -> {
-                                            // 大屏分屏：会话列表(1) + 聊天界面(2)
+                                            // 大屏分屏：受限宽度会话列表 + 自适应聊天界面
                                             Row(modifier = Modifier.fillMaxSize()) {
-                                                // 左侧：会话列表 (占1/3)
+                                                // 左侧：会话列表（240–320dp）
                                                 Box(
                                                     modifier = Modifier
-                                                        .weight(1f)
+                                                        .width(listPaneWidth)
                                                         .fillMaxHeight()
                                                 ) {
                                                     ConversationScreen(
@@ -424,10 +425,10 @@ class MainActivity : BaseActivity() {
                                                     color = MaterialTheme.colorScheme.outlineVariant
                                                 )
                                                 
-                                                // 右侧：聊天界面 (占2/3)
+                                                // 右侧：聊天界面使用剩余空间
                                                 Box(
                                                     modifier = Modifier
-                                                        .weight(2f)
+                                                        .weight(1f)
                                                         .fillMaxHeight()
                                                 ) {
                                                     if (splitChatId.isNotEmpty()) {
@@ -551,17 +552,17 @@ class MainActivity : BaseActivity() {
                                             }
                                         }
                                         "community" -> {
-                                            // 大屏分屏：社区标签页(1) + 详情面板(2)
+                                            // 大屏分屏：受限宽度社区列表 + 自适应详情面板
                                             Row(modifier = Modifier.fillMaxSize()) {
-                                                // 左侧：社区标签页 (占1/3)
+                                                // 左侧：社区列表（240–320dp）
                                                 Box(
                                                     modifier = Modifier
-                                                        .weight(1f)
+                                                        .width(listPaneWidth)
                                                         .fillMaxHeight()
                                                 ) {
                                                     CommunityTabScreen(
                                                         token = token,
-                                                        // 这一列只占屏宽的 1/3（weight(1f) + 右侧 weight(2f)），
+                                                        // 这一列最大320dp，
                                                         // 比 ModalDrawerSheet 的 360dp 下限还窄，抽屉收不干净。
                                                         // 大屏本身已经有常驻的 NavigationRail 负责导航，
                                                         // 这里的抽屉是多余的，直接关掉。
@@ -594,10 +595,10 @@ class MainActivity : BaseActivity() {
                                                     color = MaterialTheme.colorScheme.outlineVariant
                                                 )
                                                 
-                                                // 右侧：详情面板 (占2/3)
+                                                // 右侧：详情面板使用剩余空间
                                                 Box(
                                                     modifier = Modifier
-                                                        .weight(2f)
+                                                        .weight(1f)
                                                         .fillMaxHeight()
                                                 ) {
                                                     when (communityPanelType) {

@@ -370,7 +370,7 @@ private fun GroupInfoContent(
                             subtitle = if (isNoNotify) "已开启" else "已关闭",
                             checked = isNoNotify,
                             enabled = !isSettingNoNotify,
-                            showLoading = isSettingNoNotify,
+                            showLoading = false,
                             onCheckedChange = { checked ->
                                 if (isSettingNoNotify) return@GroupSwitchSettingsItem
                                 isNoNotify = checked

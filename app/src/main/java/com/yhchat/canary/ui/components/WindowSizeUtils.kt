@@ -16,5 +16,6 @@ internal fun isLargeScreenLayout(
     val shortestEdgeDp = min(configuration.screenWidthDp, configuration.screenHeightDp)
     if (shortestEdgeDp in 1..299) return false
 
-    return configuration.screenWidthDp >= 600
+    // 双栏需同时容纳导航轨、列表和正文；中等宽度仍用单栏。
+    return configuration.screenWidthDp >= 840
 }
