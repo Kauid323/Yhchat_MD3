@@ -151,7 +151,9 @@ fun ImageViewer(
     }
     // PagerState is outside Dialog's subcomposition. Its page count can update before
     // the Dialog recomposes; callbacks must not capture an older URL/key list.
-    val currentPages by rememberUpdatedState(keys.zip(sanitizedUrls))
+    var closingPages by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    var closingPicture by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val currentPages by rememberUpdatedState(closingPages ?: keys.zip(sanitizedUrls))
     val pagerState = rememberPagerState(initialPage = openingIndex, pageCount = { currentPages.size })
     val zoomedPages = remember { mutableStateMapOf<String, Boolean>() }
     val gestureLockedPages = remember { mutableStateMapOf<String, Boolean>() }
@@ -165,20 +167,27 @@ fun ImageViewer(
     var viewport by remember { mutableStateOf(Size.Zero) }
     val displayedRects = remember { mutableStateMapOf<String, Rect>() }
     val ownerWindow = androidx.compose.ui.platform.LocalView.current.windowToken
-    var near by remember { mutableStateOf(ViewerThumbnails.bounds(sanitizedUrls[openingIndex], ownerWindow)) }
+    var near by remember { mutableStateOf(currentPages.getOrNull(openingIndex)?.second?.let { ViewerThumbnails.bounds(it, ownerWindow) }) }
     var closingRect by remember { mutableStateOf<Rect?>(null) }
-    val currentKey = keys[pagerState.currentPage.coerceIn(0, keys.lastIndex)]
+    val currentPicture = closingPicture ?: currentPages.getOrNull(pagerState.currentPage)
+        ?: currentPages.firstOrNull() ?: return
+    val currentKey = currentPicture.first
     val zoomed = zoomedPages[currentKey] == true
     val locked = gestureLockedPages[currentKey] == true
-    val currentImageUrl = sanitizedUrls[pagerState.currentPage.coerceIn(0, sanitizedUrls.lastIndex)]
+    val currentImageUrl = currentPicture.second
     val dragFraction = (drag.y / viewerHeight.coerceAtLeast(1f)).coerceIn(0f, 1f)
     val dragScale = 1f - dragFraction * 0.45f
     val backdrop = progress.value * (1f - (dragFraction * 2).coerceIn(0f, 1f))
 
     fun close() {
         if (closing) return
-        near = ViewerThumbnails.bounds(currentImageUrl, ownerWindow)
-        val shown = displayedRects[currentKey]
+        val pages = currentPages.toList()
+        val picture = pages.getOrNull(pagerState.currentPage) ?: pages.firstOrNull()
+        if (picture == null) { latestDismiss(); return }
+        closingPages = pages
+        closingPicture = picture
+        near = ViewerThumbnails.bounds(picture.second, ownerWindow)
+        val shown = displayedRects[picture.first]
         closingRect = shown?.let {
             val center = Offset(viewport.width / 2f, viewport.height / 2f)
             Rect(center + (it.topLeft - center) * dragScale + drag,
@@ -207,8 +216,10 @@ fun ImageViewer(
         }
     }
     LaunchedEffect(Unit) { progress.animateTo(1f, tween(240)) }
-    LaunchedEffect(sanitizedUrls, openingIndex) {
-        if (pagerState.currentPage !in sanitizedUrls.indices) pagerState.scrollToPage(openingIndex)
+    LaunchedEffect(currentPages, openingIndex, closing) {
+        if (!closing && currentPages.isNotEmpty() && pagerState.currentPage !in currentPages.indices) {
+            pagerState.scrollToPage(openingIndex.coerceIn(0, currentPages.lastIndex))
+        }
     }
     val notifyPage by rememberUpdatedState(onPageSettled)
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress, keys, closing) {
@@ -294,10 +305,11 @@ fun ImageViewer(
                     verticalAlignment = Alignment.CenterVertically) {
                     ViewerAction(Icons.Default.Close, "关闭", onClick = { close() })
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.14f), contentColor = Color.White) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (isLoadingMore) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                            Text("${pagerState.currentPage + 1} / ${sanitizedUrls.size}", style = MaterialTheme.typography.labelLarge)
+                        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (isLoadingMore) CircularProgressIndicator(Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                            Text("${pagerState.currentPage + 1} / ${currentPages.size}",
+                                color = Color.White, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
@@ -318,7 +330,7 @@ fun ImageViewer(
             AnimatedVisibility(showChrome, enter = fadeIn(), exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 20.dp)) {
                 Surface(shape = CircleShape, color = Color(0xFF242424).copy(alpha = 0.92f), contentColor = Color.White) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ViewerAction(Icons.Default.Refresh, "重载") {
                             val pageKey = currentKey
                             refreshKeys[pageKey] = (refreshKeys[pageKey] ?: 0) + 1
@@ -339,9 +351,18 @@ fun ImageViewer(
 
 @Composable
 private fun ViewerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, colors = IconButtonDefaults.iconButtonColors(
-        containerColor = Color.White.copy(alpha = 0.12f), contentColor = Color.White)) {
-        Icon(icon, label)
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 36.dp
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(36.dp),
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = Color.White.copy(alpha = 0.12f), contentColor = Color.White
+            )
+        ) {
+            Icon(icon, label, modifier = Modifier.size(18.dp))
+        }
     }
 }
 @Composable

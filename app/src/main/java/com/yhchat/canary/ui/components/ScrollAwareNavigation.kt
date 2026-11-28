@@ -25,7 +25,10 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
  */
 @Composable
 fun rememberScrollAwareNavigationState(): ScrollAwareNavigationState {
-    return remember { ScrollAwareNavigationState() }
+    val autoHideEnabled by rememberBooleanPreference("display_settings", "navigation_auto_hide", true)
+    val state = remember { ScrollAwareNavigationState() }
+    androidx.compose.runtime.SideEffect { state.updateAutoHideEnabled(autoHideEnabled) }
+    return state
 }
 
 /**
@@ -35,6 +38,14 @@ class ScrollAwareNavigationState {
     private val _isVisible = mutableStateOf(true)
     val isVisible: Boolean by _isVisible
     
+    private var autoHideEnabled = true
+
+    fun updateAutoHideEnabled(enabled: Boolean) {
+        if (autoHideEnabled == enabled) return
+        autoHideEnabled = enabled
+        show()
+    }
+
     // 累积滚动距离
     private var accumulatedScroll = 0f
     
@@ -47,6 +58,7 @@ class ScrollAwareNavigationState {
      */
     fun nestedScrollConnection() = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (!autoHideEnabled) return Offset.Zero
             val delta = available.y
             
             // 根据滚动方向累积或重置
@@ -80,6 +92,7 @@ class ScrollAwareNavigationState {
      * @param delta 滚动增量，正值表示向上滚动（往顶部翻），负值表示向下滚动（往底部翻）
      */
     fun onScroll(delta: Int) {
+        if (!autoHideEnabled) return
         // 根据滚动方向累积或重置
         if (delta > 0 && accumulatedScroll < 0) {
             accumulatedScroll = 0f

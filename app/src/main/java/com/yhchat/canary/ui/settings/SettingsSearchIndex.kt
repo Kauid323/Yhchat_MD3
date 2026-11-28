@@ -467,6 +467,16 @@ internal val SettingsSearchIndex: List<SettingsEntry> = buildList {
         )
     )
 
+    add(
+        SettingsEntry(
+            title = "底部导航栏自动收起",
+            section = SettingsSection.Display,
+            page = null,
+            keywords = listOf("底栏", "导航栏", "自动隐藏", "自动收起", "滚动", "始终显示"),
+            scrollKey = SettingsSection.Display
+        )
+    )
+
     // ==================== 一级页：主题设置 ====================
     add(
         SettingsEntry(

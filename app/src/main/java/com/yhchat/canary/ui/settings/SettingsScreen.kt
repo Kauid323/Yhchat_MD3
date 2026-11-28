@@ -971,6 +971,20 @@ private fun DisplaySettingsGroup(
                 )
             },
             {
+                val autoHideNavigation by rememberBooleanPreference(
+                    "display_settings", "navigation_auto_hide", true
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Default.KeyboardArrowDown,
+                    title = "底部导航栏自动收起",
+                    subtitle = if (autoHideNavigation) "滚动时自动收起主界面底栏" else "主界面底栏始终显示",
+                    checked = autoHideNavigation,
+                    onCheckedChange = { enabled ->
+                        prefs.edit().putBoolean("navigation_auto_hide", enabled).apply()
+                    }
+                )
+            },
+            {
                 val previewLines by com.yhchat.canary.ui.components.rememberIntPreference(
                     "display_settings", "conversation_preview_lines", 1
                 )
