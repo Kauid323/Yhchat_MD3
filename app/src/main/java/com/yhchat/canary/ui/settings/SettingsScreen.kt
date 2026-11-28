@@ -291,11 +291,11 @@ fun SettingsScreen(
                         {
                             SettingsSwitchItem(
                                 icon = Icons.Default.MoreVert,
-                                title = "聊天上下文弹窗",
+                                title = "聊天消息下拉菜单",
                                 subtitle = if (enableChatContextMenu) {
-                                    "长按消息时显示默认消息操作弹窗"
+                                    "单击气泡显示分组操作菜单，长按文章可预览"
                                 } else {
-                                    "禁用长按消息的默认消息操作弹窗"
+                                    "已关闭气泡单击菜单，长按消息仍可使用自定义操作"
                                 },
                                 checked = enableChatContextMenu,
                                 onCheckedChange = { checked ->

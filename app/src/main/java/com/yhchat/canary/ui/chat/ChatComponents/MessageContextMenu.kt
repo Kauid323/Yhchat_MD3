@@ -5,17 +5,14 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Block
@@ -25,18 +22,26 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.yhchat.canary.data.model.ChatMessage
 import com.yhchat.canary.service.AudioCacheManager
@@ -46,9 +51,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
 
-/**
- * 消息上下文菜单
- */
+/** 气泡锚定的消息下拉菜单；子菜单在同一浮层内展开，返回时先收起子菜单。 */
 @Composable
 fun MessageContextMenu(
     message: ChatMessage,
@@ -63,208 +66,126 @@ fun MessageContextMenu(
     onAddExpression: (() -> Unit)? = null,
     onBlockUser: (() -> Unit)? = null,
     onSaveAudio: (() -> Unit)? = null,
-    onAddToPlaylist: (() -> Unit)? = null,   // 加入播放列表
-    onSpeechToText: (() -> Unit)? = null,  // 语音转文字
-    onPlusOne: (() -> Unit)? = null,  // +1 复制发送同样消息
-    onFavorite: (() -> Unit)? = null,  // 收藏消息到本地
-    onMultiSelect: (() -> Unit)? = null,  // 多选
+    onAddToPlaylist: (() -> Unit)? = null,
+    onSpeechToText: (() -> Unit)? = null,
+    onPlusOne: (() -> Unit)? = null,
+    onFavorite: (() -> Unit)? = null,
+    onMultiSelect: (() -> Unit)? = null,
     onOpenInInternalBrowser: (() -> Unit)? = null,
-    onExternalShare: (() -> Unit)? = null
+    onExternalShare: (() -> Unit)? = null,
+    expanded: Boolean = true
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "消息操作",
-                style = MaterialTheme.typography.titleMedium
+    var openedSection by remember(message.msgId, expanded) { mutableStateOf<String?>(null) }
+    val primary = MaterialTheme.colorScheme.primary
+    val error = MaterialTheme.colorScheme.error
+    val items = buildList {
+        add(MessageMenuEntry("引用", Icons.Default.FormatQuote, onQuote))
+        add(MessageMenuEntry("转发", Icons.AutoMirrored.Filled.Send, onForward))
+        add(
+            MessageMenuEntry(
+                label = "复制与分享",
+                icon = Icons.Default.ContentCopy,
+                children = buildList {
+                    add(MessageMenuEntry("复制全部", Icons.Default.ContentCopy, onCopyAll))
+                    if (message.contentType in listOf(1, 3, 8, 14)) {
+                        add(MessageMenuEntry("自由复制", Icons.Default.ContentPaste, onFreeCopy))
+                    }
+                    onExternalShare?.let { add(MessageMenuEntry("外部分享", Icons.Default.Share, it)) }
+                }
             )
-        },
-        text = {
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // 复制全部
-                ContextMenuAction(
-                    onClick = onCopyAll,
-                    icon = Icons.Default.ContentCopy,
-                    text = "复制全部"
-                )
-
-                // 自由复制（仅对文本、Markdown、HTML消息显示）
-                if (message.contentType in listOf(1, 3, 8)) {
-                    ContextMenuAction(
-                        onClick = onFreeCopy,
-                        icon = Icons.Default.ContentPaste,
-                        text = "自由复制"
-                    )
-                }
-
-                if (message.contentType == 8 && onOpenInInternalBrowser != null) {
-                    ContextMenuAction(
-                        onClick = onOpenInInternalBrowser,
-                        icon = Icons.Default.Language,
-                        text = "在内置浏览器中打开"
-                    )
-                }
-                
-                // 引用
-                ContextMenuAction(
-                    onClick = onQuote,
-                    icon = Icons.Default.FormatQuote,
-                    text = "引用"
-                )
-
-                ContextMenuAction(
-                    onClick = onForward,
-                    icon = Icons.AutoMirrored.Filled.Send,
-                    text = "转发"
-                )
-
-                if (onExternalShare != null) {
-                    ContextMenuAction(
-                        onClick = onExternalShare,
-                        icon = Icons.Default.Share,
-                        text = "外部分享"
-                    )
-                }
-                
-                // 编辑消息（仅对文本、Markdown、HTML、A2UI消息显示）
-                if (onEdit != null && message.contentType in listOf(1, 3, 8, 14)) {
-                    ContextMenuAction(
-                        onClick = onEdit,
-                        icon = Icons.Default.Edit,
-                        text = "编辑"
-                    )
-                }
-                
-                // 添加表情（仅对消息类型7显示）
-                if (onAddExpression != null && message.contentType == 7) {
-                    ContextMenuAction(
-                        onClick = onAddExpression,
-                        icon = Icons.Default.AddCircle,
-                        text = "添加表情"
-                    )
-                }
-
-                // 保存语音（仅对语音消息显示）
-                if (onSaveAudio != null && message.contentType == 11) {
-                    ContextMenuAction(
-                        onClick = onSaveAudio,
-                        icon = Icons.Default.Download,
-                        text = "保存语音"
-                    )
-                }
-
-                // 加入播放列表（仅对语音消息显示）
-                if (onAddToPlaylist != null && message.contentType == 11) {
-                    ContextMenuAction(
-                        onClick = onAddToPlaylist,
-                        icon = Icons.Default.AddCircle,
-                        text = "加入播放列表"
-                    )
-                }
-                
-                // 语音转文字（仅对语音消息显示）
-                if (onSpeechToText != null && message.contentType == 11) {
-                    ContextMenuAction(
-                        onClick = onSpeechToText,
-                        icon = Icons.Default.Edit,
-                        text = "语音转文字"
-                    )
-                }
-                
-                // +1 复制发送同样消息
-                if (onPlusOne != null) {
-                    ContextMenuAction(
-                        onClick = onPlusOne,
-                        icon = Icons.Default.AddCircle,
-                        text = "+1",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                if (onFavorite != null) {
-                    ContextMenuAction(
-                        onClick = onFavorite,
-                        icon = Icons.Default.Star,
-                        text = "收藏"
-                    )
-                }
-                
-                // 多选
-                if (onMultiSelect != null) {
-                    ContextMenuAction(
-                        onClick = onMultiSelect,
-                        icon = Icons.Default.CheckBox,
-                        text = "多选"
-                    )
-                }
-                
-                // 屏蔽用户
-                if (onBlockUser != null) {
-                    ContextMenuAction(
-                        onClick = onBlockUser,
-                        icon = Icons.Default.Block,
-                        text = "屏蔽用户",
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-                
-                // 撤回（危险操作）
-                if (showRecall) {
-                    ContextMenuAction(
-                        onClick = {
-                            onRecall()
-                        },
-                        icon = Icons.Default.Delete,
-                        text = "撤回消息",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+        )
+        val managementActions = buildList {
+            onPlusOne?.let { add(MessageMenuEntry("+1", Icons.Default.AddCircle, it, primary)) }
+            onFavorite?.let { add(MessageMenuEntry("收藏", Icons.Default.Star, it)) }
+            onMultiSelect?.let { add(MessageMenuEntry("多选", Icons.Default.CheckBox, it)) }
+            if (message.contentType in listOf(1, 3, 8, 14)) {
+                onEdit?.let { add(MessageMenuEntry("编辑", Icons.Default.Edit, it)) }
+            }
+            if (showRecall) add(MessageMenuEntry("撤回消息", Icons.Default.Delete, onRecall, error))
+        }
+        if (managementActions.isNotEmpty()) {
+            add(MessageMenuEntry("消息管理", Icons.Default.MoreHoriz, children = managementActions))
+        }
+        val contentActions = buildList {
+            if (message.contentType == 8) {
+                onOpenInInternalBrowser?.let {
+                    add(MessageMenuEntry("在内置浏览器中打开", Icons.Default.Language, it))
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
+            if (message.contentType == 7) {
+                onAddExpression?.let { add(MessageMenuEntry("添加表情", Icons.Default.AddCircle, it)) }
+            }
+            onBlockUser?.let { add(MessageMenuEntry("屏蔽用户", Icons.Default.Block, it, error)) }
+        }
+        if (contentActions.isNotEmpty()) {
+            add(MessageMenuEntry("内容与用户", Icons.Default.MoreHoriz, children = contentActions))
+        }
+        if (message.contentType == 11) {
+            val audioActions = buildList {
+                onSaveAudio?.let { add(MessageMenuEntry("保存语音", Icons.Default.Download, it)) }
+                onAddToPlaylist?.let { add(MessageMenuEntry("加入播放列表", Icons.Default.QueueMusic, it)) }
+                onSpeechToText?.let { add(MessageMenuEntry("语音转文字", Icons.Default.Edit, it)) }
+            }
+            if (audioActions.isNotEmpty()) {
+                add(MessageMenuEntry("语音操作", Icons.Default.QueueMusic, children = audioActions))
             }
         }
-    )
-}
+    }
+    val section = items.firstOrNull { it.label == openedSection }
 
-@Composable
-private fun ContextMenuAction(
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    modifier: Modifier = Modifier,
-    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
-) {
-    TextButton(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = {
+            if (openedSection != null) openedSection = null else onDismiss()
+        },
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .widthIn(min = 224.dp, max = 280.dp)
+                .animateContentSize(tween(180))
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                modifier = Modifier.size(20.dp),
-                tint = tint
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(text, color = tint)
+            if (section != null) {
+                DropdownMenuItem(
+                    text = { Text(section.label, style = MaterialTheme.typography.titleSmall) },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回上一级")
+                    },
+                    onClick = { openedSection = null }
+                )
+                HorizontalDivider()
+            }
+            (section?.children ?: items).forEach { entry ->
+                val tint = entry.tint ?: MaterialTheme.colorScheme.onSurface
+                DropdownMenuItem(
+                    text = { Text(entry.label, color = tint) },
+                    leadingIcon = { Icon(entry.icon, contentDescription = null, tint = tint) },
+                    trailingIcon = if (entry.children.isNotEmpty()) {
+                        {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "展开子菜单")
+                        }
+                    } else null,
+                    onClick = {
+                        if (entry.children.isNotEmpty()) {
+                            openedSection = entry.label
+                        } else {
+                            onDismiss()
+                            entry.action?.invoke()
+                        }
+                    }
+                )
+            }
         }
     }
 }
+
+private data class MessageMenuEntry(
+    val label: String,
+    val icon: ImageVector,
+    val action: (() -> Unit)? = null,
+    val tint: Color? = null,
+    val children: List<MessageMenuEntry> = emptyList()
+)
 
 /**
  * 保存语音到本地

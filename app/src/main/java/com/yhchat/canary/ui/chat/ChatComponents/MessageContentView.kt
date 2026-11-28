@@ -125,7 +125,11 @@ fun MessageContentView(
     onMultiSelect: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     /** 点击 `.splitfiles` 分块清单文件时触发（fileUrl, fileName） */
-    onSplitFileClick: (String, String) -> Unit = { _, _ -> }
+    onSplitFileClick: (String, String) -> Unit = { _, _ -> },
+    /** 文章卡片单击回调；为空时继续打开文章详情。 */
+    onMessageClick: (() -> Unit)? = null,
+    /** 多选等模式可关闭文章卡片自身的单击/长按响应，把手势留给父级。 */
+    enablePostPreview: Boolean = true
 ) {
     val textColor = if (isMyMessage) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -643,7 +647,9 @@ fun MessageContentView(
                     postContent = content.postContent,
                     postContentType = content.postContentType,
                     textColor = textColor,
-                    isMyMessage = isMyMessage
+                    isMyMessage = isMyMessage,
+                    onClick = onMessageClick,
+                    enablePostPreview = enablePostPreview
                 )
             }
             7 -> {
@@ -992,6 +998,7 @@ fun MessageContentView(
 /**
  * 文章消息视图
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PostMessageView(
     postId: String?,
@@ -999,9 +1006,20 @@ private fun PostMessageView(
     postContent: String?,
     postContentType: String?,
     textColor: Color,
-    isMyMessage: Boolean
+    isMyMessage: Boolean,
+    onClick: (() -> Unit)?,
+    enablePostPreview: Boolean
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showPostPreview by remember(postId) { mutableStateOf(false) }
+
+    val openPostDetail = {
+        val intent = Intent(context, PostDetailActivity::class.java).apply {
+            putExtra("post_id", postId?.toIntOrNull() ?: 0)
+            putExtra("post_title", postTitle ?: "文章详情")
+        }
+        context.startActivity(intent)
+    }
 
     if (postId.isNullOrEmpty()) {
         Text(
@@ -1012,33 +1030,39 @@ private fun PostMessageView(
         return
     }
 
-    // 文章卡片
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                // 点击跳转到文章详情
-                val intent = Intent(context, PostDetailActivity::class.java).apply {
-                    putExtra("post_id", postId.toIntOrNull() ?: 0)
-                    putExtra("post_title", postTitle ?: "文章详情")
-                }
-                context.startActivity(intent)
+    val cardShape = RoundedCornerShape(8.dp)
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .border(
+            width = 1.dp,
+            color = if (isMyMessage) {
+                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            },
+            shape = cardShape
+        )
+        .then(
+            if (enablePostPreview) {
+                Modifier.combinedClickable(
+                    onClick = { if (onClick != null) onClick() else openPostDetail() },
+                    // This card owns the long press; deliberately do not forward it to the
+                    // message context-menu callback.
+                    onLongClick = { showPostPreview = true }
+                )
+            } else {
+                // In multi-select mode the parent owns all article-card gestures.
+                Modifier
             }
-            .border(
-                width = 1.dp,
-                color = if (isMyMessage) {
-                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
-                } else {
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                },
-                shape = RoundedCornerShape(8.dp)
-            ),
+        )
+
+    Surface(
+        modifier = cardModifier,
         color = Color.Transparent
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
         ) {
-            // 文章图标和标题 - 支持文本选择
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -1059,38 +1083,24 @@ private fun PostMessageView(
                 )
             }
 
-            // 文章内容预览 - 支持文本选择
             if (!postContent.isNullOrEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
-
-                when (postContentType) {
-                    "2" -> {
-                        // Markdown内容预览
-                        Text(
-                            text = postContent.take(100) + if (postContent.length > 100) "..." else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.8f),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    else -> {
-                        // 普通文本内容预览
-                        Text(
-                            text = postContent.take(100) + if (postContent.length > 100) "..." else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.8f),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                Text(
+                    text = postContent.take(100) + if (postContent.length > 100) "..." else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textColor.copy(alpha = 0.8f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            // 查看详情提示
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "点击查看文章详情 →",
+                text = when {
+                    !enablePostPreview -> "点击选择消息"
+                    onClick != null -> "点击查看消息操作 · 长按预览文章"
+                    else -> "点击查看文章详情 · 长按预览文章"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isMyMessage) {
                     MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
@@ -1100,6 +1110,20 @@ private fun PostMessageView(
                 fontWeight = FontWeight.Medium
             )
         }
+    }
+
+    if (showPostPreview && enablePostPreview) {
+        MessagePostPreview(
+            postId = postId,
+            fallbackTitle = postTitle.orEmpty(),
+            fallbackContent = postContent.orEmpty(),
+            fallbackContentType = postContentType?.toIntOrNull() ?: 1,
+            onDismiss = { showPostPreview = false },
+            onOpenPost = {
+                showPostPreview = false
+                openPostDetail()
+            }
+        )
     }
 }
 

@@ -57,10 +57,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.indication
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -137,7 +133,7 @@ fun MessageItem(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-    var showContextMenuDialog by remember { mutableStateOf(false) }
+    var showMessageDropdown by remember(message.msgId) { mutableStateOf(false) }
 
     var showFreeCopyDialog by remember { mutableStateOf(false) }
     var freeCopyText by remember { mutableStateOf("") }
@@ -277,19 +273,17 @@ fun MessageItem(
         onSpeechToText = speechToTextAction,
         onExternalShare = externalShareMessage
     )
-    var lastActionMenuOpenAt by remember(message.msgId) { mutableStateOf(0L) }
     val openMessageActions: () -> Unit = {
         if (!isMultiSelectMode) {
-            val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastActionMenuOpenAt >= 350L) {
-                lastActionMenuOpenAt = now
-                if (enableContextMenu) {
-                    showContextMenuDialog = true
-                } else {
-                    showCustomActionContainer()
-                }
+            if (enableContextMenu) {
+                showMessageDropdown = true
+            } else {
+                showCustomActionContainer()
             }
         }
+    }
+    LaunchedEffect(isMultiSelectMode, enableContextMenu) {
+        if (isMultiSelectMode || !enableContextMenu) showMessageDropdown = false
     }
 
     // 滑动引用：水平位移状态。左右滑动分别露出对应方向的引用提示。
@@ -312,7 +306,6 @@ fun MessageItem(
     }
 
     var tagsExpanded by remember(message.msgId) { mutableStateOf(false) }
-    val rowInteractionSource = remember(message.msgId) { MutableInteractionSource() }
 
     // 滑动引用的阈值：露出约 72dp 的引用动作区即视为触发。
     val swipeRevealPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
@@ -359,35 +352,14 @@ fun MessageItem(
                         RoundedCornerShape(8.dp)
                     ) else Modifier
                 )
-            // Do not handle normal taps here, otherwise it will intercept inner clickable content
-            // (e.g. HTML <a> buttons). Long-press is implemented via pointerInput to open the
-            // context menu without consuming regular clicks.
-            .then(
-                if (isMultiSelectMode) {
-                    Modifier.combinedClickable(onClick = { onSelectionToggle?.invoke() })
-                } else {
-                    Modifier
-                }
-            )
-            .indication(rowInteractionSource, LocalIndication.current)
-            .pointerInput(message.msgId, isMultiSelectMode, openMessageActions) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val press = PressInteraction.Press(down.position)
-                    rowInteractionSource.tryEmit(press)
-                    val longPress = awaitLongPressOrCancellation(down.id)
-                    if (longPress != null) {
-                        openMessageActions()
-                    }
-                    val up = waitForUpOrCancellation()
-                    if (up == null) {
-                        rowInteractionSource.tryEmit(PressInteraction.Cancel(press))
+                .then(
+                    if (isMultiSelectMode) {
+                        Modifier.combinedClickable(onClick = { onSelectionToggle?.invoke() })
                     } else {
-                        rowInteractionSource.tryEmit(PressInteraction.Release(press))
+                        Modifier
                     }
-                }
-            }
-            .padding(end = if (isMyMessage) 8.dp else 0.dp, start = if (isMyMessage) 0.dp else 8.dp),
+                )
+                .padding(end = if (isMyMessage) 8.dp else 0.dp, start = if (isMyMessage) 0.dp else 8.dp),
         horizontalArrangement = if (isMyMessage) Arrangement.End else Arrangement.Start
     ) {
         if (!isMyMessage) {
@@ -481,6 +453,7 @@ fun MessageItem(
                 MaterialTheme.colorScheme.surfaceVariant
             }
 
+            Box(modifier = Modifier.wrapContentWidth()) {
             Surface(
                 modifier = Modifier
                     .wrapContentWidth()
@@ -496,18 +469,13 @@ fun MessageItem(
                         }
                     )
                     .clip(bubbleShape)
-                    // Long-press anywhere inside the bubble (including padding/empty area) to open context menu.
-                    // This does not handle normal taps, so inner links/buttons keep working.
-                    .pointerInput(message.msgId, isMultiSelectMode, openMessageActions) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val longPress = awaitLongPressOrCancellation(down.id)
-                            if (longPress != null) {
-                                openMessageActions()
-                            }
-                            waitForUpOrCancellation()
-                        }
-                    },
+                    .combinedClickable(
+                        enabled = !isMultiSelectMode,
+                        onClickLabel = if (enableContextMenu) "消息操作" else null,
+                        onClick = { if (enableContextMenu) openMessageActions() },
+                        onLongClickLabel = "消息操作",
+                        onLongClick = if (message.contentType == 6) null else openMessageActions
+                    ),
                 color = bubbleColor,
                 shape = bubbleShape,
                 shadowElevation = if (isMyMessage) 0.dp else 1.dp
@@ -571,9 +539,42 @@ fun MessageItem(
                         onFavorite = { _ -> favoriteMessage() },
                         onMultiSelect = onMultiSelect,
                         isStreaming = isStreaming,
-                        onSplitFileClick = onSplitFileClick
+                        onSplitFileClick = onSplitFileClick,
+                        onMessageClick = if (enableContextMenu) openMessageActions else null,
+                        enablePostPreview = !isMultiSelectMode
                     )
                 }
+            }
+
+            MessageContextMenu(
+                expanded = showMessageDropdown && enableContextMenu && !isMultiSelectMode,
+                message = message,
+                showRecall = showRecall,
+                onDismiss = { showMessageDropdown = false },
+                onCopyAll = copyAllMessage,
+                onFreeCopy = {
+                    freeCopyText = messageOperationText
+                    showFreeCopyDialog = true
+                },
+                onQuote = quoteMessage,
+                onForward = { onForward(message) },
+                onRecall = { onRecall(message.msgId) },
+                onEdit = if (message.contentType in listOf(1, 3, 8, 14) && isMyMessage) {
+                    { onEdit(message) }
+                } else null,
+                onAddExpression = addExpressionAction,
+                onBlockUser = if (!isMyMessage) {
+                    { onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl) }
+                } else null,
+                onSaveAudio = saveAudioAction,
+                onAddToPlaylist = addToPlaylistAction,
+                onSpeechToText = speechToTextAction,
+                onPlusOne = { onPlusOne(message) },
+                onFavorite = favoriteMessage,
+                onMultiSelect = onMultiSelect,
+                onOpenInInternalBrowser = if (message.contentType == 8) openHtmlInInternalBrowser else null,
+                onExternalShare = externalShareMessage
+            )
             }
 
             Row(
@@ -665,94 +666,6 @@ fun MessageItem(
         }
     }
 
-
-
-    if (showContextMenuDialog) {
-        MessageContextMenu(
-            message = message,
-            showRecall = showRecall,
-            onDismiss = { showContextMenuDialog = false },
-            onCopyAll = {
-                copyAllMessage()
-                showContextMenuDialog = false
-            },
-            onFreeCopy = {
-                freeCopyText = messageOperationText
-                showContextMenuDialog = false
-                showFreeCopyDialog = true
-            },
-            onQuote = {
-                quoteMessage()
-                showContextMenuDialog = false
-            },
-            onForward = {
-                onForward(message)
-                showContextMenuDialog = false
-            },
-            onRecall = {
-                onRecall(message.msgId)
-                showContextMenuDialog = false
-            },
-            onEdit = if (message.contentType in listOf(1, 3, 8, 14) && isMyMessage) {
-                {
-                    onEdit(message)
-                    showContextMenuDialog = false
-                }
-            } else null,
-            onAddExpression = addExpressionAction?.let { action ->
-                {
-                    action()
-                    showContextMenuDialog = false
-                }
-            },
-            onBlockUser = if (!isMyMessage) {
-                {
-                    onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl)
-                    showContextMenuDialog = false
-                }
-            } else null,
-            onSaveAudio = saveAudioAction?.let { action ->
-                {
-                    action()
-                    showContextMenuDialog = false
-                }
-            },
-            onAddToPlaylist = addToPlaylistAction?.let { action ->
-                {
-                    action()
-                    showContextMenuDialog = false
-                }
-            },
-            onSpeechToText = speechToTextAction?.let { action ->
-                {
-                    action()
-                    showContextMenuDialog = false
-                }
-            },
-            onPlusOne = {
-                onPlusOne(message)
-                showContextMenuDialog = false
-            },
-            onFavorite = {
-                favoriteMessage()
-                showContextMenuDialog = false
-            },
-            onMultiSelect = {
-                onMultiSelect?.invoke()
-                showContextMenuDialog = false
-            },
-            onOpenInInternalBrowser = if (message.contentType == 8) {
-                {
-                    openHtmlInInternalBrowser()
-                    showContextMenuDialog = false
-                }
-            } else null,
-            onExternalShare = {
-                externalShareMessage()
-                showContextMenuDialog = false
-            }
-        )
-    }
 
     if (showFreeCopyDialog) {
         AlertDialog(
