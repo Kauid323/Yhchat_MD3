@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -674,14 +675,23 @@ fun ChatScreen(
             }
         }
 
-        // 消息列表（占据中间可用空间）
+        // 消息列表和底部控件共用一个区域：列表铺满，控件叠放在列表上方。
+        var bottomOverlayHeightPx by remember { mutableIntStateOf(0) }
+        val bottomOverlayPadding = with(androidx.compose.ui.platform.LocalDensity.current) {
+            bottomOverlayHeightPx.toDp()
+        } + 8.dp
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+        // 消息列表（铺满中间区域，底部操作栏以透明层覆盖）
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = { viewModel.refreshLatestMessages() },
             state = rememberPullToRefreshState(),
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .clipToBounds()
         ) {
             if (uiState.isLoading && messages.isEmpty()) {
@@ -700,7 +710,12 @@ fun ChatScreen(
                 LazyColumn(
                     state = listState,
                     modifier = messageListModifier,
-                    contentPadding = PaddingValues(8.dp),
+                    contentPadding = PaddingValues(
+                        start = 8.dp,
+                        top = 8.dp,
+                        end = 8.dp,
+                        bottom = bottomOverlayPadding
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     reverseLayout = true // 最新消息在底部
                 ) {
@@ -1133,7 +1148,12 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .wrapContentSize(Alignment.BottomEnd)
-                    .padding(16.dp)
+                    .padding(
+                        start = 16.dp,
+                        top = 16.dp,
+                        end = 16.dp,
+                        bottom = bottomOverlayPadding + 16.dp
+                    )
             ) {
                 FloatingActionButton(
                     onClick = {
@@ -1155,6 +1175,12 @@ fun ChatScreen(
             }
         }
 
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { bottomOverlayHeightPx = it.height }
+        ) {
         // 菜单按钮栏（仅群聊显示，且设置允许）
         val showMenuButtons by rememberBooleanPreference("chat_settings", "show_menu_buttons", true)
         if (chatType == 2 && uiState.menuButtons.isNotEmpty() && showMenuButtons) {
@@ -1269,7 +1295,6 @@ fun ChatScreen(
                     androidx.compose.foundation.layout.Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         androidx.compose.foundation.layout.Row(
@@ -1567,6 +1592,8 @@ fun ChatScreen(
                     )
             )
         }  // 闭合else（输入模式）
+        }  // 闭合底部悬浮控件列
+        }  // 闭合消息列表叠层区域
         }  // 闭合Column
         }  // 闭合Surface
     }  // 闭合Box（聊天背景容器）

@@ -550,7 +550,8 @@ private fun MikepenzMarkdownText(
         linkTextSpanStyle = typography.textLink,
         codeSpanStyle = typography.inlineCode.toSpanStyle(),
         referenceLinkHandler = referenceLinkHandler,
-        uriHandler = uriHandler
+        uriHandler = uriHandler,
+        highlightSpanStyle = SpanStyle(background = MaterialTheme.colorScheme.tertiaryContainer)
     )
     val searchQuery = LocalMarkdownSearchQuery.current
     val highlightColor = MaterialTheme.colorScheme.tertiaryContainer

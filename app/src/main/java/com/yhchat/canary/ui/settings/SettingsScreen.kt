@@ -308,11 +308,11 @@ fun SettingsScreen(
                         {
                             SettingsSwitchItem(
                                 icon = Icons.Default.FormatQuote,
-                                title = "左滑引用消息",
+                                title = "滑动引用消息",
                                 subtitle = if (enableSwipeToQuote) {
-                                    "在消息内容区向左滑动即可引用该消息（头像不触发）"
+                                    "在消息内容区向左或向右滑动即可引用该消息（头像不触发）"
                                 } else {
-                                    "已关闭左滑引用消息"
+                                    "已关闭滑动引用消息"
                                 },
                                 checked = enableSwipeToQuote,
                                 onCheckedChange = { checked ->

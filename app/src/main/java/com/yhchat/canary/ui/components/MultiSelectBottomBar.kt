@@ -46,8 +46,8 @@ fun MultiSelectBottomBar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-        shadowElevation = 2.dp
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier

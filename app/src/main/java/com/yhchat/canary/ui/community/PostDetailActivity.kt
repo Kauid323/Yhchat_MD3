@@ -114,6 +114,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -694,7 +695,7 @@ fun PostBottomActionBarDuo3(
                 .height(40.dp)
                 .padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(
                 modifier = Modifier
@@ -759,11 +760,11 @@ fun PostBottomActionBarDuo3(
             ) {
                 Surface(
                     modifier = Modifier.clickable { onCommentCompose() },
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
@@ -2070,6 +2071,13 @@ fun PostDetailScreen(
     var filterLzOnly by rememberSaveable { mutableStateOf(false) }
     // 详情页主列表，点底部「评论」按钮时滚到评论标题那一项
     val listState = rememberLazyListState()
+    val commentPaneState = rememberLazyListState()
+    val layoutDensity = androidx.compose.ui.platform.LocalDensity.current
+    var detailWidthPx by remember { mutableStateOf(0) }
+    val disableLargeScreen by com.yhchat.canary.ui.components.rememberBooleanPreference(
+        "layout_settings", "force_disable_large_screen_mode", false
+    )
+    val sideBySideComments = !disableLargeScreen && with(layoutDensity) { detailWidthPx.toDp() } >= 720.dp
     val coroutineScope = rememberCoroutineScope()
 
     // 一次发送结束（sending 从 true 落回 false）时收起面板并滚到评论区。
@@ -2082,7 +2090,7 @@ fun PostDetailScreen(
             awaitingSendResult = false
             showCommentComposer = false
             // 发完滚到评论区，让人立刻看到自己的评论
-            coroutineScope.launch { listState.animateScrollToItem(1) }
+            coroutineScope.launch { if (sideBySideComments) commentPaneState.animateScrollToItem(0) else listState.animateScrollToItem(1) }
         }
     }
 
@@ -2277,7 +2285,7 @@ fun PostDetailScreen(
                     onCommentInputToggle = {
                         // 评论区现在在正文下面，点评论就滚过去（评论标题是第 2 项：0=正文，1=标题）
                         coroutineScope.launch {
-                            listState.animateScrollToItem(1)
+                            if (sideBySideComments) commentPaneState.animateScrollToItem(0) else listState.animateScrollToItem(1)
                         }
                     },
                     // 底部「评论」药丸：弹起输入面板
@@ -2301,6 +2309,7 @@ fun PostDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .onSizeChanged { detailWidthPx = it.width }
                 // 顶栏已经移出 Scaffold，paddingValues 只剩 bottomBar 的部分。
                 // 顶部由 LazyColumn 自己的 contentPadding 让开（见下面列表那段），
                 // 这样内容能从收起的顶栏下面直接穿过去。
@@ -2340,37 +2349,7 @@ fun PostDetailScreen(
                 }
             } else {
                 postDetailState.post?.let { post ->
-                    PullToRefreshBox(
-                        isRefreshing = postDetailState.isRefreshing,
-                        onRefresh = { viewModel.refreshPostDetailWithToken(postId) },
-                        state = rememberPullToRefreshState(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                // 内容上报滚动位置给顶栏
-                                .pageScroll(listState),
-                            // 顶部留出顶栏高度，正文从栏下开始；
-                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住。
-                            //
-                            // **左右不留 padding**：评论区的楼层要自己控制左边距
-                            // （楼栏从 4dp 起、正文跟在楼栏后面），外层再给 16dp
-                            // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
-                            // 正文和评论标题各自加 16dp，各自负责自己的对齐。
-                            contentPadding = PaddingValues(
-                                // 顶栏现在是浮层，不再由 Scaffold 让位，
-                                // 所以这里自己让开「状态栏 + 顶栏行高」。
-                                // 用 statusBarTop 而不是固定的 56dp：
-                                // 刘海/挖孔屏的状态栏高度不一样，写死会让正文钻到栏里。
-                                top = statusBarTop + DetailBarRowHeight + 16.dp,
-                                bottom = 140.dp
-                            ),
-                            // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
-                            // 穿过 item 之间的空隙，线才不会一层一层断开
-                            verticalArrangement = Arrangement.spacedBy(FloorGap)
-                        ) {
+                    val articleItems: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
                             // 文章内容
                             item {
                                 PostContentCard(
@@ -2400,6 +2379,8 @@ fun PostDetailScreen(
                                 )
                             }
 
+                    }
+                    val commentItems: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
                             // ===== 评论区：直接接在文章下方 =====
                             // 「只看楼主」时只留楼主本人的评论。楼主就是这篇的作者，
                             // 楼层按总评论数减去原始下标计算，过滤后保留原楼层。
@@ -2509,6 +2490,52 @@ fun PostDetailScreen(
                                     )
                                 }
                             }
+                    }
+                    PullToRefreshBox(
+                        isRefreshing = postDetailState.isRefreshing,
+                        onRefresh = { viewModel.refreshPostDetailWithToken(postId) },
+                        state = rememberPullToRefreshState(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .weight(1f).fillMaxHeight()
+                                // 内容上报滚动位置给顶栏
+                                .pageScroll(listState),
+                            // 顶部留出顶栏高度，正文从栏下开始；
+                            // 底部多留出药丸互动条的高度，滚到底时最后一段不会被按钮压住。
+                            //
+                            // **左右不留 padding**：评论区的楼层要自己控制左边距
+                            // （楼栏从 4dp 起、正文跟在楼栏后面），外层再给 16dp
+                            // 就会让评论比正文多缩一截，看着像"整块往右偏移"。
+                            // 正文和评论标题各自加 16dp，各自负责自己的对齐。
+                            contentPadding = PaddingValues(
+                                // 顶栏现在是浮层，不再由 Scaffold 让位，
+                                // 所以这里自己让开「状态栏 + 顶栏行高」。
+                                // 用 statusBarTop 而不是固定的 56dp：
+                                // 刘海/挖孔屏的状态栏高度不一样，写死会让正文钻到栏里。
+                                top = statusBarTop + DetailBarRowHeight + 16.dp,
+                                bottom = 140.dp
+                            ),
+                            // 这个间距必须跟 FloorGap 一致：楼层的竖线会往下多画这么多，
+                            // 穿过 item 之间的空隙，线才不会一层一层断开
+                            verticalArrangement = Arrangement.spacedBy(FloorGap)
+                        ) {
+                            articleItems()
+                            if (!sideBySideComments) commentItems()
+                        }
+                        if (sideBySideComments) {
+                            androidx.compose.material3.VerticalDivider(Modifier.fillMaxHeight())
+                            LazyColumn(
+                                state = commentPaneState,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                contentPadding = PaddingValues(top = statusBarTop + DetailBarRowHeight + 16.dp, bottom = 140.dp),
+                                verticalArrangement = Arrangement.spacedBy(FloorGap),
+                                content = commentItems
+                            )
+                        }
                         }
                     }
                     

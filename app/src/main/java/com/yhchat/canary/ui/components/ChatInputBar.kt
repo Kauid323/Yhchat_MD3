@@ -444,8 +444,11 @@ fun ChatInputBar(
         Column(
             modifier = modifier.fillMaxWidth()
         ) {
-            // 引用消息显示框
-            if (quotedMessageText != null) {
+            AnimatedVisibility(
+                visible = quotedMessageText != null,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
                 QuotedMessageBar(
                     quotedText = quotedMessageText,
                     onClearQuote = { onClearQuote?.invoke() }
@@ -466,7 +469,7 @@ fun ChatInputBar(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(24.dp),  // 大圆角
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),  // 半透明背景
+                color = Color.Transparent,
                 shadowElevation = 0.dp
             ) {
                 Row(

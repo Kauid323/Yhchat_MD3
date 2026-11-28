@@ -129,7 +129,7 @@ fun MessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
-    /** 是否启用左滑引用（可在设置中关闭） */
+    /** 是否启用滑动引用（可在设置中关闭） */
     enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
@@ -292,7 +292,7 @@ fun MessageItem(
         }
     }
 
-    // 左滑引用：水平位移状态。只向左滑（负 offset）时露出右侧的引用动作。
+    // 滑动引用：水平位移状态。左右滑动分别露出对应方向的引用提示。
     val swipeOffsetX = remember(message.msgId) { Animatable(0f) }
     // 引用动作回调需要始终指向最新的一次重组，避免手势 detector 捕获过期 lambda。
     val currentQuoteMessage by rememberUpdatedState(quoteMessage)
@@ -314,38 +314,35 @@ fun MessageItem(
     var tagsExpanded by remember(message.msgId) { mutableStateOf(false) }
     val rowInteractionSource = remember(message.msgId) { MutableInteractionSource() }
 
-    // 左滑引用的阈值：露出约 72dp 的引用动作区即视为触发。
+    // 滑动引用的阈值：露出约 72dp 的引用动作区即视为触发。
     val swipeRevealPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
     val swipeTriggerPx = swipeRevealPx * 0.6f
 
     Box(modifier = modifier.fillMaxWidth()) {
-        // 底层：左滑时从右侧露出的「引用」动作区。
+        // 引用提示层不绘制整行背景，静止时完全不可见。
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                // 仅在向左滑动时渐显，平时完全透明，避免透出底色；关闭开关时始终隐藏。
                 .graphicsLayer {
-                    alpha = if (enableSwipeToQuote) {
-                        (-swipeOffsetX.value / swipeRevealPx).coerceIn(0f, 1f)
+                    alpha = if (enableSwipeToQuote && !isMultiSelectMode) {
+                        (kotlin.math.abs(swipeOffsetX.value) / swipeRevealPx).coerceIn(0f, 1f)
                     } else 0f
                 }
                 .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.CenterEnd
+            contentAlignment = if (swipeOffsetX.value > 0f) Alignment.CenterStart else Alignment.CenterEnd
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.FormatQuote,
                     contentDescription = "引用",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "引用",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -423,14 +420,14 @@ fun MessageItem(
                         Modifier
                     }
                 )
-                // 左滑引用：手势只落在消息内容区（昵称/气泡/时间），头像不触发。
+                // 滑动引用：手势只落在消息内容区（昵称/气泡/时间），头像不触发。
                 // 位移由整行 Row 的 graphicsLayer 统一处理；纵向滚动交给列表。
                 .pointerInput(message.msgId, isMultiSelectMode, enableSwipeToQuote) {
                     if (isMultiSelectMode || !enableSwipeToQuote) return@pointerInput
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { change, dragAmount ->
-                            // 只接受向左（负方向），并限制在 [ -swipeRevealPx, 0 ]
-                            val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, 0f)
+                            // 左右滑均可引用，限制最大位移。
+                            val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, swipeRevealPx)
                             if (candidate != swipeOffsetX.value) change.consume()
                             coroutineScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                                 swipeOffsetX.snapTo(candidate)
@@ -438,7 +435,7 @@ fun MessageItem(
                         },
                         onDragEnd = {
                             coroutineScope.launch {
-                                val triggered = swipeOffsetX.value <= -swipeTriggerPx
+                                val triggered = kotlin.math.abs(swipeOffsetX.value) >= swipeTriggerPx
                                 swipeOffsetX.animateTo(0f, tween(180))
                                 if (triggered) currentQuoteMessage()
                             }
@@ -1088,7 +1085,7 @@ fun AnimatedMessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
-    /** 是否启用左滑引用（可在设置中关闭） */
+    /** 是否启用滑动引用（可在设置中关闭） */
     enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
