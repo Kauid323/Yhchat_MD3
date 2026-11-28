@@ -6,8 +6,10 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <!-- 状态栏文字颜色为深色 -->
         <item name="android:windowLightStatusBar">true</item>
-        <!-- 导航栏透明 -->
+        <!-- 导航栏透明，不叠加系统对比度遮罩 -->
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
         <!-- 导航栏文字颜色为深色 -->
         <item name="android:windowLightNavigationBar">true</item>
         <!-- 启用边到边显示 -->

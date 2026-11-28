@@ -21,7 +21,7 @@ abstract class BaseActivity : ComponentActivity() {
         // 全局开启沉浸式，系统手势条区域透明
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
+        SystemBarUtils.transparentNavigationBar(window)
     }
     
     /**

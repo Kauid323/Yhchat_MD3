@@ -25,6 +25,7 @@ class CanaryApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)
+        com.yhchat.canary.ui.base.SystemBarUtils.installNavigationBarPolicy(this)
         AppForegroundTracker.init()
         startMemoryAutoCleanLoop()
 

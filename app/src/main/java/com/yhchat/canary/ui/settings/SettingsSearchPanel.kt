@@ -81,7 +81,7 @@ internal fun SettingsSearchPanel(
     LaunchedEffect(lightStatusBarIcons) {
         val dialogWindow = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
         dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
-        dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
+        com.yhchat.canary.ui.base.SystemBarUtils.transparentNavigationBar(dialogWindow)
         WindowCompat.getInsetsController(dialogWindow, view).apply {
             isAppearanceLightStatusBars = lightStatusBarIcons
             isAppearanceLightNavigationBars = lightStatusBarIcons

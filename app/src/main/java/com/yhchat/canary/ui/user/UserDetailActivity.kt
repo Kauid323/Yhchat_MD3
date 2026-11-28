@@ -328,7 +328,7 @@ fun UserDetailScreen(
         @Suppress("DEPRECATION")
         window.statusBarColor = navigationBarColor.toArgb()
         @Suppress("DEPRECATION")
-        window.navigationBarColor = navigationBarColor.toArgb()
+        com.yhchat.canary.ui.base.SystemBarUtils.transparentNavigationBar(window)
 
         // 设置图标颜色：浅色主题用深色图标；深色主题用浅色图标
         val controller = WindowCompat.getInsetsController(window, view)

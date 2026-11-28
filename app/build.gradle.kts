@@ -180,7 +180,7 @@ dependencies {
 
     implementation(libs.calvin.reorderable)
 
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.androidx.documentfile)
     
     // 网络请求
     implementation(libs.retrofit)
@@ -192,12 +192,12 @@ dependencies {
     // 图片加载
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
-    implementation("io.coil-kt:coil-svg:2.5.0") // SVG支持
+    implementation(libs.coil.svg) // SVG支持
 
     implementation("androidx.media:media:1.7.0")
     
     // 权限处理
-    implementation("com.google.accompanist:accompanist-permissions:0.32.0")
+    implementation(libs.accompanist.permissions)
     
     // WebDAV 客户端
     implementation("com.github.thegrizzlylabs:sardine-android:0.8") {
@@ -210,7 +210,7 @@ dependencies {
     implementation(libs.latex.renderer)
 
     // .tgs渲染
-    implementation("com.airbnb.android:lottie-compose:6.6.0")
+    implementation(libs.lottie.compose)
 
     implementation(libs.ksoup.html)
     
@@ -229,7 +229,7 @@ dependencies {
     ksp(libs.room.compiler)
     
     // Security - 使用Android官方的安全存储方案
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation(libs.androidx.security.crypto)
     
     // Hilt
     implementation(libs.hilt.android)

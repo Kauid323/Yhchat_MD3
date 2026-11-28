@@ -151,9 +151,12 @@ fun ImageViewer(
     }
     // PagerState is outside Dialog's subcomposition. Its page count can update before
     // the Dialog recomposes; callbacks must not capture an older URL/key list.
+    val openingPages = remember { keys.zip(sanitizedUrls) }
+    val openingPicture = remember { openingPages.getOrNull(openingIndex) ?: openingPages.first() }
+    var opening by remember { mutableStateOf(true) }
     var closingPages by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
     var closingPicture by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val currentPages by rememberUpdatedState(closingPages ?: keys.zip(sanitizedUrls))
+    val currentPages by rememberUpdatedState(closingPages ?: if (opening) openingPages else keys.zip(sanitizedUrls))
     val pagerState = rememberPagerState(initialPage = openingIndex, pageCount = { currentPages.size })
     val zoomedPages = remember { mutableStateMapOf<String, Boolean>() }
     val gestureLockedPages = remember { mutableStateMapOf<String, Boolean>() }
@@ -169,8 +172,8 @@ fun ImageViewer(
     val ownerWindow = androidx.compose.ui.platform.LocalView.current.windowToken
     var near by remember { mutableStateOf(currentPages.getOrNull(openingIndex)?.second?.let { ViewerThumbnails.bounds(it, ownerWindow) }) }
     var closingRect by remember { mutableStateOf<Rect?>(null) }
-    val currentPicture = closingPicture ?: currentPages.getOrNull(pagerState.currentPage)
-        ?: currentPages.firstOrNull() ?: return
+    val currentPicture = closingPicture ?: (if (opening) openingPicture else currentPages.getOrNull(pagerState.currentPage))
+        ?: openingPicture
     val currentKey = currentPicture.first
     val zoomed = zoomedPages[currentKey] == true
     val locked = gestureLockedPages[currentKey] == true
@@ -215,20 +218,28 @@ fun ImageViewer(
             }
         }
     }
-    LaunchedEffect(Unit) { progress.animateTo(1f, tween(240)) }
+    LaunchedEffect(Unit) {
+        val startPage = openingPages.indexOfFirst { it.first == openingPicture.first }.coerceAtLeast(0)
+        pagerState.scrollToPage(startPage)
+        androidx.compose.runtime.withFrameNanos { }
+        if (!closing) {
+            progress.animateTo(1f, tween(240))
+            opening = false
+        }
+    }
     LaunchedEffect(currentPages, openingIndex, closing) {
         if (!closing && currentPages.isNotEmpty() && pagerState.currentPage !in currentPages.indices) {
             pagerState.scrollToPage(openingIndex.coerceIn(0, currentPages.lastIndex))
         }
     }
     val notifyPage by rememberUpdatedState(onPageSettled)
-    LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress, keys, closing) {
+    LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress, keys, closing, opening) {
         // Give the pager a layout pass to relocate its stable key after a prepend.
         androidx.compose.runtime.withFrameNanos { }
         val page = pagerState.currentPage
         val expectedKey = currentPages.getOrNull(page)?.first
         val laidOutKey = pagerState.layoutInfo.visiblePagesInfo.firstOrNull { it.index == page }?.key
-        if (!closing && !pagerState.isScrollInProgress && expectedKey != null && laidOutKey == expectedKey) {
+        if (!opening && !closing && !pagerState.isScrollInProgress && expectedKey != null && laidOutKey == expectedKey) {
             notifyPage?.invoke(page)
         }
     }
@@ -242,6 +253,10 @@ fun ImageViewer(
         DisposableEffect(view) {
             val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
             window?.setDimAmount(0f)
+            window?.let {
+                com.yhchat.canary.ui.base.SystemBarUtils.transparentNavigationBar(it)
+                androidx.core.view.WindowCompat.getInsetsController(it, view).isAppearanceLightNavigationBars = false
+            }
             window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
             onDispose { }
         }
@@ -266,7 +281,7 @@ fun ImageViewer(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                     pageSpacing = 16.dp,
-                    userScrollEnabled = !zoomed && !locked && !dragging && !returning && !closing,
+                    userScrollEnabled = !opening && !zoomed && !locked && !dragging && !returning && !closing,
                     key = { page -> currentPages.getOrNull(page)?.first ?: "viewer-pending-page:$page" }
                 ) { page ->
                     val picture = currentPages.getOrNull(page) ?: return@HorizontalPager
