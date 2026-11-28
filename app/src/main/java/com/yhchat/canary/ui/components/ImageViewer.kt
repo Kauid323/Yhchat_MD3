@@ -149,7 +149,10 @@ fun ImageViewer(
     val openingIndex = remember(imageUrls, initialIndex) {
         imageUrls.take(initialIndex.coerceAtLeast(0)).count { it.isNotBlank() }.coerceIn(0, sanitizedUrls.lastIndex)
     }
-    val pagerState = rememberPagerState(initialPage = openingIndex, pageCount = { sanitizedUrls.size })
+    // PagerState is outside Dialog's subcomposition. Its page count can update before
+    // the Dialog recomposes; callbacks must not capture an older URL/key list.
+    val currentPages by rememberUpdatedState(keys.zip(sanitizedUrls))
+    val pagerState = rememberPagerState(initialPage = openingIndex, pageCount = { currentPages.size })
     val zoomedPages = remember { mutableStateMapOf<String, Boolean>() }
     val gestureLockedPages = remember { mutableStateMapOf<String, Boolean>() }
     val refreshKeys = remember { mutableStateMapOf<String, Int>() }
@@ -211,7 +214,12 @@ fun ImageViewer(
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress, keys, closing) {
         // Give the pager a layout pass to relocate its stable key after a prepend.
         androidx.compose.runtime.withFrameNanos { }
-        if (!closing && !pagerState.isScrollInProgress) notifyPage?.invoke(pagerState.currentPage)
+        val page = pagerState.currentPage
+        val expectedKey = currentPages.getOrNull(page)?.first
+        val laidOutKey = pagerState.layoutInfo.visiblePagesInfo.firstOrNull { it.index == page }?.key
+        if (!closing && !pagerState.isScrollInProgress && expectedKey != null && laidOutKey == expectedKey) {
+            notifyPage?.invoke(page)
+        }
     }
     Dialog(
         onDismissRequest = { close() },
@@ -248,11 +256,12 @@ fun ImageViewer(
                     modifier = Modifier.fillMaxSize(),
                     pageSpacing = 16.dp,
                     userScrollEnabled = !zoomed && !locked && !dragging && !returning && !closing,
-                    key = { page -> keys[page] }
+                    key = { page -> currentPages.getOrNull(page)?.first ?: "viewer-pending-page:$page" }
                 ) { page ->
-                    val pageKey = keys[page]
+                    val picture = currentPages.getOrNull(page) ?: return@HorizontalPager
+                    val pageKey = picture.first
                     ZoomableImagePage(
-                        imageUrl = sanitizedUrls[page],
+                        imageUrl = picture.second,
                         reloadKey = refreshKeys[pageKey] ?: 0,
                         active = page == pagerState.currentPage,
                         onToggleControls = { close() },
@@ -444,7 +453,7 @@ private fun ZoomableImagePage(
     val pageScope = rememberCoroutineScope()
     fun toggleZoom(tap: Offset) {
         zoomAnimation?.cancel()
-        val targetScale = if (scale > 1.02f) 1f else 2.5f
+        val targetScale = if (kotlin.math.abs(scale - 1f) > 0.02f) 1f else 2.5f
         val centered = tap - Offset(containerSize.width / 2f, containerSize.height / 2f)
         val targetOffset = if (targetScale == 1f) Offset.Zero else boundImageOffset(
             containerSize, targetScale, fittedSize, centered * (1f - targetScale)
@@ -465,10 +474,10 @@ private fun ZoomableImagePage(
     }
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         zoomAnimation?.cancel()
-        val previousScale = scale
-        val newScale = (scale * zoomChange).coerceIn(1f, 5f)
+        if (!zoomChange.isFinite() || zoomChange <= 0f) return@rememberTransformableState
+        val newScale = (scale * zoomChange).coerceIn(0.5f, 5f)
         if (newScale <= 1f) {
-            scale = 1f
+            scale = newScale
             offsetX = 0f
             offsetY = 0f
             return@rememberTransformableState
@@ -485,13 +494,8 @@ private fun ZoomableImagePage(
         )
 
         scale = newScale
-        if (previousScale <= 1f && newScale > 1f) {
-            offsetX = boundedOffset.x
-            offsetY = boundedOffset.y
-        } else {
-            offsetX = boundedOffset.x
-            offsetY = boundedOffset.y
-        }
+        offsetX = boundedOffset.x
+        offsetY = boundedOffset.y
     }
 
     LaunchedEffect(scale) {

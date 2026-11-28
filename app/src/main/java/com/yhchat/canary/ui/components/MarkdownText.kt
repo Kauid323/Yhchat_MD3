@@ -31,6 +31,7 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
@@ -815,73 +816,101 @@ private fun CodeBlockComponent(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    
-    Box(
+    var copied by remember(code) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) { delay(1800); copied = false }
+    }
+    val languageLabel = remember(language) {
+        language?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "代码"
+    }
+    val lineCount = remember(code) { if (code.isEmpty()) 0 else code.count { it == '\n' } + 1 }
+    val shape = RoundedCornerShape(16.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), shape)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(start = 16.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 语言标签和复制按钮
-            Row(
+            Text(
+                text = languageLabel,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${lineCount} 行",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+                    copied = true
+                }
+            ) {
+                Icon(
+                    imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (copied) "已复制" else "复制", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        androidx.compose.material3.HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
+        val codeText: @Composable () -> Unit = {
+            Text(
+                text = code,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    lineHeight = 21.sp,
+                    letterSpacing = 0.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                softWrap = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .horizontalScroll(scrollState)
+                    .padding(16.dp)
+            )
+        }
+        if (enableTextSelection) SelectionContainer { codeText() } else codeText()
+        if (scrollState.maxValue > 0) {
+            // Position indicator remains outside the selectable code and never enters copied text.
+            androidx.compose.foundation.Canvas(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(3.dp)
             ) {
-                // 语言标签
-                if (!language.isNullOrBlank()) {
-                    Text(
-                        text = language,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-                
-                // 复制按钮
-                IconButton(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("code", code)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "复制代码",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            
-            // 代码内容
-            val codeText: @Composable () -> Unit = {
-                Text(
-                    text = code,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = 20.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(scrollState)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                val viewport = size.width
+                val scrollRange = scrollState.maxValue
+                if (viewport <= 0f || scrollRange <= 0) return@Canvas
+                val total = viewport + scrollRange
+                val thumbWidth = (viewport * viewport / total).coerceIn(12.dp.toPx().coerceAtMost(viewport), viewport)
+                val left = (viewport - thumbWidth) * scrollState.value.coerceIn(0, scrollRange) / scrollRange
+                drawRoundRect(
+                    color = Color.Gray.copy(alpha = 0.35f),
+                    topLeft = androidx.compose.ui.geometry.Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(thumbWidth, size.height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2)
                 )
             }
-            if (enableTextSelection) {
-                SelectionContainer { codeText() }
-            } else {
-                codeText()
-            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
