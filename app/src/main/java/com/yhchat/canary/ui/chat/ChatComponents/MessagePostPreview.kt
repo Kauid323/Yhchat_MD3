@@ -66,6 +66,7 @@ internal fun MessagePostPreview(
     onOpenPost: () -> Unit
 ) {
     val context = LocalContext.current
+    val resolvedPostId = remember(postId) { postId.toIntOrNull()?.takeIf { it > 0 } }
     var post by remember(postId) { mutableStateOf<CommunityPost?>(null) }
     var isLoading by remember(postId) { mutableStateOf(true) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
@@ -88,7 +89,7 @@ internal fun MessagePostPreview(
                 val token = RepositoryFactory.getTokenRepository(context).getTokenSync()
                     ?: error("请先登录后再查看文章")
                 RepositoryFactory.getCommunityRepository(context)
-                    .getPostDetail(token, postId.toIntOrNull() ?: error("文章编号无效"))
+                    .getPostDetail(token, resolvedPostId ?: error("文章编号无效"))
                     .getOrThrow()
                     .data
                     .post
@@ -223,7 +224,7 @@ internal fun MessagePostPreview(
                 ) {
                     OutlinedButton(onClick = onDismiss) { Text("关闭") }
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                    Button(onClick = onOpenPost) {
+                    Button(onClick = onOpenPost, enabled = resolvedPostId != null) {
                         Icon(
                             imageVector = Icons.Default.OpenInNew,
                             contentDescription = null,

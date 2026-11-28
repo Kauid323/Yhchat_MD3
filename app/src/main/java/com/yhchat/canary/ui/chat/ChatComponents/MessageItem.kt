@@ -454,127 +454,140 @@ fun MessageItem(
             }
 
             Box(modifier = Modifier.wrapContentWidth()) {
-            Surface(
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .then(
-                        if (!isMyMessage) {
-                            Modifier.border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                                shape = bubbleShape
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .clip(bubbleShape)
-                    .combinedClickable(
-                        enabled = !isMultiSelectMode,
-                        onClickLabel = if (enableContextMenu) "消息操作" else null,
-                        onClick = { if (enableContextMenu) openMessageActions() },
-                        onLongClickLabel = "消息操作",
-                        onLongClick = if (message.contentType == 6) null else openMessageActions
-                    ),
-                color = bubbleColor,
-                shape = bubbleShape,
-                shadowElevation = if (isMyMessage) 0.dp else 1.dp
-            ) {
-                if (isCollapsed && onToggleCollapse != null) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        val textColor = if (isMyMessage) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .then(
+                            if (!isMyMessage) {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                    shape = bubbleShape
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .clip(bubbleShape)
+                        .combinedClickable(
+                            enabled = !isMultiSelectMode,
+                            onClickLabel = if (enableContextMenu) "消息操作" else null,
+                            onClick = { if (enableContextMenu) openMessageActions() },
+                            onLongClickLabel = "消息操作",
+                            onLongClick = if (message.contentType == 6) null else openMessageActions
+                        ),
+                    color = bubbleColor,
+                    shape = bubbleShape,
+                    shadowElevation = if (isMyMessage) 0.dp else 1.dp
+                ) {
+                    if (isCollapsed && onToggleCollapse != null) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            val textColor = if (isMyMessage) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
 
-                        val htmlPreviewShown = message.contentType == 8 && !message.content.text.isNullOrBlank()
+                            val htmlPreviewShown = message.contentType == 8 && !message.content.text.isNullOrBlank()
 
-                        if (htmlPreviewShown) {
-                            HtmlCollapsedPreview(
-                                html = message.content.text.orEmpty(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        } else {
-                            message.content.text?.let { previewText ->
-                                Text(
-                                    text = previewText.take(200) + if (previewText.length > 200) "..." else "",
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 3,
+                            if (htmlPreviewShown) {
+                                HtmlCollapsedPreview(
+                                    html = message.content.text.orEmpty(),
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                            } else {
+                                message.content.text?.let { previewText ->
+                                    Text(
+                                        text = previewText.take(200) + if (previewText.length > 200) "..." else "",
+                                        color = textColor,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 3,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+
+                            Text(
+                                text = "消息过长（${message.content.text?.length ?: 0}字），已自动折叠",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedButton(
+                                onClick = onToggleCollapse,
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("展开", style = MaterialTheme.typography.labelMedium)
                             }
                         }
-
-                        Text(
-                            text = "消息过长（${message.content.text?.length ?: 0}字），已自动折叠",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    } else {
+                        MessageContentView(
+                            message = message,
+                            content = message.content,
+                            contentType = message.contentType,
+                            isMyMessage = isMyMessage,
+                            conversationChatType = conversationChatType,
+                            modifier = Modifier.padding(12.dp),
+                            onImageClick = { imageUrl -> onImageClick(imageUrl) },
+                            onLongClick = openMessageActions,
+                            onQuoteMessageClick = onQuoteMessageClick,
+                            onQuote = onQuote,
+                            onEdit = onEdit,
+                            onRecall = onRecall,
+                            onPlusOne = onPlusOne,
+                            onForward = onForward,
+                            onFavorite = { _ -> favoriteMessage() },
+                            onMultiSelect = onMultiSelect,
+                            isStreaming = isStreaming,
+                            onSplitFileClick = onSplitFileClick,
+                            onMessageClick = if (enableContextMenu) openMessageActions else null,
+                            enablePostPreview = !isMultiSelectMode
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedButton(
-                            onClick = onToggleCollapse,
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("展开", style = MaterialTheme.typography.labelMedium)
-                        }
                     }
-                } else {
-                    MessageContentView(
-                        message = message,
-                        content = message.content,
-                        contentType = message.contentType,
-                        isMyMessage = isMyMessage,
-                        conversationChatType = conversationChatType,
-                        modifier = Modifier.padding(12.dp),
-                        onImageClick = { imageUrl -> onImageClick(imageUrl) },
-                        onLongClick = openMessageActions,
-                        onQuoteMessageClick = onQuoteMessageClick,
-                        onQuote = onQuote,
-                        onEdit = onEdit,
-                        onRecall = onRecall,
-                        onPlusOne = onPlusOne,
-                        onForward = onForward,
-                        onFavorite = { _ -> favoriteMessage() },
-                        onMultiSelect = onMultiSelect,
-                        isStreaming = isStreaming,
-                        onSplitFileClick = onSplitFileClick,
-                        onMessageClick = if (enableContextMenu) openMessageActions else null,
-                        enablePostPreview = !isMultiSelectMode
+                }
+
+                if (isMultiSelectMode) {
+                    // 覆盖内容的交互区域，避免图片、链接等子控件抢走多选点击。
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(bubbleShape)
+                            .combinedClickable(
+                                onClickLabel = "选择消息",
+                                onClick = { onSelectionToggle?.invoke() }
+                            )
                     )
                 }
-            }
 
-            MessageContextMenu(
-                expanded = showMessageDropdown && enableContextMenu && !isMultiSelectMode,
-                message = message,
-                showRecall = showRecall,
-                onDismiss = { showMessageDropdown = false },
-                onCopyAll = copyAllMessage,
-                onFreeCopy = {
-                    freeCopyText = messageOperationText
-                    showFreeCopyDialog = true
-                },
-                onQuote = quoteMessage,
-                onForward = { onForward(message) },
-                onRecall = { onRecall(message.msgId) },
-                onEdit = if (message.contentType in listOf(1, 3, 8, 14) && isMyMessage) {
-                    { onEdit(message) }
-                } else null,
-                onAddExpression = addExpressionAction,
-                onBlockUser = if (!isMyMessage) {
-                    { onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl) }
-                } else null,
-                onSaveAudio = saveAudioAction,
-                onAddToPlaylist = addToPlaylistAction,
-                onSpeechToText = speechToTextAction,
-                onPlusOne = { onPlusOne(message) },
-                onFavorite = favoriteMessage,
-                onMultiSelect = onMultiSelect,
-                onOpenInInternalBrowser = if (message.contentType == 8) openHtmlInInternalBrowser else null,
-                onExternalShare = externalShareMessage
-            )
+                MessageContextMenu(
+                    expanded = showMessageDropdown && enableContextMenu && !isMultiSelectMode,
+                    message = message,
+                    showRecall = showRecall,
+                    onDismiss = { showMessageDropdown = false },
+                    onCopyAll = copyAllMessage,
+                    onFreeCopy = {
+                        freeCopyText = messageOperationText
+                        showFreeCopyDialog = true
+                    },
+                    onQuote = quoteMessage,
+                    onForward = { onForward(message) },
+                    onRecall = { onRecall(message.msgId) },
+                    onEdit = if (message.contentType in listOf(1, 3, 8, 14) && isMyMessage) {
+                        { onEdit(message) }
+                    } else null,
+                    onAddExpression = addExpressionAction,
+                    onBlockUser = if (!isMyMessage) {
+                        { onBlockUser(message.sender.chatId, message.sender.name, message.sender.avatarUrl) }
+                    } else null,
+                    onSaveAudio = saveAudioAction,
+                    onAddToPlaylist = addToPlaylistAction,
+                    onSpeechToText = speechToTextAction,
+                    onPlusOne = { onPlusOne(message) },
+                    onFavorite = favoriteMessage,
+                    onMultiSelect = onMultiSelect,
+                    onOpenInInternalBrowser = if (message.contentType == 8) openHtmlInInternalBrowser else null,
+                    onExternalShare = externalShareMessage
+                )
             }
 
             Row(

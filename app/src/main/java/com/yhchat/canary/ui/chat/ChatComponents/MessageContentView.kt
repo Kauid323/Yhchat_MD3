@@ -1013,12 +1013,17 @@ private fun PostMessageView(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showPostPreview by remember(postId) { mutableStateOf(false) }
 
-    val openPostDetail = {
-        val intent = Intent(context, PostDetailActivity::class.java).apply {
-            putExtra("post_id", postId?.toIntOrNull() ?: 0)
-            putExtra("post_title", postTitle ?: "文章详情")
+    val resolvedPostId = postId?.toIntOrNull()?.takeIf { it > 0 }
+    val openPostDetail: () -> Unit = {
+        if (resolvedPostId == null) {
+            android.widget.Toast.makeText(context, "文章编号无效", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            val intent = Intent(context, PostDetailActivity::class.java).apply {
+                putExtra("post_id", resolvedPostId)
+                putExtra("post_title", postTitle ?: "文章详情")
+            }
+            context.startActivity(intent)
         }
-        context.startActivity(intent)
     }
 
     if (postId.isNullOrEmpty()) {
