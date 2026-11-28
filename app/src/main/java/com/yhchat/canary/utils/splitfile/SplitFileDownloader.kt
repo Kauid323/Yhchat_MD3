@@ -205,7 +205,7 @@ object SplitFileDownloader {
      *
      * Android 10+ 走 MediaStore（不需要存储权限），低版本直接写公共目录。
      */
-    private fun saveToDownloads(context: Context, source: File, fileName: String): Uri {
+    internal fun saveToDownloads(context: Context, source: File, fileName: String): Uri {
         val safeName = fileName
             .replace('/', '_')
             .replace('\\', '_')
@@ -222,14 +222,18 @@ object SplitFileDownloader {
             val uri = resolver.insert(collection, values)
                 ?: throw IllegalStateException("无法在下载目录创建文件")
 
-            resolver.openOutputStream(uri)?.use { output ->
-                source.inputStream().use { input -> input.copyTo(output) }
-            } ?: throw IllegalStateException("无法写入下载目录")
-
-            values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-            return uri
+            try {
+                resolver.openOutputStream(uri)?.use { output ->
+                    source.inputStream().use { input -> input.copyTo(output) }
+                } ?: throw IllegalStateException("无法写入下载目录")
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                check(resolver.update(uri, values, null, null) > 0) { "无法发布下载文件" }
+                return uri
+            } catch (error: Exception) {
+                resolver.delete(uri, null, null)
+                throw error
+            }
         } else {
             @Suppress("DEPRECATION")
             val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

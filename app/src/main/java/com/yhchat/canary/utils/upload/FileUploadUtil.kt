@@ -49,6 +49,7 @@ object FileUploadUtil {
         context: Context,
         fileUri: Uri,
         uploadToken: String,
+        resourceKey: String? = null,
         onProgress: (Float) -> Unit = {}
     ): Result<QiniuUploadResponse> = withContext(Dispatchers.IO) {
         var tempFile: File? = null
@@ -75,7 +76,8 @@ object FileUploadUtil {
             Log.d(TAG, "✅ MD5计算完成: $md5")
 
             // 文件key = disk/MD5.扩展名（注意这里要加disk/前缀）
-            val fileKey = "disk/$md5.$extension"
+            require(resourceKey == null || Regex("[a-zA-Z0-9_.-]{1,240}").matches(resourceKey)) { "无效的上传资源 key" }
+            val fileKey = resourceKey ?: "disk/$md5.$extension"
             Log.d(TAG, "✅ 原始文件名: $originalFileName")
             Log.d(TAG, "✅ 文件扩展名: $extension")
             Log.d(TAG, "✅ 文件key: $fileKey")

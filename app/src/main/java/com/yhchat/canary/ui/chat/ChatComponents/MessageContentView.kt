@@ -134,6 +134,14 @@ fun MessageContentView(
     }
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val splitEnvelope = remember(contentType, content.text) {
+        if (contentType == 1) com.yhchat.canary.utils.splitfile.RickkobeSplitProtocol.parse(content.text) else null
+    }
+    if (splitEnvelope != null) {
+        Column(modifier = modifier) { RickkobeSplitFileCard(message, splitEnvelope) }
+        return
+    }
+
     val showHtmlRawText by rememberBooleanPreference("message_settings", "show_html_raw_text", false)
     val showMarkdownRawText by rememberBooleanPreference("message_settings", "show_markdown_raw_text", false)
     val showInlineExpressions by rememberBooleanPreference("display_settings", "show_inline_expressions", true)

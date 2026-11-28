@@ -1115,6 +1115,28 @@ class ChatViewModel @Inject constructor(
             .chunkSizeBytes(context)
         Log.d(tag, "分块大小: ${chunkSize / 1024 / 1024} MB")
 
+        if (com.yhchat.canary.utils.splitfile.SplitFileSettings.uploadProtocol(context) ==
+            com.yhchat.canary.utils.splitfile.SplitFileSettings.RICKKOBE) {
+            val targetChatId = currentChatId
+            val targetChatType = currentChatType
+            try {
+                com.yhchat.canary.utils.splitfile.RickkobeSplitUploader.upload(
+                    context, fileUri, originalName, uploadToken, chunkSize,
+                    messageRepository, targetChatId, targetChatType
+                ) { progress ->
+                    _uiState.value = _uiState.value.copy(splitUploadProgress = progress, uploadProgress = progress.fraction)
+                }
+                if (currentChatId == targetChatId && currentChatType == targetChatType) loadMessages(refresh = true)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(error = "Yunhu-rickkobe 分块发送失败：${error.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(splitUploadProgress = null)
+            }
+            return
+        }
+
         val splitResult = com.yhchat.canary.utils.splitfile.SplitFileUploader.splitAndUpload(
             context = context,
             fileUri = fileUri,

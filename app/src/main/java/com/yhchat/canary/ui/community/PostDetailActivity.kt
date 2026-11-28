@@ -367,34 +367,17 @@ fun PostContentCard(
 
         // ===== 正文 =====
         if (post.contentType == 2) {
-            if (trimmedSearchQuery.isBlank()) {
-                MarkdownText(
-                    markdown = post.content,
-                    textColor = MaterialTheme.colorScheme.onSurface,
-                    onImageClick = { imageUrl ->
-                        currentImageUrl = imageUrl
-                        showImageViewer = true
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    enableHtmlRendering = true
-                )
-            } else {
-                SelectionContainer {
-                    HighlightedArticleText(
-                        text = stripMarkdownForSearchDisplay(post.content),
-                        keyword = trimmedSearchQuery,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight.scaledOrUnspecified(1.3f),
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                    )
-                }
-            }
+            MarkdownText(
+                markdown = post.content,
+                textColor = MaterialTheme.colorScheme.onSurface,
+                onImageClick = { imageUrl ->
+                    currentImageUrl = imageUrl
+                    showImageViewer = true
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                enableHtmlRendering = true,
+                highlightKeyword = trimmedSearchQuery
+            )
         } else {
             // 普通文本内容，或搜索态下统一高亮
             SelectionContainer {

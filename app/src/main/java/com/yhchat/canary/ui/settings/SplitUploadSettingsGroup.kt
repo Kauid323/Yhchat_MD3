@@ -75,9 +75,9 @@ internal fun SplitUploadSettingsGroup(context: Context) {
                     icon = Icons.Default.ContentCut,
                     title = "非 VIP 分块上传",
                     subtitle = if (enabled) {
-                        "已开启。发送大文件时会切成多块上传，接收端收到 .splitfiles 清单后可还原"
+                        "已开启。按下方协议发送分块文件，接收端需支持所选协议"
                     } else {
-                        "关闭。开启后可绕过单文件大小限制，代价是接收端需要本客户端才能还原"
+                        "关闭。开启后大文件按所选协议切块上传，接收端需支持对应协议"
                     },
                     checked = enabled,
                     onCheckedChange = { value ->
@@ -87,6 +87,33 @@ internal fun SplitUploadSettingsGroup(context: Context) {
                             .apply()
                     }
                 )
+            },
+            {
+                val protocol by com.yhchat.canary.ui.components.rememberStringPreference(
+                    "split_upload_settings", SplitFileSettings.KEY_PROTOCOL, SplitFileSettings.CANARY
+                )
+                var expanded by remember { mutableStateOf(false) }
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("分块上传协议", style = MaterialTheme.typography.titleMedium)
+                    androidx.compose.foundation.layout.Box {
+                        androidx.compose.material3.OutlinedButton(onClick = { expanded = true }) {
+                            Text(if (protocol == SplitFileSettings.RICKKOBE) "Yunhu-rickkobe ▾" else "Canary ▾")
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            listOf(SplitFileSettings.CANARY to "Canary", SplitFileSettings.RICKKOBE to "Yunhu-rickkobe").forEach { (value, label) ->
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(label) }, onClick = {
+                                    SplitFileSettings.setUploadProtocol(context, value)
+                                    expanded = false
+                                })
+                            }
+                        }
+                    }
+                    Text(
+                        if (protocol == SplitFileSettings.RICKKOBE) "文本清单＋分块文件消息，兼容 yh-laoda v2；每块最高 32 MiB。"
+                        else "发送一个 .splitfiles 清单文件。下载自动识别两种协议。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             },
             {
                 // 分块大小设置。放在开关下面，但开关关着时仍然可见可调 ——

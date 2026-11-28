@@ -38,6 +38,20 @@ object SplitFileSettings {
         return raw.coerceIn(MIN_CHUNK_MB, MAX_CHUNK_MB)
     }
 
+    const val KEY_PROTOCOL = "upload_protocol"
+    const val CANARY = "canary"
+    const val RICKKOBE = "yunhu-rickkobe"
+
+    fun uploadProtocol(context: Context): String = context.applicationContext
+        .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROTOCOL, CANARY)
+        .takeIf { it == RICKKOBE } ?: CANARY
+
+    fun setUploadProtocol(context: Context, protocol: String) {
+        require(protocol == CANARY || protocol == RICKKOBE)
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_PROTOCOL, protocol).apply()
+    }
+
     /** 当前配置的分块大小（字节） */
     fun chunkSizeBytes(context: Context): Long = chunkSizeMb(context) * 1024L * 1024L
 

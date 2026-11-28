@@ -100,6 +100,9 @@ import java.util.Collections
 import kotlinx.coroutines.delay
 
 
+private val LocalMarkdownBodyColor = androidx.compose.runtime.compositionLocalOf { Color.Unspecified }
+private val LocalMarkdownSearchQuery = androidx.compose.runtime.compositionLocalOf { "" }
+
 /**
  * Markdown文本渲染组件
  *
@@ -133,8 +136,10 @@ fun MarkdownText(
     val latexConfig = remember(textColor, context) {
         LatexConfig(
             fontSize = 16.sp,
-            color = textColor,
-            darkColor = textColor,
+            theme = com.hrm.latex.renderer.model.LatexTheme.auto(
+                light = com.hrm.latex.renderer.model.LatexThemeColors(color = textColor),
+                dark = com.hrm.latex.renderer.model.LatexThemeColors(color = textColor)
+            ),
             accessibilityEnabled = true,
             onHyperlinkClick = { url ->
                 try {
@@ -145,6 +150,10 @@ fun MarkdownText(
         )
     }
 
+    CompositionLocalProvider(
+        LocalMarkdownBodyColor provides textColor,
+        LocalMarkdownSearchQuery provides highlightKeyword.trim()
+    ) {
     Column(
         modifier = modifier
             .wrapContentWidth()
@@ -233,8 +242,11 @@ fun MarkdownText(
                         alt = segment.alt,
                         imageReferer = imageReferer,
                         onClick = { url ->
-                            onImageClick?.invoke(url) ?: run {
-                                previewImageUrl = url
+                            if (segment.link != null) {
+                                runCatching { openMarkdownLink(context, segment.link) }
+                                    .onFailure { Toast.makeText(context, "无法打开图片链接", Toast.LENGTH_SHORT).show() }
+                            } else {
+                                onImageClick?.invoke(url) ?: run { previewImageUrl = url }
                             }
                         }
                     )
@@ -328,6 +340,7 @@ fun MarkdownText(
             }
         }
     }
+    }
 
     previewImageUrl?.let { imageUrl ->
         ImageViewer(
@@ -358,15 +371,12 @@ private fun MarkdownTextRun(
     }
 
     if (!latexEnabled) {
-        val highlightedMarkdown = MarkdownRendererCache.getHighlightedMarkdown(
-            content,
-            highlightKeyword
-        )
+        val highlightedMarkdown = content
         maybeSelection {
             Box(modifier = Modifier.fillMaxWidth()) {
                 MikepenzMarkdownText(
                     markdown = highlightedMarkdown,
-                    baseColor = latexConfig.color,
+                    baseColor = LocalMarkdownBodyColor.current,
                     onLinkClicked = onLinkClicked,
                     persistRenderState = persistRenderState,
                     modifier = Modifier.fillMaxWidth()
@@ -378,15 +388,12 @@ private fun MarkdownTextRun(
 
     val latexSegments = MarkdownRendererCache.getLatexSegments(content)
     if (latexSegments.size == 1 && latexSegments.first() is MarkdownInlineSegment.Markdown) {
-        val highlightedMarkdown = MarkdownRendererCache.getHighlightedMarkdown(
-            content,
-            highlightKeyword
-        )
+        val highlightedMarkdown = content
         maybeSelection {
             Box(modifier = Modifier.fillMaxWidth()) {
                 MikepenzMarkdownText(
                     markdown = highlightedMarkdown,
-                    baseColor = latexConfig.color,
+                    baseColor = LocalMarkdownBodyColor.current,
                     onLinkClicked = onLinkClicked,
                     persistRenderState = persistRenderState,
                     modifier = Modifier.fillMaxWidth()
@@ -416,14 +423,11 @@ private fun MarkdownTextRun(
             when (segment) {
                 is MarkdownInlineSegment.Markdown -> {
                     if (segment.content.isNotBlank()) {
-                        val highlightedMarkdown = MarkdownRendererCache.getHighlightedMarkdown(
-                            segment.content,
-                            highlightKeyword
-                        )
+                        val highlightedMarkdown = segment.content
                         maybeSelection {
                             MikepenzMarkdownText(
                                 markdown = highlightedMarkdown,
-                                baseColor = latexConfig.color,
+                                baseColor = LocalMarkdownBodyColor.current,
                                 onLinkClicked = onLinkClicked,
                                 persistRenderState = persistRenderState,
                                 modifier = Modifier.fillMaxWidth()
@@ -467,6 +471,8 @@ private fun MikepenzMarkdownText(
         }
     }
     val bodyStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontFamily = FontFamily.SansSerif,
+        fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
         color = baseColor,
         lineHeight = 22.sp
     )
@@ -475,31 +481,43 @@ private fun MikepenzMarkdownText(
         h1 = MaterialTheme.typography.headlineMedium.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 34.sp
         ),
         h2 = MaterialTheme.typography.headlineSmall.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 30.sp
         ),
         h3 = MaterialTheme.typography.titleMedium.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 24.sp
         ),
         h4 = MaterialTheme.typography.titleSmall.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 22.sp
         ),
         h5 = MaterialTheme.typography.titleSmall.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 22.sp
         ),
         h6 = MaterialTheme.typography.labelLarge.copy(
             color = baseColor,
             fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All,
             lineHeight = 20.sp
         ),
         text = bodyStyle,
@@ -523,8 +541,47 @@ private fun MikepenzMarkdownText(
         ),
         table = bodyStyle
     )
-    val annotator = com.mikepenz.markdown.model.markdownAnnotator(
+    val referenceLinkHandler = remember { PersistentReferenceLinkHandler() }
+    val defaultAnnotator = com.mikepenz.markdown.model.markdownAnnotator(
         config = com.mikepenz.markdown.model.markdownAnnotatorConfig(eolAsNewLine = true)
+    )
+    val defaultAnnotationSettings = annotatorSettings(
+        annotator = defaultAnnotator,
+        linkTextSpanStyle = typography.textLink,
+        codeSpanStyle = typography.inlineCode.toSpanStyle(),
+        referenceLinkHandler = referenceLinkHandler,
+        uriHandler = uriHandler
+    )
+    val searchQuery = LocalMarkdownSearchQuery.current
+    val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
+    val annotator = com.mikepenz.markdown.model.markdownAnnotator(
+        config = com.mikepenz.markdown.model.markdownAnnotatorConfig(eolAsNewLine = true),
+        annotate = { source, child ->
+            val strong = child.type == MarkdownElementTypes.STRONG
+            if (strong || (searchQuery.isNotBlank() && child.type == org.intellij.markdown.MarkdownTokenTypes.TEXT)) {
+                val start = length
+                if (strong) {
+                    val rendered = buildAnnotatedString {
+                        buildMarkdownAnnotatedString(source, child, defaultAnnotationSettings)
+                    }
+                    append(rendered)
+                    addStyle(SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.All
+                    ), start, length)
+                } else append(child.getUnescapedTextInNode(source))
+                // Search rendered text, never link destinations or Markdown delimiters.
+                val visible = toAnnotatedString().text
+                var from = (start - searchQuery.length + 1).coerceAtLeast(0)
+                while (searchQuery.isNotBlank() && from < visible.length) {
+                    val found = visible.indexOf(searchQuery, from, ignoreCase = true)
+                    if (found < 0) break
+                    addStyle(SpanStyle(background = highlightColor), found, found + searchQuery.length)
+                    from = found + searchQuery.length
+                }
+                true
+            } else false
+        }
     )
     val components = markdownComponents(
         table = { model ->
@@ -551,7 +608,6 @@ private fun MikepenzMarkdownText(
     )
     val flavour = remember { GFMFlavourDescriptor() }
     val parser = remember(flavour) { MarkdownParser(flavour) }
-    val referenceLinkHandler = remember { PersistentReferenceLinkHandler() }
     CompositionLocalProvider(
         LocalUriHandler provides uriHandler
     ) {
@@ -653,16 +709,11 @@ private fun InlineMarkdownWithLatex(
                         when (segment) {
                             is MarkdownInlineSegment.Markdown -> {
                                 if (segment.content.isNotEmpty()) {
-                                    val highlighted = remember(segment.content, highlightKeyword) {
-                                        MarkdownRendererCache.getHighlightedMarkdown(
-                                            segment.content,
-                                            highlightKeyword
-                                        )
-                                    }
+                                    val highlighted = segment.content
                                     maybeSelection {
                                         MikepenzMarkdownText(
                                             markdown = highlighted,
-                                            baseColor = latexConfig.color,
+                                            baseColor = LocalMarkdownBodyColor.current,
                                             onLinkClicked = onLinkClicked,
                                             persistRenderState = true,
                                             modifier = Modifier.wrapContentWidth()
@@ -876,7 +927,11 @@ private fun CodeBlockComponent(
         )
         val codeText: @Composable () -> Unit = {
             Text(
-                text = code,
+                text = highlightRenderedText(
+                    androidx.compose.ui.text.AnnotatedString(code),
+                    LocalMarkdownSearchQuery.current,
+                    MaterialTheme.colorScheme.tertiaryContainer
+                ),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
@@ -917,7 +972,7 @@ private fun CodeBlockComponent(
 
 private sealed interface MarkdownSegment {
     data class Text(val content: String) : MarkdownSegment
-    data class Image(val url: String, val alt: String?) : MarkdownSegment
+    data class Image(val url: String, val alt: String?, val link: String? = null) : MarkdownSegment
     data class HtmlTable(val content: String) : MarkdownSegment
     data class HtmlBlock(val content: String) : MarkdownSegment
     data class CodeBlock(val code: String, val language: String?) : MarkdownSegment
@@ -935,7 +990,6 @@ private object MarkdownRendererCache {
     private const val INLINE_SEGMENT_CACHE_SIZE = 512
     private const val NORMALIZED_MARKDOWN_CACHE_SIZE = 256
     private const val TASK_RUN_CACHE_SIZE = 512
-    private const val HIGHLIGHT_CACHE_SIZE = 1024
     private const val DETAILS_STATE_CACHE_SIZE = 256
     private const val LATEX_SEGMENT_CACHE_SIZE = 1024
     private const val MARKDOWN_STATE_CACHE_SIZE = 128
@@ -945,7 +999,6 @@ private object MarkdownRendererCache {
     private val segmentCache = createLruCache<String, List<MarkdownSegment>>(SEGMENT_CACHE_SIZE)
     private val inlineSegmentsCache = createLruCache<String, List<MarkdownSegment>>(INLINE_SEGMENT_CACHE_SIZE)
     private val taskRunsCache = createLruCache<String, List<TaskRun>>(TASK_RUN_CACHE_SIZE)
-    private val highlightedMarkdownCache = createLruCache<String, String>(HIGHLIGHT_CACHE_SIZE)
     private val detailsExpandedCache = createLruCache<String, Boolean>(DETAILS_STATE_CACHE_SIZE)
     private val latexSegmentsCache = createLruCache<String, List<MarkdownInlineSegment>>(LATEX_SEGMENT_CACHE_SIZE)
     private val markdownStateCache = createLruCache<String, MarkdownState>(MARKDOWN_STATE_CACHE_SIZE)
@@ -971,12 +1024,6 @@ private object MarkdownRendererCache {
         return isLinkHeavyMarkdown(content)
     }
 
-    fun getHighlightedMarkdown(content: String, keyword: String): String {
-        if (keyword.isBlank() || content.isBlank()) return content
-        return highlightedMarkdownCache.cached(content + "\u0000" + keyword.lowercase()) {
-            injectHighlightMark(content, keyword)
-        }
-    }
 
     fun getLatexSegments(content: String): List<MarkdownInlineSegment> = latexSegmentsCache.cached(content) {
         splitLatexSegments(content)
@@ -1186,7 +1233,10 @@ private fun MarkdownDetailsBlock(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = summary,
+                text = highlightRenderedText(
+                    androidx.compose.ui.text.AnnotatedString(summary), highlightKeyword,
+                    MaterialTheme.colorScheme.tertiaryContainer
+                ),
                 color = textColor,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
@@ -1238,55 +1288,22 @@ private fun openMarkdownLink(context: Context, url: String) {
     context.startActivity(intent)
 }
 
-private fun injectHighlightMark(markdown: String, keyword: String): String {
-    if (keyword.isBlank() || markdown.isBlank()) return markdown
-    val pattern = Regex(Regex.escape(keyword), RegexOption.IGNORE_CASE)
-    return pattern.replace(markdown) { match ->
-        // 使用行内代码包裹，利用现有 codeStyle 背景实现稳定高亮
-        "`" + match.value + "`"
-    }
-}
 
 /**
  * 从内容中提取图片，将图片和文本分离
  */
 private fun extractImagesFromContent(content: String, segments: MutableList<MarkdownSegment>) {
-    val regex = Regex("!\\[([^\\]]*)\\]\\(\\s*<?([^)\\s>]+)>?(?:\\s+[\"'][^\"']*[\"'])?\\s*\\)")
+    val images = markdownImageRanges(content)
     var lastIndex = 0
-    var foundAnyImage = false
-    
-    regex.findAll(content).forEach { match ->
-        foundAnyImage = true
-        val range = match.range
-        if (range.first > lastIndex) {
-            val textContent = content.substring(lastIndex, range.first)
-            if (textContent.isNotBlank()) {
-                segments += MarkdownSegment.Text(processLineBreaks(textContent))
-            }
-        }
-        
-        val alt = match.groupValues.getOrNull(1).orEmpty().ifBlank { null }
-        val rawUrl = match.groupValues.getOrNull(2).orEmpty().trim()
-        val url = rawUrl.removeSurrounding("<", ">").trim()
-        if (url.isNotBlank()) {
-            segments += MarkdownSegment.Image(url = url, alt = alt)
-        }
-        
-        lastIndex = range.last + 1
+    for (image in images) {
+        if (image.start < lastIndex) continue
+        val before = content.substring(lastIndex, image.start)
+        if (before.isNotBlank()) segments += MarkdownSegment.Text(processLineBreaks(before))
+        segments += MarkdownSegment.Image(image.url, image.alt, image.link)
+        lastIndex = image.end
     }
-    
-    // 处理剩余内容
-    if (foundAnyImage && lastIndex < content.length) {
-        val textContent = content.substring(lastIndex)
-        if (textContent.isNotBlank()) {
-            segments += MarkdownSegment.Text(processLineBreaks(textContent))
-        }
-    }
-    
-    // 如果没有找到图片，整个内容作为文本
-    if (!foundAnyImage && content.isNotBlank()) {
-        segments += MarkdownSegment.Text(processLineBreaks(content))
-    }
+    val tail = content.substring(lastIndex)
+    if (tail.isNotBlank()) segments += MarkdownSegment.Text(processLineBreaks(tail))
 }
 
 private data class HtmlTableBlock(
