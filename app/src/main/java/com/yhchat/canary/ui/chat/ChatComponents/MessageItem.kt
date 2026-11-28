@@ -3,6 +3,7 @@ package com.yhchat.canary.ui.chat.ChatComponents
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
@@ -15,6 +16,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.MaterialTheme
@@ -43,12 +46,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -124,6 +129,8 @@ fun MessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
+    /** 是否启用左滑引用（可在设置中关闭） */
+    enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
@@ -285,6 +292,15 @@ fun MessageItem(
         }
     }
 
+    // 左滑引用：水平位移状态。只向左滑（负 offset）时露出右侧的引用动作。
+    val swipeOffsetX = remember(message.msgId) { Animatable(0f) }
+    // 引用动作回调需要始终指向最新的一次重组，避免手势 detector 捕获过期 lambda。
+    val currentQuoteMessage by rememberUpdatedState(quoteMessage)
+    // message.msgId 变化时（列表复用）复位位移，避免残留偏移。
+    LaunchedEffect(message.msgId) {
+        if (swipeOffsetX.value != 0f) swipeOffsetX.snapTo(0f)
+    }
+
     if (message.msgDeleteTime != null) {
         RecallMessageItem(message = message, modifier = modifier)
         return
@@ -298,15 +314,54 @@ fun MessageItem(
     var tagsExpanded by remember(message.msgId) { mutableStateOf(false) }
     val rowInteractionSource = remember(message.msgId) { MutableInteractionSource() }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (isHighlighted) Modifier.background(
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    RoundedCornerShape(8.dp)
-                ) else Modifier
-            )
+    // 左滑引用的阈值：露出约 72dp 的引用动作区即视为触发。
+    val swipeRevealPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
+    val swipeTriggerPx = swipeRevealPx * 0.6f
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        // 底层：左滑时从右侧露出的「引用」动作区。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                // 仅在向左滑动时渐显，平时完全透明，避免透出底色；关闭开关时始终隐藏。
+                .graphicsLayer {
+                    alpha = if (enableSwipeToQuote) {
+                        (-swipeOffsetX.value / swipeRevealPx).coerceIn(0f, 1f)
+                    } else 0f
+                }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.FormatQuote,
+                    contentDescription = "引用",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "引用",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+
+        // 上层：消息本体，跟随水平手势位移。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // 视觉上整行一起位移（头像跟随），但手势检测只在内容区 Column 上。
+                .graphicsLayer { translationX = swipeOffsetX.value }
+                .then(
+                    if (isHighlighted) Modifier.background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        RoundedCornerShape(8.dp)
+                    ) else Modifier
+                )
             // Do not handle normal taps here, otherwise it will intercept inner clickable content
             // (e.g. HTML <a> buttons). Long-press is implemented via pointerInput to open the
             // context menu without consuming regular clicks.
@@ -367,7 +422,30 @@ fun MessageItem(
                     } else {
                         Modifier
                     }
-                ),
+                )
+                // 左滑引用：手势只落在消息内容区（昵称/气泡/时间），头像不触发。
+                // 位移由整行 Row 的 graphicsLayer 统一处理；纵向滚动交给列表。
+                .pointerInput(message.msgId, isMultiSelectMode, enableSwipeToQuote) {
+                    if (isMultiSelectMode || !enableSwipeToQuote) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            // 只接受向左（负方向），并限制在 [ -swipeRevealPx, 0 ]
+                            val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, 0f)
+                            if (candidate != swipeOffsetX.value) change.consume()
+                            swipeOffsetX.tryEmit(candidate)
+                        },
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                val triggered = swipeOffsetX.value <= -swipeTriggerPx
+                                swipeOffsetX.animateTo(0f, tween(180))
+                                if (triggered) currentQuoteMessage()
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch { swipeOffsetX.animateTo(0f, tween(180)) }
+                        }
+                    )
+                },
             horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
         ) {
             SenderNameAndTags(
@@ -584,6 +662,7 @@ fun MessageItem(
                     contentScale = ContentScale.Crop
                 )
             }
+        }
         }
     }
 
@@ -1007,6 +1086,8 @@ fun AnimatedMessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
+    /** 是否启用左滑引用（可在设置中关闭） */
+    enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
@@ -1070,6 +1151,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    enableSwipeToQuote = enableSwipeToQuote,
                     onSplitFileClick = onSplitFileClick,
                 )
             }
@@ -1131,6 +1213,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    enableSwipeToQuote = enableSwipeToQuote,
                     onSplitFileClick = onSplitFileClick,
                 )
             }
