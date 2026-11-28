@@ -268,6 +268,11 @@ fun ChatScreen(
         "enable_chat_context_menu",
         true
     )
+    val enableSwipeToQuote by rememberBooleanPreference(
+        "chat_settings",
+        "enable_swipe_to_quote",
+        true
+    )
     
     // 处理搜索跳转：当有搜索目标消息ID时，自动跳转到该消息
     LaunchedEffect(searchTargetMsgId, searchTargetMsgSeq) {
@@ -728,6 +733,7 @@ fun ChatScreen(
                             isSelected = selectedMessageIds.contains(message.msgId),
                             isStreaming = isStreaming,
                             enableContextMenu = enableChatContextMenu,
+                            enableSwipeToQuote = enableSwipeToQuote,
                             onSplitFileClick = { fileUrl, fileName ->
                                 // 点 .splitfiles：拉清单 → 解出分块信息 → 弹窗询问是否下载还原
                                 coroutineScope.launch {
