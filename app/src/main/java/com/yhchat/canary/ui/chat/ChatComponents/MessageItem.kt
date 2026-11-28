@@ -540,7 +540,8 @@ fun MessageItem(
                             onMultiSelect = onMultiSelect,
                             isStreaming = isStreaming,
                             onSplitFileClick = onSplitFileClick,
-                            onMessageClick = if (enableContextMenu) openMessageActions else null,
+                            // 文章卡片单击打开详情；气泡空白区域仍由父级打开操作菜单。
+                            onMessageClick = null,
                             enablePostPreview = !isMultiSelectMode
                         )
                     }

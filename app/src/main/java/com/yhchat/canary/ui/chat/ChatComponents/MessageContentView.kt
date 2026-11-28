@@ -1098,22 +1098,6 @@ private fun PostMessageView(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = when {
-                    !enablePostPreview -> "点击选择消息"
-                    onClick != null -> "点击查看消息操作 · 长按预览文章"
-                    else -> "点击查看文章详情 · 长按预览文章"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isMyMessage) {
-                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                fontWeight = FontWeight.Medium
-            )
         }
     }
 
