@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.MaterialTheme
@@ -318,50 +317,17 @@ fun MessageItem(
     val swipeRevealPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
     val swipeTriggerPx = swipeRevealPx * 0.6f
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 底层：左滑时从右侧露出的「引用」动作区。
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                // 仅在向左滑动时渐显，平时完全透明，避免透出底色；关闭开关时始终隐藏。
-                .graphicsLayer {
-                    alpha = if (enableSwipeToQuote) {
-                        (-swipeOffsetX.value / swipeRevealPx).coerceIn(0f, 1f)
-                    } else 0f
-                }
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.FormatQuote,
-                    contentDescription = "引用",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "引用",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-        }
-
-        // 上层：消息本体，跟随水平手势位移。
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                // 视觉上整行一起位移（头像跟随），但手势检测只在内容区 Column 上。
-                .graphicsLayer { translationX = swipeOffsetX.value }
-                .then(
-                    if (isHighlighted) Modifier.background(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        RoundedCornerShape(8.dp)
-                    ) else Modifier
-                )
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            // 左滑引用：仅做视觉位移，不改变测量，静止时外观与原始完全一致。
+            .graphicsLayer { translationX = swipeOffsetX.value }
+            .then(
+                if (isHighlighted) Modifier.background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    RoundedCornerShape(8.dp)
+                ) else Modifier
+            )
             // Do not handle normal taps here, otherwise it will intercept inner clickable content
             // (e.g. HTML <a> buttons). Long-press is implemented via pointerInput to open the
             // context menu without consuming regular clicks.
@@ -662,7 +628,6 @@ fun MessageItem(
                     contentScale = ContentScale.Crop
                 )
             }
-        }
         }
     }
 
