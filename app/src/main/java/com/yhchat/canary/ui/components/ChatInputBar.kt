@@ -450,7 +450,7 @@ fun ChatInputBar(
                 exit = fadeOut()
             ) {
                 QuotedMessageBar(
-                    quotedText = quotedMessageText,
+                    quotedText = quotedMessageText.orEmpty(),
                     onClearQuote = { onClearQuote?.invoke() }
                 )
             }
