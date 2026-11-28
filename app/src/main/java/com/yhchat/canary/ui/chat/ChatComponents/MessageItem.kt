@@ -129,6 +129,8 @@ fun MessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
+    /** 是否启用左滑引用（可在设置中关闭） */
+    enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
@@ -323,9 +325,11 @@ fun MessageItem(
                 .matchParentSize()
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                // 仅在向左滑动时渐显，平时完全透明，避免透出底色。
+                // 仅在向左滑动时渐显，平时完全透明，避免透出底色；关闭开关时始终隐藏。
                 .graphicsLayer {
-                    alpha = (-swipeOffsetX.value / swipeRevealPx).coerceIn(0f, 1f)
+                    alpha = if (enableSwipeToQuote) {
+                        (-swipeOffsetX.value / swipeRevealPx).coerceIn(0f, 1f)
+                    } else 0f
                 }
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterEnd
@@ -350,6 +354,7 @@ fun MessageItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // 视觉上整行一起位移（头像跟随），但手势检测只在内容区 Column 上。
                 .graphicsLayer { translationX = swipeOffsetX.value }
                 .then(
                     if (isHighlighted) Modifier.background(
@@ -385,28 +390,6 @@ fun MessageItem(
                     }
                 }
             }
-            // 左滑引用：只处理水平方向拖动，纵向滚动仍交给列表；多选模式下禁用。
-            .pointerInput(message.msgId, isMultiSelectMode) {
-                if (isMultiSelectMode) return@pointerInput
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        // 只接受向左（负方向），并限制在 [ -swipeRevealPx, 0 ]
-                        val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, 0f)
-                        if (candidate != swipeOffsetX.value) change.consume()
-                        swipeOffsetX.tryEmit(candidate)
-                    },
-                    onDragEnd = {
-                        coroutineScope.launch {
-                            val triggered = swipeOffsetX.value <= -swipeTriggerPx
-                            swipeOffsetX.animateTo(0f, tween(180))
-                            if (triggered) currentQuoteMessage()
-                        }
-                    },
-                    onDragCancel = {
-                        coroutineScope.launch { swipeOffsetX.animateTo(0f, tween(180)) }
-                    }
-                )
-            }
             .padding(end = if (isMyMessage) 8.dp else 0.dp, start = if (isMyMessage) 0.dp else 8.dp),
         horizontalArrangement = if (isMyMessage) Arrangement.End else Arrangement.Start
     ) {
@@ -439,7 +422,30 @@ fun MessageItem(
                     } else {
                         Modifier
                     }
-                ),
+                )
+                // 左滑引用：手势只落在消息内容区（昵称/气泡/时间），头像不触发。
+                // 位移由整行 Row 的 graphicsLayer 统一处理；纵向滚动交给列表。
+                .pointerInput(message.msgId, isMultiSelectMode, enableSwipeToQuote) {
+                    if (isMultiSelectMode || !enableSwipeToQuote) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            // 只接受向左（负方向），并限制在 [ -swipeRevealPx, 0 ]
+                            val candidate = (swipeOffsetX.value + dragAmount).coerceIn(-swipeRevealPx, 0f)
+                            if (candidate != swipeOffsetX.value) change.consume()
+                            swipeOffsetX.tryEmit(candidate)
+                        },
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                val triggered = swipeOffsetX.value <= -swipeTriggerPx
+                                swipeOffsetX.animateTo(0f, tween(180))
+                                if (triggered) currentQuoteMessage()
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch { swipeOffsetX.animateTo(0f, tween(180)) }
+                        }
+                    )
+                },
             horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
         ) {
             SenderNameAndTags(
@@ -1080,6 +1086,8 @@ fun AnimatedMessageItem(
     onToggleCollapse: (() -> Unit)? = null,
     isStreaming: Boolean = false,
     enableContextMenu: Boolean = true,
+    /** 是否启用左滑引用（可在设置中关闭） */
+    enableSwipeToQuote: Boolean = true,
     /** 点击 .splitfiles 分块清单文件的回调 */
     onSplitFileClick: (String, String) -> Unit = { _, _ -> }
 ) {
@@ -1143,6 +1151,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    enableSwipeToQuote = enableSwipeToQuote,
                     onSplitFileClick = onSplitFileClick,
                 )
             }
@@ -1204,6 +1213,7 @@ fun AnimatedMessageItem(
                     onToggleCollapse = onToggleCollapse,
                     isStreaming = isStreaming,
                     enableContextMenu = enableContextMenu,
+                    enableSwipeToQuote = enableSwipeToQuote,
                     onSplitFileClick = onSplitFileClick,
                 )
             }
