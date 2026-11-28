@@ -123,6 +123,11 @@ fun SettingsScreen(
         key = "enable_chat_context_menu",
         defaultValue = true
     )
+    val enableSwipeToQuote by rememberBooleanPreference(
+        preferencesName = "chat_settings",
+        key = "enable_swipe_to_quote",
+        defaultValue = true
+    )
 
     // 获取用户信息
     var userEmail by remember { mutableStateOf("") }
@@ -296,6 +301,23 @@ fun SettingsScreen(
                                 onCheckedChange = { checked ->
                                     chatPrefs.edit()
                                         .putBoolean("enable_chat_context_menu", checked)
+                                        .apply()
+                                }
+                            )
+                        },
+                        {
+                            SettingsSwitchItem(
+                                icon = Icons.Default.FormatQuote,
+                                title = "左滑引用消息",
+                                subtitle = if (enableSwipeToQuote) {
+                                    "在消息内容区向左滑动即可引用该消息（头像不触发）"
+                                } else {
+                                    "已关闭左滑引用消息"
+                                },
+                                checked = enableSwipeToQuote,
+                                onCheckedChange = { checked ->
+                                    chatPrefs.edit()
+                                        .putBoolean("enable_swipe_to_quote", checked)
                                         .apply()
                                 }
                             )
